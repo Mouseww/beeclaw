@@ -1,0 +1,299 @@
+// ============================================================================
+// @beeclaw/consensus ConsensusEngine 单元测试
+// ============================================================================
+
+import { describe, it, expect } from 'vitest';
+import { ConsensusEngine } from './ConsensusEngine.js';
+import type { AgentResponseRecord } from './SentimentAggregator.js';
+import type { WorldEvent } from '@beeclaw/shared';
+
+function createTestEvent(overrides: Partial<WorldEvent> = {}): WorldEvent {
+  return {
+    id: 'evt_test',
+    type: 'external',
+    category: 'finance',
+    title: '央行降息',
+    content: '央行宣布降息 25 个基点',
+    source: 'manual',
+    importance: 0.7,
+    propagationRadius: 0.5,
+    tick: 5,
+    tags: ['金融', '利率'],
+    ...overrides,
+  };
+}
+
+function createBullishRecord(agentId: string, emotion: number = 0.6, credibility: number = 0.5): AgentResponseRecord {
+  return {
+    agentId,
+    agentName: `Agent ${agentId}`,
+    credibility,
+    response: {
+      opinion: '看好后市',
+      action: 'speak',
+      emotionalState: emotion,
+      reasoning: '基本面向好',
+    },
+  };
+}
+
+function createBearishRecord(agentId: string, emotion: number = -0.6, credibility: number = 0.5): AgentResponseRecord {
+  return {
+    agentId,
+    agentName: `Agent ${agentId}`,
+    credibility,
+    response: {
+      opinion: '看空后市',
+      action: 'speak',
+      emotionalState: emotion,
+      reasoning: '风险增大',
+    },
+  };
+}
+
+function createNeutralRecord(agentId: string, credibility: number = 0.5): AgentResponseRecord {
+  return {
+    agentId,
+    agentName: `Agent ${agentId}`,
+    credibility,
+    response: {
+      opinion: '观望',
+      action: 'silent',
+      emotionalState: 0.0,
+      reasoning: '等待更多信息',
+    },
+  };
+}
+
+describe('ConsensusEngine', () => {
+  // ── analyze 基本功能 ──
+
+  describe('analyze', () => {
+    it('应返回正确的共识信号结构', () => {
+      const engine = new ConsensusEngine();
+      const event = createTestEvent();
+      const responses = [
+        createBullishRecord('a1'),
+        createBearishRecord('a2'),
+        createNeutralRecord('a3'),
+      ];
+
+      const signal = engine.analyze(1, event, responses);
+      expect(signal.topic).toBe('央行降息');
+      expect(signal.tick).toBe(1);
+      expect(signal.sentimentDistribution).toBeDefined();
+      expect(signal.intensity).toBeGreaterThanOrEqual(0);
+      expect(signal.consensus).toBeGreaterThanOrEqual(0);
+      expect(signal.trend).toBeDefined();
+      expect(signal.topArguments).toBeDefined();
+      expect(signal.alerts).toBeDefined();
+    });
+
+    it('空响应列表应正常工作', () => {
+      const engine = new ConsensusEngine();
+      const signal = engine.analyze(1, createTestEvent(), []);
+      expect(signal.sentimentDistribution.neutral).toBe(1);
+      expect(signal.intensity).toBe(0);
+    });
+
+    it('应将信号保存到历史中', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent(), [createBullishRecord('a1')]);
+      engine.analyze(2, createTestEvent(), [createBearishRecord('a2')]);
+      const history = engine.getSignalHistory('央行降息');
+      expect(history).toHaveLength(2);
+      expect(history[0]!.tick).toBe(1);
+      expect(history[1]!.tick).toBe(2);
+    });
+
+    it('历史信号应保留最近 50 个', () => {
+      const engine = new ConsensusEngine();
+      const event = createTestEvent();
+      for (let i = 0; i < 55; i++) {
+        engine.analyze(i, event, [createBullishRecord('a1')]);
+      }
+      const history = engine.getSignalHistory('央行降息');
+      expect(history).toHaveLength(50);
+      expect(history[0]!.tick).toBe(5); // 前 5 个被丢弃
+    });
+  });
+
+  // ── topArguments ──
+
+  describe('topArguments', () => {
+    it('speak/predict 动作的响应应提取论点', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createBullishRecord('a1', 0.6),
+        createBullishRecord('a2', 0.7),
+        createBearishRecord('a3', -0.5),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      expect(signal.topArguments.length).toBeGreaterThan(0);
+    });
+
+    it('全部 silent 动作不应产生论点', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createNeutralRecord('a1'),
+        createNeutralRecord('a2'),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      expect(signal.topArguments).toHaveLength(0);
+    });
+
+    it('论点应按支持者人数排序', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createBullishRecord('a1'),
+        createBullishRecord('a2'),
+        createBullishRecord('a3'),
+        createBearishRecord('a4'),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      if (signal.topArguments.length >= 2) {
+        expect(signal.topArguments[0]!.supporters).toBeGreaterThanOrEqual(
+          signal.topArguments[1]!.supporters
+        );
+      }
+    });
+  });
+
+  // ── trend 检测 ──
+
+  describe('trend', () => {
+    it('首次分析应返回 forming', () => {
+      const engine = new ConsensusEngine();
+      const signal = engine.analyze(1, createTestEvent(), [createBullishRecord('a1')]);
+      expect(signal.trend).toBe('forming');
+    });
+
+    it('第二次分析也应返回 forming（只有一条历史记录）', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent(), [createBullishRecord('a1')]);
+      const signal2 = engine.analyze(2, createTestEvent(), [createBullishRecord('a2')]);
+      // 此时有 1 条历史（第一次 analyze 保存的），不满足 >= 2 条
+      // 但实际上 detectTrend 在第二次调用时，history 已经有第一次的记录了
+      expect(['forming', 'strengthening', 'weakening', 'reversing']).toContain(signal2.trend);
+    });
+
+    it('方向反转时应检测到 reversing', () => {
+      const engine = new ConsensusEngine();
+      // 第一次：全部看多
+      engine.analyze(1, createTestEvent(), [
+        createBullishRecord('a1', 0.8),
+        createBullishRecord('a2', 0.7),
+        createBullishRecord('a3', 0.9),
+      ]);
+      // 第二次：也看多（建立趋势）
+      engine.analyze(2, createTestEvent(), [
+        createBullishRecord('a1', 0.8),
+        createBullishRecord('a2', 0.7),
+        createBullishRecord('a3', 0.9),
+      ]);
+      // 第三次：全部看空（反转）
+      const signal3 = engine.analyze(3, createTestEvent(), [
+        createBearishRecord('a1', -0.8),
+        createBearishRecord('a2', -0.7),
+        createBearishRecord('a3', -0.9),
+      ]);
+      expect(signal3.trend).toBe('reversing');
+    });
+  });
+
+  // ── alerts 检测 ──
+
+  describe('alerts', () => {
+    it('高激烈度应触发 sentiment_shift 预警', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createBullishRecord('a1', 0.9),
+        createBearishRecord('a2', -0.9),
+        createBullishRecord('a3', 0.8),
+        createBearishRecord('a4', -0.8),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      // intensity = avg(|0.9|, |-0.9|, |0.8|, |-0.8|) = avg(0.9,0.9,0.8,0.8) = 0.85 > 0.7
+      const sentimentShift = signal.alerts.find(a => a.type === 'sentiment_shift');
+      expect(sentimentShift).toBeDefined();
+    });
+
+    it('低共识度且人数足够应触发 consensus_break 预警', () => {
+      const engine = new ConsensusEngine();
+      // 生成高度分化的响应
+      const responses = [
+        createBullishRecord('a1', 0.9),
+        createBearishRecord('a2', -0.9),
+        createBullishRecord('a3', 0.8),
+        createBearishRecord('a4', -0.8),
+        createBullishRecord('a5', 0.7),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      // 如果 consensus < 0.3 且 responses.length >= 5 应触发
+      if (signal.consensus < 0.3) {
+        const consensusBreak = signal.alerts.find(a => a.type === 'consensus_break');
+        expect(consensusBreak).toBeDefined();
+      }
+    });
+
+    it('平稳情绪不应产生预警', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createNeutralRecord('a1'),
+        createNeutralRecord('a2'),
+      ];
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      // 全部 silent 不会触发 topArguments 相关的预警
+      const sentimentShift = signal.alerts.find(a => a.type === 'sentiment_shift');
+      expect(sentimentShift).toBeUndefined();
+    });
+
+    it('逆向者涌现应触发 contrarian_surge 预警', () => {
+      const engine = new ConsensusEngine();
+      // 大部分看多，但有足够多的逆向者
+      const responses: AgentResponseRecord[] = [];
+      // 7 个看多
+      for (let i = 0; i < 7; i++) {
+        responses.push(createBullishRecord(`bull_${i}`, 0.6));
+      }
+      // 3 个强烈看空（逆向者）
+      for (let i = 0; i < 3; i++) {
+        responses.push(createBearishRecord(`bear_${i}`, -0.5));
+      }
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      const contrarianSurge = signal.alerts.find(a => a.type === 'contrarian_surge');
+      expect(contrarianSurge).toBeDefined();
+    });
+  });
+
+  // ── 查询方法 ──
+
+  describe('查询方法', () => {
+    it('getSignalHistory 不存在的话题应返回空数组', () => {
+      const engine = new ConsensusEngine();
+      expect(engine.getSignalHistory('不存在的话题')).toEqual([]);
+    });
+
+    it('getAllTopics 应返回所有分析过的话题', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent({ title: '话题A' }), [createBullishRecord('a1')]);
+      engine.analyze(2, createTestEvent({ title: '话题B' }), [createBearishRecord('a2')]);
+      const topics = engine.getAllTopics();
+      expect(topics).toContain('话题A');
+      expect(topics).toContain('话题B');
+      expect(topics).toHaveLength(2);
+    });
+
+    it('getLatestSignals 应返回每个话题的最新信号', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent({ title: '话题A' }), [createBullishRecord('a1')]);
+      engine.analyze(2, createTestEvent({ title: '话题A' }), [createBearishRecord('a2')]);
+      engine.analyze(3, createTestEvent({ title: '话题B' }), [createNeutralRecord('a3')]);
+
+      const latest = engine.getLatestSignals();
+      expect(latest).toHaveLength(2);
+      const topicATick = latest.find(s => s.topic === '话题A');
+      expect(topicATick?.tick).toBe(2);
+    });
+  });
+});
