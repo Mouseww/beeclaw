@@ -1,0 +1,24 @@
+{
+  "name": "@beeclaw/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": { "build": "tsc", "test": "vitest run" },
+  "dependencies": {
+    "@beeclaw/shared": "*",
+    "@beeclaw/world-engine": "*",
+    "@beeclaw/agent-runtime": "*",
+    "@beeclaw/event-bus": "*",
+    "@beeclaw/social-graph": "*",
+    "@beeclaw/consensus": "*",
+    "fastify": "^5.3.3",
+    "@fastify/websocket": "^11.2.0",
+    "better-sqlite3": "^11.9.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/ws": "^8.18.1"
+  }
+}

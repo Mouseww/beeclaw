@@ -14,7 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "start": "node packages/cli/dist/index.js",
     "inject": "node packages/cli/dist/inject.js",
-    "status": "node packages/cli/dist/status.js"
+    "status": "node packages/cli/dist/status.js",
+    "serve": "node packages/server/dist/index.js"
   },
   "engines": {
     "node": ">=20"
