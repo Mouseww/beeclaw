@@ -1,0 +1,21 @@
+{
+  "name": "beeclaw",
+  "version": "0.1.0",
+  "description": "BeeClaw (BeeWorld) - 群体智能仿真引擎，由完整 LLM Agent 组成的持续演化的平行世界",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "start": "node packages/cli/dist/index.js",
+    "inject": "node packages/cli/dist/inject.js",
+    "status": "node packages/cli/dist/status.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "BeeQueen 集团",
+  "license": "MIT"
+}

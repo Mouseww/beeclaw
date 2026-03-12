@@ -1,0 +1,9 @@
+{
+  "name": "@beeclaw/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": { "build": "tsc" },
+  "dependencies": { "@beeclaw/shared": "*", "@beeclaw/world-engine": "*" },
+  "devDependencies": { "typescript": "^5.7.0" }
+}
