@@ -36,23 +36,81 @@
 | **Event Bus** | 事件传播：外部注入 + Agent 产生 + 级联传播 |
 | **Consensus Engine** | 从群体行为中提取趋势信号 |
 
+## 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/Mouseww/beeclaw.git
+cd beeclaw
+
+# 安装依赖（npm workspaces monorepo）
+npm install
+
+# 构建所有包
+npm run build
+
+# 运行测试
+npm test
+```
+
+**环境要求：** Node.js >= 20（推荐 22），npm >= 9
+
 ## 快速开始
 
 ```bash
-# 安装依赖
-npm install
+# 启动世界（10 个 Agent，默认配置）
+npm run start
 
-# 构建
-npm run build
+# 启动世界（指定 Agent 数量）
+npm run start -- --agents 50
 
-# 启动世界（50 个 Agent，默认金融场景）
-npm run start -- --agents 50 --scenario financial
+# 带种子事件启动
+npm run start -- --agents 20 --ticks 5 --seed "央行宣布降息50个基点"
 
-# 注入事件
+# 注入外部事件
 npm run inject -- --event "央行宣布降息50个基点"
 
 # 查看世界状态
 npm run status
+```
+
+## CLI 用法
+
+```
+🐝 BeeClaw — 群体智能仿真引擎 CLI
+
+用法:
+  npm run start -- [选项]
+
+选项:
+  -a, --agents <数量>      初始 Agent 数量 (默认: 10)
+  -i, --interval <毫秒>    Tick 间隔时间 (默认: 30000ms)
+  -t, --ticks <数量>       最大运行 tick 数 (默认: 0=无限)
+  -s, --seed <事件内容>    注入种子事件启动仿真
+  -h, --help              显示帮助信息
+```
+
+**示例：**
+
+```bash
+# 运行 5 个 tick，20 个 Agent，注入金融事件
+npm run start -- --agents 20 --ticks 5 --seed "美联储宣布加息25个基点"
+
+# 无限运行模式（Ctrl+C 优雅停止）
+npm run start -- --agents 100 --interval 60000
+```
+
+## 包结构
+
+```
+packages/
+  shared/        - 共享类型、工具函数
+  world-engine/  - 世界引擎（主循环、Tick 调度、世界状态）
+  agent-runtime/ - Agent 运行时（人格、记忆、LLM 调用、孵化器）
+  social-graph/  - 社交网络（图结构、传播算法、社区发现）
+  event-bus/     - 事件总线（事件分发、外部接入、传播规则）
+  consensus/     - 共识引擎（情绪聚合、趋势检测）
+  cli/           - CLI 工具（启动、注入事件、查看状态）
 ```
 
 ## 成本控制
@@ -72,16 +130,32 @@ npm run status
 
 ## 技术栈
 
-- TypeScript (Node.js)
-- PostgreSQL + Redis
-- Ollama / vLLM (本地 LLM)
-- OpenAI 兼容 API (云 LLM)
-- React + D3.js (可视化)
-- Docker Compose
+- **语言：** TypeScript + Node.js（ES2022）
+- **构建：** npm workspaces monorepo
+- **存储：** SQLite（MVP，后期迁移 PostgreSQL）
+- **LLM：** OpenAI 兼容 API（支持任意 provider）
+- **测试：** Vitest
+
+## 开发
+
+```bash
+# 安装依赖
+npm install
+
+# 构建所有包
+npm run build
+
+# 运行所有测试
+npm test
+```
 
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+
+## 许可证
+
+[MIT](LICENSE)
 
 ---
 
