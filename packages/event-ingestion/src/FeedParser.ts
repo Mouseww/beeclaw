@@ -54,7 +54,8 @@ function parseRssItem(itemXml: string): FeedItem {
   const guid = extractTagContent(itemXml, 'guid') ?? link ?? `${title}-${pubDateStr ?? ''}`;
 
   // 优先使用 content:encoded，其次用 description
-  const content = decodeHtmlEntities(stripHtmlTags(contentEncoded ?? descriptionRaw));
+  // 先解码 HTML 实体（&lt; → <），再去除 HTML 标签
+  const content = stripHtmlTags(decodeHtmlEntities(contentEncoded ?? descriptionRaw));
 
   // 解析分类
   const categories = extractAllTagContents(itemXml, 'category').map(decodeHtmlEntities);
@@ -134,12 +135,31 @@ function parseAtomEntry(entryXml: string): FeedItem {
  * 提取 Atom link 的 href 属性
  */
 function extractAtomLink(xml: string): string | undefined {
-  // 优先选 rel="alternate" 或无 rel 属性的 link
-  const linkMatch = xml.match(/<link[^>]*rel\s*=\s*["']alternate["'][^>]*href\s*=\s*["']([^"']+)["'][^>]*\/?>/);
-  if (linkMatch?.[1]) return linkMatch[1];
+  // 收集所有 <link> 标签
+  const linkRegex = /<link\s([^>]*?)\/?>/gi;
+  let match: RegExpExecArray | null;
+  let alternateHref: string | undefined;
+  let fallbackHref: string | undefined;
 
-  const simpleLinkMatch = xml.match(/<link[^>]*href\s*=\s*["']([^"']+)["'][^>]*\/?>/);
-  return simpleLinkMatch?.[1];
+  while ((match = linkRegex.exec(xml)) !== null) {
+    const attrs = match[1]!;
+    const hrefMatch = attrs.match(/href\s*=\s*["']([^"']+)["']/);
+    const relMatch = attrs.match(/rel\s*=\s*["']([^"']+)["']/);
+
+    if (!hrefMatch?.[1]) continue;
+
+    const rel = relMatch?.[1];
+    if (rel === 'alternate') {
+      alternateHref = hrefMatch[1];
+      break; // alternate is highest priority
+    }
+    if (!rel && !fallbackHref) {
+      // no rel attribute → use as fallback
+      fallbackHref = hrefMatch[1];
+    }
+  }
+
+  return alternateHref ?? fallbackHref;
 }
 
 /**
