@@ -17,5 +17,8 @@
     "node": ">=20"
   },
   "author": "BeeQueen 集团",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.4.0"
+  }
 }

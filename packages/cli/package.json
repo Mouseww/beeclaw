@@ -4,6 +4,13 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": { "build": "tsc" },
-  "dependencies": { "@beeclaw/shared": "*", "@beeclaw/world-engine": "*" },
+  "dependencies": {
+    "@beeclaw/shared": "*",
+    "@beeclaw/world-engine": "*",
+    "@beeclaw/agent-runtime": "*",
+    "@beeclaw/event-bus": "*",
+    "@beeclaw/social-graph": "*",
+    "@beeclaw/consensus": "*"
+  },
   "devDependencies": { "typescript": "^5.7.0" }
 }
