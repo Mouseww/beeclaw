@@ -293,6 +293,18 @@ export class AgentMemory {
   }
 
   /**
+   * 从已有状态恢复记忆（用于反序列化）
+   */
+  restore(state: AgentMemoryState): void {
+    this.state = {
+      shortTerm: [...state.shortTerm],
+      longTerm: [...state.longTerm],
+      opinions: { ...state.opinions },
+      predictions: [...state.predictions],
+    };
+  }
+
+  /**
    * 获取记忆状态的快照（用于序列化）
    */
   getState(): AgentMemoryState {

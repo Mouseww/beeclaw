@@ -232,6 +232,32 @@ export class Agent {
   }
 
   /**
+   * 从序列化数据恢复 Agent 实例
+   */
+  static fromData(data: BeeAgent): Agent {
+    const agent = new Agent({
+      id: data.id,
+      name: data.name,
+      persona: data.persona,
+      modelTier: data.modelTier,
+      spawnedAtTick: data.spawnedAtTick,
+    });
+
+    // 恢复记忆状态
+    agent.memory.restore(data.memory);
+
+    // 恢复运行时状态
+    agent._status = data.status;
+    agent._influence = data.influence;
+    agent._credibility = data.credibility;
+    agent._lastActiveTick = data.lastActiveTick;
+    agent._followers = [...data.followers];
+    agent._following = [...data.following];
+
+    return agent;
+  }
+
+  /**
    * 导出 Agent 数据
    */
   toData(): BeeAgent {

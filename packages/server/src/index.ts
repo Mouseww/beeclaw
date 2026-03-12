@@ -7,8 +7,8 @@
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import { WorldEngine } from '@beeclaw/world-engine';
-import { ModelRouter } from '@beeclaw/agent-runtime';
-import type { WorldConfig } from '@beeclaw/shared';
+import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
+import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
 import { registerWs, broadcast, getConnectionCount } from './ws/handler.js';
@@ -72,9 +72,22 @@ async function main(): Promise<void> {
   const savedAgents = store.loadAgentRows();
   if (savedAgents.length > 0) {
     console.log(`[Server] 从数据库恢复 ${savedAgents.length} 个 Agent`);
-    // TODO: 从 row 重建 Agent 实例（需要 Agent.fromData）
-    // 目前先生成新的
-    const agents = engine.spawner.spawnBatch(INITIAL_AGENTS, store.getTick());
+    const agents = savedAgents.map(row => Agent.fromData({
+      id: row.id,
+      name: row.name,
+      persona: JSON.parse(row.persona) as AgentPersona,
+      memory: JSON.parse(row.memory) as AgentMemoryState,
+      relationships: [],
+      followers: JSON.parse(row.followers) as string[],
+      following: JSON.parse(row.following) as string[],
+      influence: row.influence,
+      status: row.status as AgentStatus,
+      credibility: row.credibility,
+      spawnedAtTick: row.spawned_at_tick,
+      lastActiveTick: row.last_active_tick,
+      modelTier: row.model_tier as ModelTier,
+      modelId: `${row.model_tier}-default`,
+    }));
     engine.addAgents(agents);
   } else {
     console.log(`[Server] 孵化 ${INITIAL_AGENTS} 个初始 Agent`);
