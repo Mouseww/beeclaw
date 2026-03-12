@@ -1,0 +1,90 @@
+# ============================================================================
+# BeeClaw 默认配置文件
+# ============================================================================
+# 复制此文件为 config/local.yaml 后自行修改即可
+
+# ── 世界引擎配置 ──
+world:
+  tickIntervalMs: 30000            # Tick 间隔（毫秒）
+  maxAgents: 200                   # 最大 Agent 数量
+  eventRetentionTicks: 100         # 事件保留的 Tick 数
+  enableNaturalSelection: false    # 是否启用自然淘汰
+
+# ── 模型路由配置 ──
+models:
+  local:
+    baseURL: "http://localhost:11434"
+    apiKey: "no-key"
+    model: "qwen2.5:7b"
+    maxTokens: 1024
+    temperature: 0.7
+
+  cheap:
+    baseURL: "http://localhost:11434"
+    apiKey: "no-key"
+    model: "qwen2.5:7b"
+    maxTokens: 1536
+    temperature: 0.7
+
+  strong:
+    baseURL: "http://localhost:11434"
+    apiKey: "no-key"
+    model: "qwen2.5:72b"
+    maxTokens: 2048
+    temperature: 0.7
+
+# ── Agent 配置 ──
+agents:
+  initialCount: 10                 # 初始 Agent 数量
+  concurrency: 5                   # 同时处理的 Agent 并发数
+
+# ── 事件接入配置 ──
+eventIngestion:
+  enabled: false                   # 是否启用外部事件自动接入
+  pollIntervalMs: 300000           # 轮询间隔（毫秒），默认 5 分钟
+  maxCacheSize: 5000               # 去重缓存最大条目数
+  sources: []                      # RSS/Atom 数据源列表
+  # sources:
+  #   - name: "财经新闻"
+  #     url: "https://example.com/rss/finance"
+  #     type: "rss"
+  #     pollIntervalMs: 600000     # 单独的轮询间隔（可选）
+  #     categories:
+  #       - "finance"
+  #   - name: "科技资讯"
+  #     url: "https://example.com/rss/tech"
+  #     type: "rss"
+  #     categories:
+  #       - "tech"
+
+# ── 孵化规则 ──
+spawnRules:
+  - trigger:
+      type: "population_drop"
+      threshold: 5
+    count: 3
+    modelTier: "cheap"
+    template:
+      professionPool:
+        - "散户投资者"
+        - "金融分析师"
+        - "经济学家"
+        - "记者"
+        - "普通市民"
+      traitRanges:
+        riskTolerance: [0.1, 0.9]
+        informationSensitivity: [0.3, 0.8]
+        conformity: [0.2, 0.8]
+        emotionality: [0.2, 0.8]
+        analyticalDepth: [0.2, 0.8]
+      expertisePool:
+        - ["金融", "股票"]
+        - ["经济", "政策"]
+        - ["科技", "互联网"]
+        - ["社会", "民生"]
+      biasPool:
+        - "确认偏误"
+        - "锚定效应"
+        - "从众心理"
+        - "损失厌恶"
+        - "过度自信"
