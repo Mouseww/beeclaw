@@ -506,15 +506,15 @@ Agent.react(event):
 - [x] Agent Spawner（基本模板 + 手动/事件触发）
 
 ### 8.2 Phase 2
-- [ ] 外部事件自动接入（RSS、新闻 API）
-- [ ] 模型分层（本地模型 + 云 API 混合）
+- [x] 外部事件自动接入（RSS、新闻 API）— event-ingestion 包已完成
+- [x] 模型分层（本地模型 + 云 API 混合）— ModelRouter 已实现
 - [ ] React Dashboard（世界状态可视化）
 - [ ] Social Graph 可视化（D3.js）
-- [ ] 记忆压缩（定期摘要）
+- [x] 记忆压缩（定期摘要）— AgentMemory 已内置 LLM 压缩
 - [ ] 自然选择（信誉淘汰）
 
 ### 8.3 Phase 3
-- [ ] REST API（对外提供预测信号）
+- [x] REST API（对外提供预测信号）— server 包已实现（Fastify + WebSocket）
 - [ ] 金融数据源接入
 - [ ] 多场景模板（金融、舆论、产品测试）
 - [ ] 性能优化（batch inference、缓存）
