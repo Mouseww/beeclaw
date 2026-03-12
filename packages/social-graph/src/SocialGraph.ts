@@ -232,6 +232,27 @@ export class SocialGraph {
   }
 
   /**
+   * 获取图的统计信息
+   */
+  getStats(): { nodeCount: number; edgeCount: number; avgDegree: number; communities: string[] } {
+    const nodeCount = this.getNodeCount();
+    const edgeCount = this.getEdgeCount();
+    const avgDegree = nodeCount > 0 ? edgeCount / nodeCount : 0;
+
+    const communitySet = new Set<string>();
+    for (const node of this.nodes.values()) {
+      communitySet.add(node.community);
+    }
+
+    return {
+      nodeCount,
+      edgeCount,
+      avgDegree,
+      communities: Array.from(communitySet),
+    };
+  }
+
+  /**
    * 导出图数据（用于序列化/调试）
    */
   toData(): { nodes: SocialNode[]; edges: SocialEdge[] } {

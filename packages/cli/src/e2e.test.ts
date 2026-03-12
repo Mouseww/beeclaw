@@ -177,8 +177,8 @@ describe('BeeClaw 端到端集成测试', () => {
     for (const agent of agents) {
       const memories = agent.memory.getRecentMemories(5);
       for (const mem of memories) {
-        if (mem.emotionalWeight !== undefined) {
-          memoriesWithEmotion.push(mem.emotionalWeight);
+        if (mem.emotionalImpact !== undefined && mem.emotionalImpact !== 0) {
+          memoriesWithEmotion.push(mem.emotionalImpact);
         }
       }
     }
