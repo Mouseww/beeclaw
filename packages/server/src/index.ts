@@ -4,8 +4,12 @@
 // 启动 Fastify HTTP 服务 + WorldEngine 守护进程
 // ============================================================================
 
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
 import { WorldEngine } from '@beeclaw/world-engine';
 import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
@@ -134,6 +138,32 @@ async function main(): Promise<void> {
   registerMetricsRoute(app, ctx);
   registerHealthRoute(app, ctx);
   registerPrometheusRoute(app, ctx);
+
+  // 静态文件：Dashboard SPA
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const dashboardRoot = join(__dirname, '../../dashboard/dist');
+
+  if (existsSync(dashboardRoot)) {
+    await app.register(fastifyStatic, {
+      root: dashboardRoot,
+      prefix: '/',
+      wildcard: false,
+    });
+
+    // SPA fallback: 非 API/WS 路径返回 index.html
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/api/') || req.url.startsWith('/ws') || req.url === '/health' || req.url === '/metrics') {
+        reply.code(404).send({ error: 'Not Found' });
+      } else {
+        reply.sendFile('index.html');
+      }
+    });
+
+    console.log(`[Server] Dashboard 已挂载: ${dashboardRoot}`);
+  } else {
+    console.log(`[Server] ⚠️ Dashboard 未找到: ${dashboardRoot}`);
+  }
 
   await app.listen({ port: PORT, host: HOST });
   console.log(`[Server] HTTP + WebSocket 监听 http://${HOST}:${PORT}`);
