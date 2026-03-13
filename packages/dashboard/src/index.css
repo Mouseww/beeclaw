@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bullish: #22c55e;
+    --color-bearish: #ef4444;
+    --color-neutral: #6b7280;
+  }
+
+  body {
+    @apply antialiased;
+  }
+
+  /* 自定义滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg;
+  }
+
+  .card-header {
+    @apply text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-white;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-active {
+    @apply bg-green-900/50 text-green-400 border border-green-800;
+  }
+
+  .badge-dormant {
+    @apply bg-yellow-900/50 text-yellow-400 border border-yellow-800;
+  }
+
+  .badge-dead {
+    @apply bg-red-900/50 text-red-400 border border-red-800;
+  }
+
+  .badge-bullish {
+    @apply bg-green-900/50 text-green-400;
+  }
+
+  .badge-bearish {
+    @apply bg-red-900/50 text-red-400;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
+           text-gray-400 hover:text-white hover:bg-gray-800/60
+           transition-colors duration-150;
+  }
+
+  .nav-link-active {
+    @apply text-bee-400 bg-bee-400/10 hover:text-bee-300;
+  }
+}
