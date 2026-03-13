@@ -148,6 +148,7 @@ async function main(): Promise<void> {
   registerMetricsRoute(app, ctx);
   registerHealthRoute(app, ctx);
   registerPrometheusRoute(app, ctx);
+  registerConfigRoute(app, ctx);
 
   // 静态文件：Dashboard SPA
   const __filename = fileURLToPath(import.meta.url);
