@@ -25,6 +25,7 @@ import { registerScenarioRoute } from './api/scenario.js';
 import { registerMetricsRoute } from './api/metrics.js';
 import { registerHealthRoute } from './api/health.js';
 import { registerPrometheusRoute } from './api/prometheus.js';
+import { registerConfigRoute } from './api/config.js';
 
 // ── 配置 ──
 
@@ -58,8 +59,17 @@ async function main(): Promise<void> {
   const store = new Store(db);
   console.log(`[Server] SQLite 已初始化`);
 
-  // 2. 初始化 ModelRouter
+  // 2. 初始化 ModelRouter（先用环境变量，再用数据库覆盖）
   const modelRouter = new ModelRouter();
+
+  // 从数据库加载持久化的 LLM 配置，覆盖环境变量默认值
+  const savedLLMConfig = store.loadLLMConfigs();
+  if (savedLLMConfig) {
+    modelRouter.updateGlobalConfig(savedLLMConfig);
+    console.log(`[Server] 已从数据库恢复 LLM 配置`);
+  } else {
+    console.log(`[Server] 使用环境变量默认 LLM 配置`);
+  }
 
   // 3. 初始化 WorldEngine
   const config: WorldConfig = {

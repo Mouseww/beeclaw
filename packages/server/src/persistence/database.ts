@@ -63,6 +63,16 @@ export function initDatabase(dbPath?: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_consensus_topic ON consensus_signals(topic);
     CREATE INDEX IF NOT EXISTS idx_consensus_tick ON consensus_signals(tick);
     CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+
+    CREATE TABLE IF NOT EXISTS llm_config (
+      tier       TEXT PRIMARY KEY,
+      base_url   TEXT NOT NULL,
+      api_key    TEXT NOT NULL,
+      model      TEXT NOT NULL,
+      max_tokens INTEGER,
+      temperature REAL,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   return db;

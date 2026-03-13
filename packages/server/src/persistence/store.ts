@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type Database from 'better-sqlite3';
-import type { ConsensusSignal } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult } from '@beeclaw/world-engine';
 
@@ -151,6 +151,79 @@ export class Store {
       .all(topic, limit) as { data: string }[];
     return rows.map(r => JSON.parse(r.data) as ConsensusSignal);
   }
+
+  // ── LLM 配置持久化 ──
+
+  /** 保存单个 tier 的 LLM 配置 */
+  saveLLMConfig(tier: ModelTier, config: LLMConfig): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO llm_config
+         (tier, base_url, api_key, model, max_tokens, temperature, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, unixepoch())`
+      )
+      .run(
+        tier,
+        config.baseURL,
+        config.apiKey,
+        config.model,
+        config.maxTokens ?? null,
+        config.temperature ?? null
+      );
+  }
+
+  /** 保存所有 tier 的 LLM 配置 */
+  saveLLMConfigs(configs: ModelRouterConfig): void {
+    const tiers: ModelTier[] = ['local', 'cheap', 'strong'];
+    const tx = this.db.transaction(() => {
+      for (const tier of tiers) {
+        this.saveLLMConfig(tier, configs[tier]);
+      }
+    });
+    tx();
+  }
+
+  /** 加载数据库中保存的 LLM 配置，返回 null 表示无记录 */
+  loadLLMConfigs(): ModelRouterConfig | null {
+    const rows = this.db
+      .prepare('SELECT * FROM llm_config ORDER BY tier')
+      .all() as LLMConfigRow[];
+    if (rows.length === 0) return null;
+
+    const result: Partial<ModelRouterConfig> = {};
+    for (const row of rows) {
+      const tier = row.tier as ModelTier;
+      result[tier] = {
+        baseURL: row.base_url,
+        apiKey: row.api_key,
+        model: row.model,
+        maxTokens: row.max_tokens ?? undefined,
+        temperature: row.temperature ?? undefined,
+      };
+    }
+
+    // 确保三个 tier 都有配置才返回完整对象
+    if (result.local && result.cheap && result.strong) {
+      return result as ModelRouterConfig;
+    }
+
+    return null;
+  }
+
+  /** 加载单个 tier 的 LLM 配置 */
+  loadLLMConfig(tier: ModelTier): LLMConfig | null {
+    const row = this.db
+      .prepare('SELECT * FROM llm_config WHERE tier = ?')
+      .get(tier) as LLMConfigRow | undefined;
+    if (!row) return null;
+    return {
+      baseURL: row.base_url,
+      apiKey: row.api_key,
+      model: row.model,
+      maxTokens: row.max_tokens ?? undefined,
+      temperature: row.temperature ?? undefined,
+    };
+  }
 }
 
 // ── Row 类型 ──
@@ -180,4 +253,14 @@ export interface TickHistoryRow {
   signals: number;
   duration_ms: number;
   created_at: number;
+}
+
+export interface LLMConfigRow {
+  tier: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  max_tokens: number | null;
+  temperature: number | null;
+  updated_at: number;
 }
