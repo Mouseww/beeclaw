@@ -100,17 +100,64 @@ npm run start -- --agents 20 --ticks 5 --seed "美联储宣布加息25个基点"
 npm run start -- --agents 100 --interval 60000
 ```
 
+## 配置
+
+复制 `.env.example` 为 `.env` 并根据需要修改：
+
+```bash
+cp .env.example .env
+```
+
+主要配置项：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `BEECLAW_LLM_BASE_URL` | LLM API 地址 | `http://localhost:11434` |
+| `BEECLAW_LLM_API_KEY` | LLM API Key | `no-key` |
+| `BEECLAW_LOCAL_MODEL` | 本地模型 | `qwen2.5:7b` |
+| `BEECLAW_STRONG_MODEL` | 强模型 | `qwen2.5:72b` |
+| `BEECLAW_PORT` | Server 端口 | `3000` |
+| `BEECLAW_DB_PATH` | SQLite 路径 | 空（内存模式） |
+
+## Server & Dashboard
+
+```bash
+# 启动 HTTP API + WebSocket 服务
+npm run serve
+
+# 启动 Dashboard 开发模式
+cd packages/dashboard && npm run dev
+```
+
+Server 提供：
+- RESTful API — agents, events, consensus, status, scenario
+- WebSocket — 实时推送 tick 结果
+- Health check / Prometheus metrics — `/health`, `/metrics`
+
+## Docker
+
+```bash
+# 构建镜像
+docker build -t beeclaw .
+
+# 运行
+docker compose up -d
+```
+
 ## 包结构
 
 ```
 packages/
-  shared/        - 共享类型、工具函数
-  world-engine/  - 世界引擎（主循环、Tick 调度、世界状态）
-  agent-runtime/ - Agent 运行时（人格、记忆、LLM 调用、孵化器）
-  social-graph/  - 社交网络（图结构、传播算法、社区发现）
-  event-bus/     - 事件总线（事件分发、外部接入、传播规则）
-  consensus/     - 共识引擎（情绪聚合、趋势检测）
-  cli/           - CLI 工具（启动、注入事件、查看状态）
+  shared/          - 共享类型、工具函数
+  world-engine/    - 世界引擎（主循环、Tick 调度、世界状态、场景运行器）
+  agent-runtime/   - Agent 运行时（人格、记忆、LLM 调用、孵化器、模型路由）
+  social-graph/    - 社交网络（图结构、传播算法、社区发现）
+  event-bus/       - 事件总线（事件分发、传播规则）
+  consensus/       - 共识引擎（情绪聚合、趋势检测）
+  event-ingestion/ - 外部事件接入（RSS/Atom、Yahoo Finance、市场情绪）
+  server/          - HTTP API + WebSocket 服务（Fastify）
+  dashboard/       - React 可视化面板（Vite + D3.js）
+  cli/             - CLI 工具（启动、注入事件、查看状态、场景运行）
 ```
 
 ## 成本控制
@@ -152,6 +199,7 @@ npm test
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+- [更新日志](CHANGELOG.md)
 
 ## 许可证
 
