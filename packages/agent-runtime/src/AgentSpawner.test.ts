@@ -213,6 +213,75 @@ describe('AgentSpawner', () => {
     });
   });
 
+  // ── getRules ──
+
+  describe('getRules', () => {
+    it('初始无规则时应返回空数组', () => {
+      const spawner = new AgentSpawner();
+      expect(spawner.getRules()).toEqual([]);
+      expect(spawner.getRules()).toHaveLength(0);
+    });
+
+    it('应返回所有已添加的规则', () => {
+      const spawner = new AgentSpawner();
+      const rule1: SpawnRule = {
+        trigger: { type: 'event_keyword', keywords: ['降息'] },
+        template: TEST_TEMPLATE,
+        count: 2,
+        modelTier: 'cheap',
+      };
+      const rule2: SpawnRule = {
+        trigger: { type: 'population_drop', threshold: 5 },
+        template: TEST_TEMPLATE,
+        count: 3,
+        modelTier: 'local',
+      };
+
+      spawner.addRule(rule1);
+      spawner.addRule(rule2);
+
+      const rules = spawner.getRules();
+      expect(rules).toHaveLength(2);
+      expect(rules[0]).toEqual(rule1);
+      expect(rules[1]).toEqual(rule2);
+    });
+
+    it('构造函数传入规则后 getRules 应返回正确结果', () => {
+      const rules: SpawnRule[] = [{
+        trigger: { type: 'event_keyword', keywords: ['测试'] },
+        template: TEST_TEMPLATE,
+        count: 1,
+        modelTier: 'cheap',
+      }];
+      const spawner = new AgentSpawner(rules);
+
+      const result = spawner.getRules();
+      expect(result).toHaveLength(1);
+      expect(result[0].trigger.type).toBe('event_keyword');
+    });
+
+    it('返回的是规则副本，修改不影响内部状态', () => {
+      const spawner = new AgentSpawner();
+      spawner.addRule({
+        trigger: { type: 'event_keyword', keywords: ['降息'] },
+        template: TEST_TEMPLATE,
+        count: 2,
+        modelTier: 'cheap',
+      });
+
+      const rules = spawner.getRules();
+      rules.push({
+        trigger: { type: 'manual' },
+        template: TEST_TEMPLATE,
+        count: 10,
+        modelTier: 'strong',
+      });
+
+      // 内部规则不受外部 push 影响
+      expect(spawner.getRules()).toHaveLength(1);
+    });
+  });
+
   // ── 构造函数带规则 ──
 
   describe('constructor with rules', () => {

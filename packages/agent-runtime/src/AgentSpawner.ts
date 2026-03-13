@@ -117,6 +117,13 @@ export class AgentSpawner {
   }
 
   /**
+   * 获取当前所有孵化规则
+   */
+  getRules(): SpawnRule[] {
+    return [...this.rules];
+  }
+
+  /**
    * 获取历史孵化总数
    */
   getTotalSpawnCount(): number {

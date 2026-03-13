@@ -199,6 +199,52 @@ describe('ConsensusEngine', () => {
       ]);
       expect(signal3.trend).toBe('reversing');
     });
+
+    it('同方向情绪增强时应检测到 strengthening', () => {
+      const engine = new ConsensusEngine();
+      // 第一次：温和看多
+      engine.analyze(1, createTestEvent(), [
+        createBullishRecord('a1', 0.3),
+        createBullishRecord('a2', 0.3),
+        createNeutralRecord('a3'),
+      ]);
+      // 第二次：温和看多（建立历史）
+      engine.analyze(2, createTestEvent(), [
+        createBullishRecord('a1', 0.4),
+        createBullishRecord('a2', 0.3),
+        createNeutralRecord('a3'),
+      ]);
+      // 第三次：更强烈的看多（增强）
+      const signal3 = engine.analyze(3, createTestEvent(), [
+        createBullishRecord('a1', 0.9),
+        createBullishRecord('a2', 0.9),
+        createBullishRecord('a3', 0.8),
+      ]);
+      expect(signal3.trend).toBe('strengthening');
+    });
+
+    it('同方向情绪减弱时应检测到 weakening', () => {
+      const engine = new ConsensusEngine();
+      // 第一次：强烈看多
+      engine.analyze(1, createTestEvent(), [
+        createBullishRecord('a1', 0.9),
+        createBullishRecord('a2', 0.9),
+        createBullishRecord('a3', 0.9),
+      ]);
+      // 第二次：强烈看多（建立历史）
+      engine.analyze(2, createTestEvent(), [
+        createBullishRecord('a1', 0.9),
+        createBullishRecord('a2', 0.8),
+        createBullishRecord('a3', 0.9),
+      ]);
+      // 第三次：温和看多（减弱，但同方向）
+      const signal3 = engine.analyze(3, createTestEvent(), [
+        createBullishRecord('a1', 0.3),
+        createBullishRecord('a2', 0.3),
+        createNeutralRecord('a3'),
+      ]);
+      expect(signal3.trend).toBe('weakening');
+    });
   });
 
   // ── alerts 检测 ──
