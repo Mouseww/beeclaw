@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.0] - 2026-03-13
+
+### 🚀 New Features
+
+- **ModelRouter** — 多模型路由支持，按 Agent 角色/场景选择不同 LLM provider
+- **PersistenceStore 增强** — 持久化层改进 + config API 端点
+- **Dashboard 集成** — Server 内置 Dashboard 静态文件服务 + SPA fallback (@fastify/static)
+
+### 🐛 Bug Fixes
+
+- 修复 Docker Compose LLM 环境变量名与 ModelRouter 实际读取不一致
+- 修复 Dockerfile 构建问题 (tsconfig 路径、tsbuildinfo 缓存、依赖顺序)
+- 修复 Dashboard 前端测试 (vitest/globals 类型引用、未使用 import)
+- 修复 Docker 构建优化 + WorldState 类型
+- 修复 vitest workspace 配置 + WebSocket 重连测试
+
+### 📝 Other
+
+- 添加 .env.example 环境变量配置模板
+- 更新 README (server/dashboard/docker/配置文档)
+- Dashboard vitest + jsdom 测试配置
+- 全面测试覆盖 (750 tests passing)
+
 ## [0.2.0] - 2026-03-13
 
 ### 🚀 New Features
