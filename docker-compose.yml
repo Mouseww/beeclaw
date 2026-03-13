@@ -20,10 +20,12 @@ services:
       - BEECLAW_SAVE_INTERVAL=${BEECLAW_SAVE_INTERVAL:-5}
       - BEECLAW_DB_PATH=/app/data/beeclaw.db
       - BEECLAW_SEED_EVENT=${BEECLAW_SEED_EVENT:-}
-      # LLM API 配置 — 通过 .env 或环境变量注入
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-}
+      # ── LLM 配置 ──
+      - BEECLAW_LLM_BASE_URL=${BEECLAW_LLM_BASE_URL:-http://localhost:11434}
+      - BEECLAW_LLM_API_KEY=${BEECLAW_LLM_API_KEY:-no-key}
+      - BEECLAW_LOCAL_MODEL=${BEECLAW_LOCAL_MODEL:-qwen2.5:7b}
+      - BEECLAW_CHEAP_MODEL=${BEECLAW_CHEAP_MODEL:-qwen2.5:7b}
+      - BEECLAW_STRONG_MODEL=${BEECLAW_STRONG_MODEL:-qwen2.5:72b}
     volumes:
       - beeclaw-data:/app/data
     healthcheck:
