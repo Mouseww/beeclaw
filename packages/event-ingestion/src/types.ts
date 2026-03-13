@@ -84,3 +84,91 @@ export interface EventIngestionConfig {
   /** 去重缓存大小（记住已处理的条目 guid） */
   deduplicationCacheSize?: number;
 }
+
+// ============================================================================
+// 金融数据源类型定义
+// ============================================================================
+
+/** 金融资产类型 */
+export type AssetType = 'stock' | 'crypto' | 'forex' | 'commodity';
+
+/** 金融标的配置 */
+export interface FinanceSymbol {
+  /** 标的符号，如 AAPL, BTC-USD */
+  symbol: string;
+  /** 显示名称 */
+  name: string;
+  /** 资产类型 */
+  type: AssetType;
+  /** 自定义标签 */
+  tags?: string[];
+}
+
+/** 金融数据源配置 */
+export interface FinanceSourceConfig {
+  /** 数据源唯一标识 */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** 关注的标的列表 */
+  symbols: FinanceSymbol[];
+  /** 轮询间隔（毫秒），默认 60_000 (1分钟) */
+  pollIntervalMs?: number;
+  /** 是否启用，默认 true */
+  enabled?: boolean;
+  /** 价格变动阈值（百分比），超过此值才生成事件。默认 2 */
+  priceChangeThreshold?: number;
+  /** 是否生成市场情绪事件，默认 true */
+  enableSentimentEvents?: boolean;
+}
+
+/** 股票/加密货币行情数据 */
+export interface QuoteData {
+  /** 标的符号 */
+  symbol: string;
+  /** 显示名称 */
+  name: string;
+  /** 资产类型 */
+  type: AssetType;
+  /** 当前价格 */
+  price: number;
+  /** 价格变动（绝对值） */
+  change: number;
+  /** 价格变动（百分比） */
+  changePercent: number;
+  /** 交易量 */
+  volume?: number;
+  /** 最高价 */
+  high?: number;
+  /** 最低价 */
+  low?: number;
+  /** 开盘价 */
+  open?: number;
+  /** 前收盘价 */
+  previousClose?: number;
+  /** 市值 */
+  marketCap?: number;
+  /** 数据获取时间 */
+  timestamp: Date;
+  /** 货币单位 */
+  currency?: string;
+}
+
+/** 市场情绪类型 */
+export type MarketSentimentType = 'extreme_fear' | 'fear' | 'neutral' | 'greed' | 'extreme_greed';
+
+/** 市场情绪评估结果 */
+export interface MarketSentimentResult {
+  /** 标的符号 */
+  symbol: string;
+  /** 情绪类型 */
+  sentiment: MarketSentimentType;
+  /** 情绪强度 0-1 */
+  intensity: number;
+  /** 波动率指标 0-1 */
+  volatility: number;
+  /** 价格趋势方向 */
+  trend: 'bullish' | 'bearish' | 'sideways';
+  /** 描述文本 */
+  description: string;
+}
