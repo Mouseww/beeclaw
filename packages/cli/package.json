@@ -6,7 +6,8 @@
   "bin": {
     "beeclaw": "dist/index.js",
     "beeclaw-inject": "dist/inject.js",
-    "beeclaw-status": "dist/status.js"
+    "beeclaw-status": "dist/status.js",
+    "beeclaw-scenario": "dist/scenario.js"
   },
   "scripts": { "build": "tsc", "test": "vitest run" },
   "dependencies": {

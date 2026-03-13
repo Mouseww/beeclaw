@@ -516,7 +516,7 @@ Agent.react(event):
 ### 8.3 Phase 3
 - [x] REST API（对外提供预测信号）— server 包已实现（Fastify + WebSocket）
 - [x] 金融数据源接入（Yahoo Finance + 加密货币 + 市场情绪推断）
-- [ ] 多场景模板（金融、舆论、产品测试）
+- [x] 多场景模板（金融、舆论、产品测试）
 - [ ] 性能优化（batch inference、缓存）
 - [ ] 生产部署 + 监控
 

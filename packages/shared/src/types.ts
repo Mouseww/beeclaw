@@ -252,6 +252,66 @@ export interface SpawnRule {
   modelTier: ModelTier;
 }
 
+// ── 场景模板 ──
+
+/** Agent 角色定义（场景模板中的预定义角色） */
+export interface AgentProfile {
+  /** 角色名称标签，如 "散户"、"分析师" */
+  role: string;
+  /** 该角色的数量 */
+  count: number;
+  /** 模型层级 */
+  modelTier: ModelTier;
+  /** Agent 模板（用于生成 Agent） */
+  template: AgentTemplate;
+}
+
+/** 事件源配置（场景模板中的事件源） */
+export interface EventSourceConfig {
+  /** 事件源类型 */
+  type: 'finance' | 'rss' | 'manual';
+  /** 事件源名称 */
+  name: string;
+  /** 事件源配置参数（根据 type 不同而不同） */
+  config: Record<string, unknown>;
+}
+
+/** 共识配置覆盖 */
+export interface ConsensusConfig {
+  /** 最少需要多少个 Agent 响应才生成共识信号 */
+  minResponsesForSignal?: number;
+  /** 是否启用预警信号 */
+  enableAlerts?: boolean;
+}
+
+/** 场景模板 — 定义一个完整的仿真场景 */
+export interface ScenarioTemplate {
+  /** 模板唯一标识名 */
+  name: string;
+  /** 模板描述 */
+  description: string;
+  /** 预定义的 Agent 角色列表 */
+  agentProfiles: AgentProfile[];
+  /** 关联的事件源配置 */
+  eventSources: EventSourceConfig[];
+  /** 世界配置覆盖 */
+  worldConfig: Partial<WorldConfig>;
+  /** 共识配置覆盖 */
+  consensusConfig: Partial<ConsensusConfig>;
+  /** 默认运行 tick 数 */
+  duration?: number;
+  /** 孵化规则 */
+  spawnRules?: SpawnRule[];
+  /** 种子事件列表（启动时自动注入） */
+  seedEvents?: Array<{
+    title: string;
+    content: string;
+    category: EventCategory;
+    importance: number;
+    tags: string[];
+  }>;
+}
+
 // ── LLM 配置 ──
 
 export interface LLMConfig {

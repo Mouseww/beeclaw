@@ -15,3 +15,9 @@ export type {
   SelectionReason,
   NaturalSelectionEvent,
 } from './NaturalSelection.js';
+export { ScenarioRunner } from './ScenarioRunner.js';
+export type {
+  ScenarioRunnerOptions,
+  ScenarioStatus,
+  ScenarioSummary,
+} from './ScenarioRunner.js';
