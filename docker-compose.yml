@@ -1,0 +1,38 @@
+# ============================================================================
+# BeeClaw — Docker Compose 配置
+# ============================================================================
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: beeclaw-server
+    restart: unless-stopped
+    ports:
+      - "${BEECLAW_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - BEECLAW_PORT=3000
+      - BEECLAW_HOST=0.0.0.0
+      - BEECLAW_INITIAL_AGENTS=${BEECLAW_INITIAL_AGENTS:-10}
+      - BEECLAW_TICK_INTERVAL=${BEECLAW_TICK_INTERVAL:-30000}
+      - BEECLAW_SAVE_INTERVAL=${BEECLAW_SAVE_INTERVAL:-5}
+      - BEECLAW_DB_PATH=/app/data/beeclaw.db
+      - BEECLAW_SEED_EVENT=${BEECLAW_SEED_EVENT:-}
+      # LLM API 配置 — 通过 .env 或环境变量注入
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
+    volumes:
+      - beeclaw-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)throw 1})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  beeclaw-data:
+    driver: local
