@@ -1,6 +1,6 @@
 {
   "name": "beeclaw",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "BeeClaw (BeeWorld) - 群体智能仿真引擎，由完整 LLM Agent 组成的持续演化的平行世界",
   "private": true,
   "bin": {
@@ -15,7 +15,11 @@
     "start": "node packages/cli/dist/index.js",
     "inject": "node packages/cli/dist/inject.js",
     "status": "node packages/cli/dist/status.js",
-    "serve": "node packages/server/dist/index.js"
+    "serve": "node packages/server/dist/index.js",
+    "lint": "eslint packages/*/src/",
+    "lint:fix": "eslint packages/*/src/ --fix",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\""
   },
   "engines": {
     "node": ">=20"
@@ -23,6 +27,11 @@
   "author": "BeeQueen 集团",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^25.4.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.4.0",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.57.0"
   }
 }
