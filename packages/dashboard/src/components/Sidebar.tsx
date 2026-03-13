@@ -20,8 +20,8 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   return (
-    <aside className="w-56 border-r border-gray-800 bg-gray-950 flex flex-col shrink-0">
-      <nav className="flex-1 py-4 px-3 space-y-1">
+    <aside className="w-56 border-r border-gray-800 bg-gray-950 flex flex-col shrink-0 overflow-y-auto">
+      <nav className="flex-1 py-4 px-3 space-y-1.5">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.path}

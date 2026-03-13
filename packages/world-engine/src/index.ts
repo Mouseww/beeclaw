@@ -21,3 +21,5 @@ export type {
   ScenarioStatus,
   ScenarioSummary,
 } from './ScenarioRunner.js';
+export { AgentActivationPool } from './AgentActivationPool.js';
+export type { ActivationPoolConfig, ActivationResult } from './AgentActivationPool.js';

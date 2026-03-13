@@ -9,9 +9,19 @@ import type {
   AgentResponse,
   EventCategory,
 } from '@beeclaw/shared';
-import { batchProcess } from '@beeclaw/shared';
 import { EventBus } from '@beeclaw/event-bus';
-import { Agent, AgentSpawner, ModelRouter } from '@beeclaw/agent-runtime';
+import {
+  Agent,
+  AgentSpawner,
+  ModelRouter,
+  ResponseCache,
+  BatchInference,
+} from '@beeclaw/agent-runtime';
+import type {
+  ResponseCacheConfig,
+  BatchInferenceConfig,
+  InferenceRequest,
+} from '@beeclaw/agent-runtime';
 import { SocialGraph, calculatePropagation } from '@beeclaw/social-graph';
 import { ConsensusEngine } from '@beeclaw/consensus';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
@@ -19,6 +29,8 @@ import { TickScheduler } from './TickScheduler.js';
 import { WorldStateManager } from './WorldState.js';
 import { NaturalSelection } from './NaturalSelection.js';
 import type { NaturalSelectionConfig } from './NaturalSelection.js';
+import { AgentActivationPool } from './AgentActivationPool.js';
+import type { ActivationPoolConfig } from './AgentActivationPool.js';
 
 /**
  * WorldEngine 配置选项
@@ -28,6 +40,12 @@ export interface WorldEngineOptions {
   modelRouter?: ModelRouter;
   concurrency?: number; // LLM 并发调用数，默认 10
   naturalSelectionConfig?: Partial<NaturalSelectionConfig>; // 自然选择配置
+  /** 响应缓存配置 */
+  cacheConfig?: Partial<ResponseCacheConfig>;
+  /** 批量推理配置 */
+  batchInferenceConfig?: Partial<BatchInferenceConfig>;
+  /** Agent 激活池配置 */
+  activationPoolConfig?: Partial<ActivationPoolConfig>;
 }
 
 /**
@@ -43,6 +61,12 @@ export interface TickResult {
   durationMs: number;
   /** 自然选择淘汰的 Agent 数量（dormant + dead） */
   agentsEliminated?: number;
+  /** 缓存命中次数 */
+  cacheHits?: number;
+  /** 缓存未命中次数 */
+  cacheMisses?: number;
+  /** 被激活池过滤的 Agent 数量 */
+  agentsFiltered?: number;
 }
 
 export class WorldEngine {
@@ -54,6 +78,9 @@ export class WorldEngine {
   readonly scheduler: TickScheduler;
   readonly worldState: WorldStateManager;
   readonly naturalSelection: NaturalSelection;
+  readonly responseCache: ResponseCache;
+  readonly batchInference: BatchInference;
+  readonly activationPool: AgentActivationPool;
 
   private agents: Map<string, Agent> = new Map();
   private modelRouter: ModelRouter;
@@ -73,6 +100,14 @@ export class WorldEngine {
     this.worldState = new WorldStateManager();
 
     this.naturalSelection = new NaturalSelection(options.naturalSelectionConfig);
+
+    // Phase 3: 性能优化组件
+    this.responseCache = new ResponseCache(options.cacheConfig);
+    this.batchInference = new BatchInference({
+      maxConcurrency: this.concurrency,
+      ...options.batchInferenceConfig,
+    });
+    this.activationPool = new AgentActivationPool(options.activationPoolConfig);
 
     this.scheduler = new TickScheduler({
       tickIntervalMs: options.config.tickIntervalMs,
@@ -194,6 +229,9 @@ export class WorldEngine {
     const startTime = Date.now();
     console.log(`\n[WorldEngine] ════ Tick ${tick} 开始 ════`);
 
+    // 记录 tick 开始时的缓存状态
+    const cacheStatsBefore = this.responseCache.getStats();
+
     // 1. 推进世界状态
     this.worldState.advanceTick(tick);
 
@@ -203,20 +241,37 @@ export class WorldEngine {
 
     let totalActivated = 0;
     let totalResponses = 0;
+    let totalFiltered = 0;
     const allResponseRecords: Array<{ event: WorldEvent; records: AgentResponseRecord[] }> = [];
 
     // 3. 对每个事件进行传播和 Agent 响应
     for (const event of events) {
-      // 3a. 计算传播范围
-      const propagation = calculatePropagation(event, this.socialGraph);
-      const activatedIds = propagation.reachedAgentIds;
-      console.log(`[WorldEngine] 事件 "${event.title}" 触达 ${activatedIds.length} 个 Agent`);
+      // 3a. 使用 AgentActivationPool 计算激活范围
+      const activeAgentIds: string[] = [];
+      for (const agent of this.agents.values()) {
+        if (agent.status === 'active') {
+          activeAgentIds.push(agent.id);
+        }
+      }
 
-      // 3b. 筛选出对事件感兴趣的活跃 Agent
+      const activation = this.activationPool.computeActivation(
+        event,
+        this.socialGraph,
+        activeAgentIds,
+      );
+
+      totalFiltered += activation.filteredCount;
+
+      console.log(
+        `[WorldEngine] 事件 "${event.title}" 激活 ${activation.activatedIds.length} 个 Agent` +
+        (activation.filteredCount > 0 ? `（过滤 ${activation.filteredCount}）` : ''),
+      );
+
+      // 3b. 筛选出对事件感兴趣的 Agent
       const interestedAgents: Agent[] = [];
-      for (const agentId of activatedIds) {
+      for (const agentId of activation.activatedIds) {
         const agent = this.agents.get(agentId);
-        if (agent && agent.status === 'active' && agent.isInterestedIn(event)) {
+        if (agent && agent.isInterestedIn(event)) {
           interestedAgents.push(agent);
         }
       }
@@ -225,19 +280,31 @@ export class WorldEngine {
 
       if (interestedAgents.length === 0) continue;
 
-      // 3c. 并发调用 Agent 对事件做出反应
+      // 3c. 使用 BatchInference 批量并发调用 Agent
       const responseRecords: AgentResponseRecord[] = [];
 
-      const results = await batchProcess(
-        interestedAgents,
-        this.concurrency,
-        async (agent) => {
-          const response = await agent.react(event, this.modelRouter, tick);
-          return { agent, response };
-        }
-      );
+      const inferenceRequests: InferenceRequest<{ agent: Agent; response: AgentResponse }>[] =
+        interestedAgents.map((agent) => ({
+          id: agent.id,
+          execute: async () => {
+            const response = await agent.react(event, this.modelRouter, tick);
+            return { agent, response };
+          },
+        }));
 
-      for (const { agent, response } of results) {
+      const inferenceResults = await this.batchInference.executeBatch(inferenceRequests);
+
+      for (const inferResult of inferenceResults) {
+        if (!inferResult.success || !inferResult.result) {
+          console.error(
+            `[WorldEngine] Agent ${inferResult.id} 推理失败:`,
+            inferResult.error?.message,
+          );
+          continue;
+        }
+
+        const { agent, response } = inferResult.result;
+
         responseRecords.push({
           agentId: agent.id,
           agentName: agent.name,
@@ -354,7 +421,12 @@ export class WorldEngine {
     // 8. 清理过期事件
     this.eventBus.cleanup(tick);
 
-    // 9. 记录结果
+    // 9. 缓存统计
+    const cacheStatsAfter = this.responseCache.getStats();
+    const tickCacheHits = cacheStatsAfter.hits - cacheStatsBefore.hits;
+    const tickCacheMisses = cacheStatsAfter.misses - cacheStatsBefore.misses;
+
+    // 10. 记录结果
     const durationMs = Date.now() - startTime;
     const tickResult: TickResult = {
       tick,
@@ -365,6 +437,9 @@ export class WorldEngine {
       signals: signalCount,
       durationMs,
       agentsEliminated: agentsEliminated > 0 ? agentsEliminated : undefined,
+      cacheHits: tickCacheHits > 0 ? tickCacheHits : undefined,
+      cacheMisses: tickCacheMisses > 0 ? tickCacheMisses : undefined,
+      agentsFiltered: totalFiltered > 0 ? totalFiltered : undefined,
     };
 
     this.tickHistory.push(tickResult);
@@ -376,7 +451,9 @@ export class WorldEngine {
     console.log(
       `[WorldEngine] ════ Tick ${tick} 完成 ════ ` +
       `事件:${events.length} 激活:${totalActivated} 响应:${totalResponses} ` +
-      `信号:${signalCount} 新Agent:${newAgentsSpawned} 耗时:${durationMs}ms`
+      `信号:${signalCount} 新Agent:${newAgentsSpawned} 耗时:${durationMs}ms` +
+      (tickCacheHits > 0 ? ` 缓存命中:${tickCacheHits}` : '') +
+      (totalFiltered > 0 ? ` 过滤:${totalFiltered}` : '')
     );
   }
 
@@ -422,5 +499,16 @@ export class WorldEngine {
    */
   getSocialGraph(): SocialGraph {
     return this.socialGraph;
+  }
+
+  /**
+   * 获取性能统计信息
+   */
+  getPerformanceStats() {
+    return {
+      cache: this.responseCache.getStats(),
+      batchInference: this.batchInference.getStats(),
+      activationPool: this.activationPool.getStats(),
+    };
   }
 }

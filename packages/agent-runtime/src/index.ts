@@ -14,3 +14,12 @@ export {
   buildSystemPrompt,
   DEFAULT_TEMPLATE,
 } from './AgentPersona.js';
+export { ResponseCache } from './ResponseCache.js';
+export type { CacheEntry, CacheStats, ResponseCacheConfig } from './ResponseCache.js';
+export { BatchInference } from './BatchInference.js';
+export type {
+  InferenceRequest,
+  InferenceResult,
+  BatchStats,
+  BatchInferenceConfig,
+} from './BatchInference.js';

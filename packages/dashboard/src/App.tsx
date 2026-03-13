@@ -16,16 +16,16 @@ export function App() {
   const { state: wsState, lastTick } = useWebSocket();
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-950 text-gray-100">
       {/* 顶部导航 */}
       <Header wsState={wsState} tick={lastTick?.tick ?? 0} />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
         {/* 侧边栏 */}
         <Sidebar />
 
         {/* 主内容区 */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
           <Routes>
             <Route path="/" element={<WorldOverview />} />
             <Route path="/agents" element={<AgentList />} />

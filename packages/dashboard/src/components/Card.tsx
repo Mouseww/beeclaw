@@ -13,7 +13,7 @@ interface CardProps {
 /** 通用卡片容器 */
 export function Card({ title, children, className = '' }: CardProps) {
   return (
-    <div className={`card ${className}`}>
+    <div className={`card mb-4 ${className}`}>
       {title && <h3 className="card-header">{title}</h3>}
       {children}
     </div>
