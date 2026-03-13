@@ -1,9 +1,6 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineProject } from 'vitest/config';
 
-export default defineConfig({
-  plugins: [react()],
+export default defineProject({
   test: {
     environment: 'jsdom',
     globals: true,
