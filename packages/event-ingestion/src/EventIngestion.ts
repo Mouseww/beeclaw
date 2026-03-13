@@ -5,9 +5,10 @@
 
 import type { EventCategory } from '@beeclaw/shared';
 import type { EventBus } from '@beeclaw/event-bus';
-import type { FeedSource, FeedItem, EventIngestionConfig, ParsedFeed } from './types.js';
+import type { FeedSource, FeedItem, EventIngestionConfig, ParsedFeed, FinanceSourceConfig } from './types.js';
 import { parseFeed } from './FeedParser.js';
 import { ImportanceEvaluator } from './ImportanceEvaluator.js';
+import { FinanceDataSource } from './FinanceDataSource.js';
 
 /** 默认配置 */
 const DEFAULTS = {
@@ -29,6 +30,7 @@ interface SourceState {
 export class EventIngestion {
   private eventBus: EventBus;
   private sources: Map<string, SourceState> = new Map();
+  private financeSources: Map<string, FinanceDataSource> = new Map();
   private seenGuids: Set<string> = new Set();
   private maxCacheSize: number;
   private maxItemsPerPoll: number;
@@ -93,6 +95,56 @@ export class EventIngestion {
     console.log(`[EventIngestion] 移除数据源: "${sourceId}"`);
   }
 
+  // ── 金融数据源管理 ──
+
+  /**
+   * 添加金融数据源（Yahoo Finance 行情）
+   */
+  addFinanceSource(config: FinanceSourceConfig): FinanceDataSource {
+    if (this.financeSources.has(config.id)) {
+      console.warn(`[EventIngestion] 金融数据源 "${config.id}" 已存在，将被覆盖`);
+      this.removeFinanceSource(config.id);
+    }
+
+    const financeSource = new FinanceDataSource(this.eventBus, config);
+    financeSource.setCurrentTick(this.currentTick);
+    this.financeSources.set(config.id, financeSource);
+    console.log(`[EventIngestion] 添加金融数据源: "${config.name}" (${config.symbols.length} 个标的)`);
+
+    // 如果已在运行中且该源启用，立即启动
+    if (this.running && (config.enabled ?? true)) {
+      financeSource.start();
+    }
+
+    return financeSource;
+  }
+
+  /**
+   * 移除金融数据源
+   */
+  removeFinanceSource(sourceId: string): void {
+    const source = this.financeSources.get(sourceId);
+    if (!source) return;
+
+    source.stop();
+    this.financeSources.delete(sourceId);
+    console.log(`[EventIngestion] 移除金融数据源: "${sourceId}"`);
+  }
+
+  /**
+   * 获取金融数据源状态
+   */
+  getFinanceSourceStates(): Array<ReturnType<FinanceDataSource['getStatus']>> {
+    return Array.from(this.financeSources.values()).map(s => s.getStatus());
+  }
+
+  /**
+   * 获取指定金融数据源实例
+   */
+  getFinanceSource(sourceId: string): FinanceDataSource | undefined {
+    return this.financeSources.get(sourceId);
+  }
+
   /**
    * 获取所有数据源状态
    */
@@ -123,6 +175,10 @@ export class EventIngestion {
    */
   setCurrentTick(tick: number): void {
     this.currentTick = tick;
+    // 同步更新金融数据源的 tick
+    for (const source of this.financeSources.values()) {
+      source.setCurrentTick(tick);
+    }
   }
 
   /**
@@ -131,12 +187,17 @@ export class EventIngestion {
   start(): void {
     if (this.running) return;
     this.running = true;
-    console.log(`[EventIngestion] 启动自动轮询，数据源数量: ${this.sources.size}`);
+    console.log(`[EventIngestion] 启动自动轮询，数据源数量: ${this.sources.size}，金融数据源数量: ${this.financeSources.size}`);
 
     for (const state of this.sources.values()) {
       if (state.source.enabled) {
         this.startSourcePolling(state);
       }
+    }
+
+    // 启动金融数据源
+    for (const source of this.financeSources.values()) {
+      source.start();
     }
   }
 
@@ -151,6 +212,12 @@ export class EventIngestion {
         state.timer = undefined;
       }
     }
+
+    // 停止金融数据源
+    for (const source of this.financeSources.values()) {
+      source.stop();
+    }
+
     console.log('[EventIngestion] 已停止所有轮询');
   }
 

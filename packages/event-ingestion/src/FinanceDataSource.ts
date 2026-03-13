@@ -38,6 +38,7 @@ export class FinanceDataSource {
   private running = false;
   private currentTick = 0;
   private sentiment: MarketSentiment;
+  private _lastFetchError?: string;
 
   /** 允许注入自定义 fetch（用于测试） */
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>;
@@ -72,9 +73,12 @@ export class FinanceDataSource {
     return this.state.config.name;
   }
 
-  /** 获取配置 */
+  /** 获取配置（深拷贝，修改副本不影响原始） */
   getConfig(): FinanceSourceConfig {
-    return { ...this.state.config };
+    return {
+      ...this.state.config,
+      symbols: this.state.config.symbols.map(s => ({ ...s })),
+    };
   }
 
   /** 获取运行状态 */
@@ -149,11 +153,18 @@ export class FinanceDataSource {
 
   /** 手动触发一次轮询 */
   async poll(): Promise<number> {
+    this._lastFetchError = undefined;
     try {
       const quotes = await this.fetchQuotes();
       this.state.lastPollTime = new Date();
-      this.state.lastError = undefined;
       this.state.quotesPolled += quotes.length;
+
+      // 如果有标的但全部获取失败，记录最后一个 fetch 错误
+      if (quotes.length === 0 && this.state.config.symbols.length > 0 && this._lastFetchError) {
+        this.state.lastError = this._lastFetchError;
+      } else {
+        this.state.lastError = undefined;
+      }
 
       let eventsEmitted = 0;
 
@@ -251,6 +262,7 @@ export class FinanceDataSource {
       return this.parseYahooChartResponse(data, symbol);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
+      this._lastFetchError = msg;
       console.warn(`[FinanceDataSource] 获取 ${symbol.symbol} 行情失败: ${msg}`);
       return null;
     }
