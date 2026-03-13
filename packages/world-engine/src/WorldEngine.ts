@@ -9,6 +9,7 @@ import type {
   AgentResponse,
   EventCategory,
 } from '@beeclaw/shared';
+import { createLogger } from '@beeclaw/shared';
 import { EventBus } from '@beeclaw/event-bus';
 import {
   Agent,
@@ -87,6 +88,9 @@ export class WorldEngine {
   private concurrency: number;
   private tickHistory: TickResult[] = [];
   private running = false;
+  private readonly log = createLogger('WorldEngine');
+  /** 累计 LLM 调用计数（含跨 tick） */
+  private totalLLMCalls = 0;
 
   constructor(options: WorldEngineOptions) {
     this.config = options.config;
@@ -175,7 +179,7 @@ export class WorldEngine {
   start(): void {
     if (this.running) return;
     this.running = true;
-    console.log(`[WorldEngine] 🐝 BeeWorld 启动！Agent 数量: ${this.agents.size}`);
+    this.log.info('🐝 BeeWorld 启动', { agentCount: this.agents.size });
     this.scheduler.start();
   }
 
@@ -185,7 +189,7 @@ export class WorldEngine {
   stop(): void {
     this.running = false;
     this.scheduler.stop();
-    console.log(`[WorldEngine] BeeWorld 已停止，Tick: ${this.scheduler.getCurrentTick()}`);
+    this.log.info('BeeWorld 已停止', { tick: this.scheduler.getCurrentTick() });
   }
 
   /**

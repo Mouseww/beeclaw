@@ -18,6 +18,9 @@ import { registerEventsRoute } from './api/events.js';
 import { registerConsensusRoute } from './api/consensus.js';
 import { registerHistoryRoute } from './api/history.js';
 import { registerScenarioRoute } from './api/scenario.js';
+import { registerMetricsRoute } from './api/metrics.js';
+import { registerHealthRoute } from './api/health.js';
+import { registerPrometheusRoute } from './api/prometheus.js';
 
 // ── 配置 ──
 
@@ -128,9 +131,9 @@ async function main(): Promise<void> {
   registerConsensusRoute(app, ctx);
   registerHistoryRoute(app, ctx);
   registerScenarioRoute(app, ctx);
-
-  // 健康检查
-  app.get('/health', async () => ({ ok: true }));
+  registerMetricsRoute(app, ctx);
+  registerHealthRoute(app, ctx);
+  registerPrometheusRoute(app, ctx);
 
   await app.listen({ port: PORT, host: HOST });
   console.log(`[Server] HTTP + WebSocket 监听 http://${HOST}:${PORT}`);
