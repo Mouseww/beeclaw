@@ -23,8 +23,11 @@ dist/
 
 # 文档和配置
 docs/
-*.md
 LICENSE
+# 只忽略非必需的 md 文件（保留 tsconfig 等构建文件）
+CHANGELOG.md
+CLAUDE.md
+README.md
 
 # CI / 工作流
 .github/

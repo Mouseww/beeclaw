@@ -23,22 +23,22 @@ COPY packages/server/package.json         packages/server/
 COPY packages/cli/package.json            packages/cli/
 COPY packages/dashboard/package.json      packages/dashboard/
 
-RUN npm ci
+RUN npm ci --network-timeout 120000
 
-# 复制源码和配置
-COPY tsconfig.json ./
+# 复制 tsconfig 和源码
+COPY tsconfig.base.json ./
 COPY packages/ packages/
 
-# 构建所有 TypeScript 包（不含 dashboard，dashboard 用 vite 单独构建）
-RUN npm run build --workspace=packages/shared \
- && npm run build --workspace=packages/world-engine \
- && npm run build --workspace=packages/agent-runtime \
- && npm run build --workspace=packages/social-graph \
- && npm run build --workspace=packages/event-bus \
- && npm run build --workspace=packages/consensus \
- && npm run build --workspace=packages/event-ingestion \
- && npm run build --workspace=packages/server \
- && npm run build --workspace=packages/cli
+# 按依赖顺序逐个构建，每次验证 dist 输出
+RUN npm run build --workspace=packages/shared && ls packages/shared/dist/index.js
+RUN npm run build --workspace=packages/event-bus && ls packages/event-bus/dist/index.js
+RUN npm run build --workspace=packages/social-graph && ls packages/social-graph/dist/index.js
+RUN npm run build --workspace=packages/consensus && ls packages/consensus/dist/index.js
+RUN npm run build --workspace=packages/agent-runtime && ls packages/agent-runtime/dist/index.js
+RUN npm run build --workspace=packages/world-engine && ls packages/world-engine/dist/index.js
+RUN npm run build --workspace=packages/event-ingestion && ls packages/event-ingestion/dist/index.js
+RUN npm run build --workspace=packages/server && ls packages/server/dist/index.js
+RUN npm run build --workspace=packages/cli && ls packages/cli/dist/index.js
 
 # ── 阶段 2: 构建 Dashboard ─────────────────────────────────────────────────
 FROM builder AS dashboard-builder
@@ -69,7 +69,7 @@ COPY packages/server/package.json         packages/server/
 COPY packages/cli/package.json            packages/cli/
 COPY packages/dashboard/package.json      packages/dashboard/
 
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --network-timeout 120000 && npm cache clean --force
 
 # 清理构建工具（仅用于 native 模块编译）
 RUN apt-get purge -y python3 make g++ && apt-get autoremove -y

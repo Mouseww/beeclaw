@@ -100,7 +100,8 @@ export class WorldStateManager {
     const sentimentEntries = Object.entries(this.state.sentiment);
     if (sentimentEntries.length > 0) {
       lines.push('  ── 情绪地图 ──');
-      for (const [topic, value] of sentimentEntries.slice(0, 10)) {
+      for (const [topic, rawValue] of sentimentEntries.slice(0, 10)) {
+        const value = rawValue as number;
         const bar = value > 0 ? '📈' : value < 0 ? '📉' : '➡️';
         lines.push(`    ${bar} ${topic}: ${value > 0 ? '+' : ''}${value.toFixed(2)}`);
       }
