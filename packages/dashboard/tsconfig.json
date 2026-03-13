@@ -20,5 +20,6 @@
     "resolveJsonModule": true,
     "types": ["vitest/globals", "@testing-library/jest-dom/vitest"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/__tests__"]
 }
