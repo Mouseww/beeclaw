@@ -17,6 +17,8 @@ import { ConsensusEngine } from '@beeclaw/consensus';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 import { TickScheduler } from './TickScheduler.js';
 import { WorldStateManager } from './WorldState.js';
+import { NaturalSelection } from './NaturalSelection.js';
+import type { NaturalSelectionConfig } from './NaturalSelection.js';
 
 /**
  * WorldEngine 配置选项
@@ -25,6 +27,7 @@ export interface WorldEngineOptions {
   config: WorldConfig;
   modelRouter?: ModelRouter;
   concurrency?: number; // LLM 并发调用数，默认 10
+  naturalSelectionConfig?: Partial<NaturalSelectionConfig>; // 自然选择配置
 }
 
 /**
@@ -38,6 +41,8 @@ export interface TickResult {
   newAgentsSpawned: number;
   signals: number;
   durationMs: number;
+  /** 自然选择淘汰的 Agent 数量（dormant + dead） */
+  agentsEliminated?: number;
 }
 
 export class WorldEngine {
@@ -48,6 +53,7 @@ export class WorldEngine {
   readonly spawner: AgentSpawner;
   readonly scheduler: TickScheduler;
   readonly worldState: WorldStateManager;
+  readonly naturalSelection: NaturalSelection;
 
   private agents: Map<string, Agent> = new Map();
   private modelRouter: ModelRouter;
@@ -65,6 +71,8 @@ export class WorldEngine {
     this.consensusEngine = new ConsensusEngine();
     this.spawner = new AgentSpawner();
     this.worldState = new WorldStateManager();
+
+    this.naturalSelection = new NaturalSelection(options.naturalSelectionConfig);
 
     this.scheduler = new TickScheduler({
       tickIntervalMs: options.config.tickIntervalMs,
@@ -313,13 +321,40 @@ export class WorldEngine {
       newAgentsSpawned += scheduledAgents.length;
     }
 
-    // 6. 更新活跃事件
+    // 6. 自然选择（信誉淘汰）
+    let agentsEliminated = 0;
+    if (this.config.enableNaturalSelection && this.naturalSelection.shouldCheck(tick)) {
+      const allAgents = this.getAgents();
+      const { result, event: selectionEvent } = this.naturalSelection.evaluate(
+        tick,
+        allAgents,
+        this.spawner,
+        (newAgents) => {
+          this.addAgents(newAgents);
+          newAgentsSpawned += newAgents.length;
+        },
+      );
+
+      agentsEliminated = result.newDormant.length + result.newDead.length;
+
+      // 更新 Agent 数量
+      this.worldState.setAgentCount(this.agents.size);
+
+      console.log(
+        `[NaturalSelection] Tick ${tick}: ` +
+        `休眠 ${result.newDormant.length} / 死亡 ${result.newDead.length} / ` +
+        `新生 ${result.newSpawned.length} ` +
+        `活跃: ${result.activeCountBefore} → ${result.activeCountAfter}`
+      );
+    }
+
+    // 7. 更新活跃事件
     this.worldState.setActiveEvents(this.eventBus.getActiveEvents(tick));
 
-    // 7. 清理过期事件
+    // 8. 清理过期事件
     this.eventBus.cleanup(tick);
 
-    // 8. 记录结果
+    // 9. 记录结果
     const durationMs = Date.now() - startTime;
     const tickResult: TickResult = {
       tick,
@@ -329,6 +364,7 @@ export class WorldEngine {
       newAgentsSpawned,
       signals: signalCount,
       durationMs,
+      agentsEliminated: agentsEliminated > 0 ? agentsEliminated : undefined,
     };
 
     this.tickHistory.push(tickResult);

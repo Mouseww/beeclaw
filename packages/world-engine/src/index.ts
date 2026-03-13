@@ -7,3 +7,11 @@ export type { WorldEngineOptions, TickResult } from './WorldEngine.js';
 export { WorldStateManager } from './WorldState.js';
 export { TickScheduler } from './TickScheduler.js';
 export type { TickSchedulerOptions } from './TickScheduler.js';
+export { NaturalSelection } from './NaturalSelection.js';
+export type {
+  NaturalSelectionConfig,
+  SelectionResult,
+  SelectionRecord,
+  SelectionReason,
+  NaturalSelectionEvent,
+} from './NaturalSelection.js';
