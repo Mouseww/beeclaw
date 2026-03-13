@@ -2,7 +2,13 @@
 // BeeClaw Dashboard — 测试环境初始化
 // ============================================================================
 
-import '@testing-library/jest-dom/vitest';
+// 注意：不使用 '@testing-library/jest-dom/vitest' 自动注册，因为在 monorepo 中
+// 它可能解析到根目录的 vitest (v4) 而非 dashboard 本地的 vitest (v3)，导致
+// expect.extend 注册到错误的 expect 实例上。改为手动导入 matchers 并注册。
+import { expect } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+
+expect.extend(matchers);
 
 // Mock WebSocket (jsdom 不提供)
 class MockWebSocket {
