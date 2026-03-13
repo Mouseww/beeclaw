@@ -130,17 +130,20 @@ export class ModelRouter {
    * 获取当前所有 tier 的配置（apiKey 脱敏显示）
    */
   getConfig(): ModelRouterConfigMasked {
-    const result: Record<string, LLMConfigMasked> = {};
-    for (const tier of ALL_TIERS) {
+    const mask = (tier: ModelTier): LLMConfigMasked => {
       const cfg = this.configs.get(tier)!;
-      result[tier] = {
+      return {
         baseURL: cfg.baseURL,
         apiKey: maskApiKey(cfg.apiKey),
         model: cfg.model,
         maxTokens: cfg.maxTokens,
         temperature: cfg.temperature,
       };
-    }
-    return result as ModelRouterConfigMasked;
+    };
+    return {
+      local: mask('local'),
+      cheap: mask('cheap'),
+      strong: mask('strong'),
+    };
   }
 }
