@@ -17,32 +17,43 @@ let lastWsInstance: {
   close: ReturnType<typeof vi.fn>;
 } | null = null;
 
+// 用于追踪构造次数的 spy
+const wsConstructorSpy = vi.fn();
+
 beforeEach(() => {
   lastWsInstance = null;
+  wsConstructorSpy.mockClear();
   vi.useFakeTimers();
 
-  // 替换全局 WebSocket 构造函数以捕获实例
-  globalThis.WebSocket = vi.fn().mockImplementation((url: string) => {
-    const ws = {
-      url,
-      readyState: 0, // CONNECTING
-      onopen: null,
-      onclose: null,
-      onmessage: null,
-      onerror: null,
-      close: vi.fn(),
-      send: vi.fn(),
-    };
-    lastWsInstance = ws;
-    return ws;
-  }) as unknown as typeof WebSocket;
+  // 使用 class 来 mock WebSocket，确保 new 调用正常工作
+  class MockWS {
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSING = 2;
+    static readonly CLOSED = 3;
 
-  Object.assign(globalThis.WebSocket, {
-    CONNECTING: 0,
-    OPEN: 1,
-    CLOSING: 2,
-    CLOSED: 3,
-  });
+    readonly CONNECTING = 0;
+    readonly OPEN = 1;
+    readonly CLOSING = 2;
+    readonly CLOSED = 3;
+
+    url: string;
+    readyState = 0;
+    onopen: ((ev: Event) => void) | null = null;
+    onclose: ((ev: CloseEvent) => void) | null = null;
+    onmessage: ((ev: MessageEvent) => void) | null = null;
+    onerror: ((ev: Event) => void) | null = null;
+    close = vi.fn();
+    send = vi.fn();
+
+    constructor(url: string) {
+      wsConstructorSpy(url);
+      this.url = url;
+      lastWsInstance = this;
+    }
+  }
+
+  vi.stubGlobal('WebSocket', MockWS);
 });
 
 describe('useWebSocket', () => {
@@ -178,7 +189,7 @@ describe('useWebSocket', () => {
     });
 
     // 应该创建了新的 WebSocket 实例
-    expect(globalThis.WebSocket).toHaveBeenCalledTimes(2);
+    expect(wsConstructorSpy).toHaveBeenCalledTimes(2);
   });
 
   it('WebSocket 出错应关闭连接', async () => {
