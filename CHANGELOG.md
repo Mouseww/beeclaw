@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0] - 2026-03-15
+
+### 🐛 Bug Fixes
+
+- **Dashboard:** 修复 useWebSocket 测试的 WebSocket mock 问题
+- **Dashboard:** 分离 vitest.config.ts 解决 jsdom 环境不被识别问题
+- **Dashboard:** 使用 vite defineConfig + react plugin 修复 jsdom 测试环境
+- **Server:** 注册 config route 到主应用引导流程
+
+### 📝 Other
+
+- Server 持久化层测试文件跟踪 (database.test.ts, store.test.ts, api helpers)
+- 全量测试覆盖 799 tests passing
+
 ## [0.3.0] - 2026-03-13
 
 ### 🚀 New Features
