@@ -26,6 +26,12 @@ import { registerMetricsRoute } from './api/metrics.js';
 import { registerHealthRoute } from './api/health.js';
 import { registerPrometheusRoute } from './api/prometheus.js';
 import { registerConfigRoute } from './api/config.js';
+import {
+  registerAuthMiddleware,
+  registerCorsMiddleware,
+  registerRateLimitMiddleware,
+  registerRequestLogger,
+} from './middleware/index.js';
 
 // ── 配置 ──
 
@@ -136,6 +142,12 @@ async function main(): Promise<void> {
   // 6. 启动 Fastify
   const app = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
+
+  // 注册中间件（在路由之前）
+  await registerCorsMiddleware(app);
+  await registerRateLimitMiddleware(app);
+  registerAuthMiddleware(app);
+  registerRequestLogger(app);
 
   // 共享上下文
   const ctx: ServerContext = {

@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.7.0] - 2026-03-16
+
+### 🔒 Server 生产加固
+
+- **API 认证中间件** — 支持 Bearer token 认证
+  - 环境变量 `BEECLAW_API_KEY` 设置 API key
+  - 不设置则不启用认证（开发模式）
+  - `/health` 和 `/metrics/prometheus` 不需要认证（给监控用）
+  - 认证失败返回 401
+- **CORS 中间件** — 基于 `@fastify/cors`
+  - 环境变量 `BEECLAW_CORS_ORIGINS` 控制允许的域名（逗号分隔）
+  - 默认允许所有来源（开发模式）
+- **Rate Limiting** — 基于 `@fastify/rate-limit`
+  - 默认 100 req/min
+  - 环境变量 `BEECLAW_RATE_LIMIT` 可调整上限
+  - `/health` 和 `/metrics/prometheus` 不受限速影响
+- **请求日志增强** — 记录请求方法、路径、状态码、耗时
+  - 按状态码分级输出（200 → log，4xx → warn，5xx → error）
+
+### 🧪 Testing
+
+- 新增 24 个中间件单元测试，覆盖 auth、CORS、rate-limit、request-logger
+
+### 📦 Dependencies
+
+- 新增 `@fastify/cors` — CORS 跨域支持
+- 新增 `@fastify/rate-limit` — 请求频率限制
+
 ## [0.6.1] - 2026-03-16
 
 ### 🐛 Bug Fixes

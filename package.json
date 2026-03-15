@@ -1,6 +1,6 @@
 {
   "name": "beeclaw",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "BeeClaw (BeeWorld) - 群体智能仿真引擎，由完整 LLM Agent 组成的持续演化的平行世界",
   "private": true,
   "bin": {
@@ -22,7 +22,8 @@
     "lint": "eslint packages/*/src/",
     "lint:fix": "eslint packages/*/src/ --fix",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\"",
-    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\""
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
+    "benchmark": "vitest bench --config vitest.config.bench.ts"
   },
   "engines": {
     "node": ">=20"

@@ -215,6 +215,14 @@ pm2 startup
 | `BEECLAW_SEED_EVENT` | _(空)_ | 启动时注入的种子事件内容 |
 | `BEECLAW_SAVE_INTERVAL` | `5` | 每 N 个 tick 保存一次状态到数据库 |
 
+### 安全与访问控制
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `BEECLAW_API_KEY` | _(空=不启用)_ | API 认证 Bearer token。设置后所有 API 请求需携带 `Authorization: Bearer <key>`。`/health` 和 `/metrics/prometheus` 不需要认证 |
+| `BEECLAW_CORS_ORIGINS` | _(空=允许所有)_ | 允许的 CORS 域名（逗号分隔），例如 `https://dashboard.beeclaw.com,https://admin.beeclaw.com`。不设置则允许所有来源 |
+| `BEECLAW_RATE_LIMIT` | `100` | 每分钟最大请求数。`/health` 和 `/metrics/prometheus` 不受限速影响 |
+
 ### 日志配置
 
 | 变量 | 默认值 | 说明 |
@@ -326,8 +334,10 @@ docker cp beeclaw-server:/app/data/beeclaw.db ./beeclaw-backup.db
 
 ### 安全注意事项
 
-- 当前所有 API 端点**无认证**，不要直接暴露到公网
-- 使用反向代理（Nginx / Caddy）提供 TLS 和访问控制
+- 生产环境**强烈建议**设置 `BEECLAW_API_KEY`，防止未授权访问
+- 设置 `BEECLAW_CORS_ORIGINS` 限制允许的前端域名
+- 内置 Rate Limiting 防止滥用（默认 100 req/min，可通过 `BEECLAW_RATE_LIMIT` 调整）
+- 使用反向代理（Nginx / Caddy）提供 TLS 和额外的安全层
 - LLM API Key 敏感信息通过环境变量传递，不要写入代码或镜像
 
 ### Nginx 反向代理示例
