@@ -773,14 +773,19 @@ describe('EventIngestion', () => {
       fetchSpy.mockRestore();
     });
 
-    it('fetch 失败应在 state 中记录 lastError', async () => {
+    it('fetch 失败应在 state 中记录 lastError', { timeout: 15000 }, async () => {
       const fetchSpy = mockFetchFailure('timeout');
 
       const bus = createMockEventBus();
       const ingestion = new EventIngestion(bus as any);
       ingestion.addSource(createSource());
 
-      await ingestion.pollSource('test-src');
+      // pollSource → fetchFeed retries use setTimeout with backoff.
+      // With fake timers we must advance time so those sleeps resolve.
+      const pollPromise = ingestion.pollSource('test-src');
+      // Advance past all retry backoffs (1s + 2s + margin)
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pollPromise;
 
       const states = ingestion.getSourceStates();
       expect(states[0]!.lastError).toContain('timeout');
