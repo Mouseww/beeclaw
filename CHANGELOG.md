@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0] - 2026-03-16
+
+### 🧪 Testing
+
+- **E2E 集成测试** — 新增 5 个端到端测试套件，覆盖完整仿真流水线
+  - `world-engine-tick.test.ts` — 世界引擎 tick 循环集成测试
+  - `agent-lifecycle.test.ts` — Agent 全生命周期（孵化→进化→淘汰）集成测试
+  - `cli-integration.test.ts` — CLI 命令集成测试
+  - `server-api.test.ts` — Server REST API 端到端测试
+  - `event-ingestion.test.ts` — 外部事件接入管道集成测试
+- **包级测试补全** — 补充 shared、event-bus、server 包的单元测试
+  - `shared/logger.test.ts` — 日志工具完整测试覆盖
+  - `event-bus/index.test.ts` — 事件总线核心功能测试
+  - `server/routes.test.ts` — API 路由处理器测试
+- **测试基础设施** — 每个子包独立 `vitest.config.ts`，支持独立运行
+- **E2E 测试配置** — 顶层 `vitest.config.e2e.ts` + 测试辅助工具
+- 测试覆盖：73 e2e + 280 unit = **353 新增测试**，全项目总计 **~1150+ tests passing**
+
 ## [0.5.1] - 2026-03-16
 
 ### 📝 Documentation
