@@ -1,5 +1,9 @@
 # BeeClaw 🐝🔮
 
+[![CI](https://github.com/Mouseww/beeclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/Mouseww/beeclaw/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+
 > **BeeClaw** (又名 BeeWorld / 蜂蜂大世界) — 由完整 LLM Agent 组成的群体智能仿真引擎
 
 一个持续运行的平行世界，数百到数千个**完整 LLM Agent** 在其中生活、交互、演化，通过群体行为涌现来预测现实世界的趋势。
@@ -199,6 +203,9 @@ npm test
 ## 文档
 
 - [架构设计](docs/ARCHITECTURE.md)
+- [API 参考](docs/API.md)
+- [部署指南](docs/DEPLOYMENT.md)
+- [开发者指南](docs/DEVELOPMENT.md)
 - [更新日志](CHANGELOG.md)
 
 ## 许可证
