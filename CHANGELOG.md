@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.0.0] - 2026-03-16
+
+### 🎉 首个正式版本发布
+
+BeeClaw v1.0.0 标志着 **Phase 1-3 全部完成**，系统已具备完整的群体智能仿真能力。
+
+### ✅ Phase 1 — 核心引擎
+
+- **World Engine** — Tick 驱动的世界主循环，回合制状态管理
+- **Agent Runtime** — 完整 LLM Agent，独立人格（AgentPersona）、短期/长期记忆（AgentMemory）、观点立场系统
+- **Social Graph** — 动态社交网络，关系形成/传播算法/社区发现
+- **Event Bus** — 事件分发与传播规则，手动注入 + Agent 响应级联
+- **Consensus Engine** — 情绪聚合、趋势检测、多空比例分析
+- **CLI** — 启动世界、注入事件、查看状态
+- **Agent Spawner** — 模板孵化、事件触发/定时/手动生成
+
+### ✅ Phase 2 — 可视化与进化
+
+- **Event Ingestion** — 外部事件自动接入（RSS/Atom FeedParser、Yahoo Finance 行情、市场情绪推断）
+- **Model Router** — 多模型分层路由（local/cheap/strong）
+- **Dashboard** — React 可视化面板（世界总览、Agent 列表/详情、事件时间线、共识面板）
+- **Social Graph 可视化** — D3.js 力导向图
+- **记忆压缩** — LLM 驱动的长期记忆摘要
+- **自然选择** — 信誉淘汰机制
+
+### ✅ Phase 3 — 生产就绪
+
+- **Server API** — Fastify REST API + WebSocket 实时推送 + SQLite 持久化
+- **金融数据源** — Yahoo Finance + 加密货币 + 市场情绪分析
+- **场景模板** — ScenarioRunner 多场景运行器（金融、舆论、产品测试）
+- **性能优化** — BatchInference、ResponseCache、AgentActivationPool
+- **生产加固** — API 认证（Bearer token）、CORS、Rate Limiting、请求日志增强
+- **监控** — Health check、Prometheus metrics、结构化日志
+- **OpenAPI Schema Validation** — 全路由 JSON Schema 校验 + Swagger UI 文档
+- **部署** — Dockerfile + docker-compose.yml + GitHub Actions CI
+
+### 🧪 测试
+
+- 1150+ 测试通过（单元测试 + E2E 集成测试 + 基准测试）
+- 5 个核心模块基准测试套件
+
+### 🐛 Bug Fixes（自 v0.8.0）
+
+- 修复 `setErrorHandler` 回调缺少 `FastifyError` 类型注解
+- 修复 AgentDetail 测试 + webhook/schema 改进
+
 ## [0.8.0] - 2026-03-16
 
 ### 🚀 New Features
