@@ -17,14 +17,14 @@ import {
 // ── Mock WebSocket 工厂 ──
 
 function createMockSocket(overrides?: Partial<Record<string, any>>) {
-  const listeners = new Map<string, Function[]>();
+  const listeners = new Map<string, ((...args: any[]) => void)[]>();
   const socket: Record<string, any> = {
     readyState: 1, // OPEN
     send: vi.fn(),
     ping: vi.fn(),
     close: vi.fn(),
     terminate: vi.fn(),
-    on: vi.fn((event: string, cb: Function) => {
+    on: vi.fn((event: string, cb: (...args: any[]) => void) => {
       if (!listeners.has(event)) listeners.set(event, []);
       listeners.get(event)!.push(cb);
     }),

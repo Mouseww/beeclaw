@@ -5,7 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 export default tseslint.config(
   // 全局忽略
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/*.js', '**/*.mjs', '!eslint.config.js'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.js', '**/*.mjs', '!eslint.config.js'],
   },
 
   // 基础 JS 推荐规则
