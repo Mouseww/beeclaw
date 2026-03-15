@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 import { fetchAgents } from '../api/client';
 import { Card, EmptyState, ErrorState } from '../components';
@@ -61,15 +62,15 @@ export function AgentList() {
                       className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
                     >
                       <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2">
+                        <Link to={`/agents/${agent.id}`} className="flex items-center gap-2 group">
                           <span className="w-8 h-8 rounded-full bg-gradient-to-br from-bee-500 to-bee-700 flex items-center justify-center text-xs font-bold text-white">
                             {agent.name.charAt(0)}
                           </span>
                           <div>
-                            <p className="font-medium text-gray-100">{agent.name}</p>
+                            <p className="font-medium text-gray-100 group-hover:text-bee-400 transition-colors">{agent.name}</p>
                             <p className="text-xs text-gray-500 font-mono">{agent.id.slice(0, 8)}</p>
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="py-3 pr-4 text-gray-300">{agent.profession}</td>
                       <td className="py-3 pr-4 text-center">

@@ -102,6 +102,64 @@ export interface HistoryResponse {
   source: 'db' | 'memory';
 }
 
+/** Agent 详情数据（/api/agents/:id 响应，对应 BeeAgent） */
+export interface AgentDetailData {
+  id: string;
+  name: string;
+  persona: {
+    background: string;
+    profession: string;
+    traits: {
+      riskTolerance: number;
+      informationSensitivity: number;
+      conformity: number;
+      emotionality: number;
+      analyticalDepth: number;
+    };
+    expertise: string[];
+    biases: string[];
+    communicationStyle: string;
+  };
+  memory: {
+    shortTerm: {
+      tick: number;
+      type: string;
+      content: string;
+      importance: number;
+      emotionalImpact: number;
+    }[];
+    longTerm: {
+      summary: string;
+      tickRange: [number, number];
+      keyInsights: string[];
+      createdAt: number;
+    }[];
+    opinions: Record<string, {
+      topic: string;
+      stance: number;
+      confidence: number;
+      reasoning: string;
+      lastUpdatedTick: number;
+    }>;
+    predictions: {
+      tick: number;
+      prediction: string;
+      outcome?: string;
+      accurate?: boolean;
+    }[];
+  };
+  relationships: unknown[];
+  followers: string[];
+  following: string[];
+  influence: number;
+  status: 'active' | 'dormant' | 'dead';
+  credibility: number;
+  spawnedAtTick: number;
+  lastActiveTick: number;
+  modelTier: 'local' | 'cheap' | 'strong';
+  modelId: string;
+}
+
 /** WebSocket 消息 */
 export interface WsMessage {
   type: string;

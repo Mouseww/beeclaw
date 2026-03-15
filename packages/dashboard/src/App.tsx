@@ -8,6 +8,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { WorldOverview } from './pages/WorldOverview';
 import { AgentList } from './pages/AgentList';
+import { AgentDetail } from './pages/AgentDetail';
 import { EventFeed } from './pages/EventFeed';
 import { ConsensusView } from './pages/ConsensusView';
 import { SocialGraphView } from './pages/SocialGraphView';
@@ -29,6 +30,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<WorldOverview />} />
             <Route path="/agents" element={<AgentList />} />
+            <Route path="/agents/:id" element={<AgentDetail />} />
             <Route path="/events" element={<EventFeed />} />
             <Route path="/consensus" element={<ConsensusView />} />
             <Route path="/social-graph" element={<SocialGraphView />} />

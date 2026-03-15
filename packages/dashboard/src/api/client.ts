@@ -5,6 +5,7 @@
 import type {
   ServerStatus,
   AgentListResponse,
+  AgentDetailData,
   ConsensusResponse,
   HistoryResponse,
 } from '../types';
@@ -30,8 +31,8 @@ export function fetchAgents(page = 1, size = 20): Promise<AgentListResponse> {
 }
 
 /** 获取 Agent 详情 */
-export function fetchAgent(id: string): Promise<unknown> {
-  return fetchJSON<unknown>(`/agents/${id}`);
+export function fetchAgent(id: string): Promise<AgentDetailData> {
+  return fetchJSON<AgentDetailData>(`/agents/${id}`);
 }
 
 /** 获取共识信号 */

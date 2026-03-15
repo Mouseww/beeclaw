@@ -157,6 +157,12 @@ describe('App', () => {
     expect(screen.getByText('BeeClaw 仿真世界实时状态')).toBeInTheDocument();
   });
 
+  it('"/agents/:id" 路由应该显示 Agent 详情页面', () => {
+    renderWithRouter('/agents/test-agent-123');
+    // usePolling 返回 null → 显示 Agent 未找到
+    expect(screen.getByText('Agent 未找到')).toBeInTheDocument();
+  });
+
   it('Header 应该显示 WebSocket 断开状态', () => {
     renderWithRouter();
     expect(screen.getByText('已断开')).toBeInTheDocument();

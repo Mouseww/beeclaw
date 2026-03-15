@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0] - 2026-03-16
+
+### 🚀 New Features
+
+- **OpenAPI Schema Validation** — 为所有 API 路由添加 OpenAPI JSON Schema 校验
+  - 集中定义所有端点的 request/response schema (`api/schemas.ts`)
+  - Fastify 自动校验请求参数和响应格式
+  - Swagger UI 文档自动生成 (`/docs`)
+  - 覆盖 agents、events、consensus、history、scenario、config、webhooks、monitoring 等全部路由
+- **Agent 详情页 (Dashboard)** — 新增 AgentDetail 页面，展示 Agent 完整信息
+  - Persona（人格背景、性格特征、专业领域）
+  - 记忆系统（短期记忆、长期记忆、观点立场）
+  - 情绪状态与信誉度
+  - 社交连接（粉丝/关注）
+  - 从 Agent 列表页可点击进入详情
+
+### 🧪 Testing
+
+- 新增 AgentDetail 页面渲染测试
+- 新增 App.tsx 路由测试（`/agents/:id`）
+
 ## [0.7.0] - 2026-03-16
 
 ### 🔒 Server 生产加固
