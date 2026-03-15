@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyError } from 'fastify';
 import { WorldEngine } from '@beeclaw/world-engine';
 import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig } from '@beeclaw/shared';
@@ -87,7 +87,7 @@ export async function buildTestContext(wsCount = 0): Promise<TestContext> {
   };
 
   // 将 schema validation 错误统一为 { error: "..." } 格式（与路由手动验证一致）
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: FastifyError, _req, reply) => {
     if (error.validation) {
       return reply.status(400).send({ error: error.message });
     }

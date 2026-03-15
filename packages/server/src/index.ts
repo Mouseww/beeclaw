@@ -7,7 +7,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
   registerWebhooksRoute(app, ctx);
 
   // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: FastifyError, _req, reply) => {
     if (error.validation) {
       return reply.status(400).send({ error: error.message });
     }
