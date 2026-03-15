@@ -9,5 +9,5 @@
     "@beeclaw/shared": "*",
     "@beeclaw/event-bus": "*"
   },
-  "devDependencies": { "typescript": "^5.7.0", "vitest": "^3.0.0" }
+  "devDependencies": { "typescript": "^5.7.0", "vitest": "^4.1.0" }
 }
