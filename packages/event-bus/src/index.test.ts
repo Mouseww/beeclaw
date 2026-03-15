@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventBus } from './index.js';
-import type { EventListener } from './index.js';
+import type { EventListener as _EventListener } from './index.js';
 
 describe('index.ts 导出', () => {
   it('应正确导出 EventBus 类', () => {

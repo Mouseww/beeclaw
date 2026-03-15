@@ -403,7 +403,7 @@ describe('Health & Metrics 端点测试', () => {
 
     it('长时间 uptime 应包含天/小时/分钟', async () => {
       // mock process.uptime 返回超过 1 天的秒数
-      const originalUptime = process.uptime;
+      const _originalUptime = process.uptime;
       // 1d 2h 30m 45s = 86400+7200+1800+45 = 95445
       vi.spyOn(process, 'uptime').mockReturnValue(95445);
 

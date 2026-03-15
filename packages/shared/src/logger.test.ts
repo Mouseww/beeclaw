@@ -10,7 +10,7 @@ import {
   setJsonMode,
   isJsonMode,
 } from './logger.js';
-import type { LogLevel } from './logger.js';
+import type { LogLevel as _LogLevel } from './logger.js';
 
 // ── 全局控制函数 ──
 

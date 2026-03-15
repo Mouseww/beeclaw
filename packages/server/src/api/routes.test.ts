@@ -5,9 +5,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type { WorldEngine } from '@beeclaw/world-engine';
-import type { ModelRouter } from '@beeclaw/agent-runtime';
-import type { Store } from '../persistence/store.js';
+import type { WorldEngine as _WorldEngine } from '@beeclaw/world-engine';
+import type { ModelRouter as _ModelRouter } from '@beeclaw/agent-runtime';
+import type { Store as _Store } from '../persistence/store.js';
 import {
   buildTestContext,
   silenceConsole,
