@@ -6,6 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
 import type { LLMConfig, ModelTier } from '@beeclaw/shared';
+import { getLLMConfigSchema, putLLMConfigSchema, putLLMTierConfigSchema } from './schemas.js';
 
 const VALID_TIERS: ModelTier[] = ['local', 'cheap', 'strong'];
 
@@ -42,12 +43,12 @@ function validateLLMConfig(body: unknown): LLMConfig | string {
 
 export function registerConfigRoute(app: FastifyInstance, ctx: ServerContext): void {
   // GET /api/config/llm — 获取当前 LLM 配置（apiKey 脱敏）
-  app.get('/api/config/llm', async () => {
+  app.get('/api/config/llm', { schema: getLLMConfigSchema }, async () => {
     return ctx.modelRouter.getConfig();
   });
 
   // PUT /api/config/llm — 更新全部 LLM 配置
-  app.put('/api/config/llm', async (req, reply) => {
+  app.put('/api/config/llm', { schema: putLLMConfigSchema }, async (req, reply) => {
     const body = req.body as Record<string, unknown> | undefined;
     if (!body || typeof body !== 'object') {
       return reply.code(400).send({ error: 'Body must contain local, cheap, strong configs' });
@@ -86,7 +87,7 @@ export function registerConfigRoute(app: FastifyInstance, ctx: ServerContext): v
   });
 
   // PUT /api/config/llm/:tier — 更新单个 tier 配置
-  app.put<{ Params: { tier: string } }>('/api/config/llm/:tier', async (req, reply) => {
+  app.put<{ Params: { tier: string } }>('/api/config/llm/:tier', { schema: putLLMTierConfigSchema }, async (req, reply) => {
     const tier = req.params.tier as ModelTier;
     if (!VALID_TIERS.includes(tier)) {
       return reply.code(400).send({ error: `Invalid tier: ${tier}. Must be one of: ${VALID_TIERS.join(', ')}` });

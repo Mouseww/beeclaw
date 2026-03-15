@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
 import type { EventCategory } from '@beeclaw/shared';
 import { broadcast } from '../ws/handler.js';
+import { injectEventSchema } from './schemas.js';
 
 interface InjectEventBody {
   title: string;
@@ -17,7 +18,7 @@ interface InjectEventBody {
 }
 
 export function registerEventsRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.post<{ Body: InjectEventBody }>('/api/events', async (req, reply) => {
+  app.post<{ Body: InjectEventBody }>('/api/events', { schema: injectEventSchema }, async (req, reply) => {
     const { title, content, category, importance, propagationRadius, tags } = req.body;
 
     if (!title || !content) {

@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
 import { WorldEngine } from '@beeclaw/world-engine';
 import type { EventCategory } from '@beeclaw/shared';
+import { scenarioSchema } from './schemas.js';
 
 interface ScenarioBody {
   seedEvent: {
@@ -20,7 +21,7 @@ interface ScenarioBody {
 }
 
 export function registerScenarioRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.post<{ Body: ScenarioBody }>('/api/scenario', async (req, reply) => {
+  app.post<{ Body: ScenarioBody }>('/api/scenario', { schema: scenarioSchema }, async (req, reply) => {
     const { seedEvent, agentCount = 10, ticks = 5 } = req.body;
 
     if (!seedEvent?.title || !seedEvent?.content) {

@@ -5,6 +5,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
+import { healthSchema } from './schemas.js';
 
 /**
  * 健康检查响应结构
@@ -22,7 +23,7 @@ export interface HealthResponse {
  * 返回服务状态、运行时间、版本号和当前 tick 数
  */
 export function registerHealthRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.get('/health', async () => {
+  app.get('/health', { schema: healthSchema }, async () => {
     const response: HealthResponse = {
       status: 'ok',
       uptime: process.uptime(),

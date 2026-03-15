@@ -5,6 +5,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
+import { metricsSchema } from './schemas.js';
 
 /**
  * 运行时指标结构
@@ -102,7 +103,7 @@ function formatUptime(seconds: number): string {
 }
 
 export function registerMetricsRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.get('/metrics', async () => {
+  app.get('/metrics', { schema: metricsSchema }, async () => {
     const engine = ctx.engine;
     const agents = engine.getAgents();
     const state = engine.getWorldState().getState();

@@ -4,9 +4,10 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
+import { statusSchema } from './schemas.js';
 
 export function registerStatusRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.get('/api/status', async () => {
+  app.get('/api/status', { schema: statusSchema }, async () => {
     const state = ctx.engine.getWorldState().getState();
     const tick = ctx.engine.getCurrentTick();
     const agents = ctx.engine.getAgents();

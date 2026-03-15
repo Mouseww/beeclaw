@@ -4,11 +4,12 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { ServerContext } from '../index.js';
+import { historySchema } from './schemas.js';
 
 export function registerHistoryRoute(app: FastifyInstance, ctx: ServerContext): void {
   app.get<{
     Querystring: { limit?: string };
-  }>('/api/history', async (req) => {
+  }>('/api/history', { schema: historySchema }, async (req) => {
     const limit = Math.min(200, parseInt(req.query.limit ?? '50', 10) || 50);
 
     // 优先从持久化读，fallback 到内存

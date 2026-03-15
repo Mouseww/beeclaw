@@ -5,6 +5,7 @@
 
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ServerContext } from '../index.js';
+import { prometheusSchema } from './schemas.js';
 
 /**
  * 生成 Prometheus text exposition format 指标
@@ -157,7 +158,7 @@ function buildPrometheusMetrics(ctx: ServerContext): string {
  * 注册 GET /metrics/prometheus — Prometheus text exposition format
  */
 export function registerPrometheusRoute(app: FastifyInstance, ctx: ServerContext): void {
-  app.get('/metrics/prometheus', async (_request, reply: FastifyReply) => {
+  app.get('/metrics/prometheus', { schema: prometheusSchema }, async (_request, reply: FastifyReply) => {
     const body = buildPrometheusMetrics(ctx);
     reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     return reply.send(body);

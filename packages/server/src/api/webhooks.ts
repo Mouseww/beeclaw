@@ -7,6 +7,13 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { WebhookEventType } from '@beeclaw/shared';
 import type { ServerContext } from '../index.js';
+import {
+  createWebhookSchema,
+  listWebhooksSchema,
+  deleteWebhookSchema,
+  updateWebhookSchema,
+  testWebhookSchema,
+} from './schemas.js';
 
 const VALID_EVENTS: WebhookEventType[] = [
   'consensus.signal',
@@ -34,7 +41,7 @@ interface UpdateWebhookBody {
 
 export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext): void {
   // POST /api/webhooks — 注册新 webhook
-  app.post<{ Body: CreateWebhookBody }>('/api/webhooks', async (req, reply) => {
+  app.post<{ Body: CreateWebhookBody }>('/api/webhooks', { schema: createWebhookSchema }, async (req, reply) => {
     const { url, events, secret } = req.body;
 
     if (!url || typeof url !== 'string') {
@@ -67,7 +74,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
   });
 
   // GET /api/webhooks — 列出所有 webhook
-  app.get('/api/webhooks', async () => {
+  app.get('/api/webhooks', { schema: listWebhooksSchema }, async () => {
     const webhooks = ctx.store.getWebhooks();
     // 不返回 secret 明文，仅返回掩码
     const masked = webhooks.map(w => ({
@@ -78,7 +85,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
   });
 
   // DELETE /api/webhooks/:id — 删除 webhook
-  app.delete<{ Params: { id: string } }>('/api/webhooks/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string } }>('/api/webhooks/:id', { schema: deleteWebhookSchema }, async (req, reply) => {
     const deleted = ctx.store.deleteWebhook(req.params.id);
     if (!deleted) {
       return reply.status(404).send({ error: 'Webhook not found' });
@@ -87,7 +94,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
   });
 
   // PUT /api/webhooks/:id — 更新 webhook
-  app.put<{ Params: { id: string }; Body: UpdateWebhookBody }>('/api/webhooks/:id', async (req, reply) => {
+  app.put<{ Params: { id: string }; Body: UpdateWebhookBody }>('/api/webhooks/:id', { schema: updateWebhookSchema }, async (req, reply) => {
     const { url, events, active } = req.body;
 
     if (events) {
@@ -117,7 +124,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
   });
 
   // POST /api/webhooks/:id/test — 发送测试 payload
-  app.post<{ Params: { id: string } }>('/api/webhooks/:id/test', async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/api/webhooks/:id/test', { schema: testWebhookSchema }, async (req, reply) => {
     const webhook = ctx.store.getWebhook(req.params.id);
     if (!webhook) {
       return reply.status(404).send({ error: 'Webhook not found' });

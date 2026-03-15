@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import Fastify from 'fastify';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { WorldEngine } from '@beeclaw/world-engine';
@@ -145,6 +147,33 @@ async function main(): Promise<void> {
   // 6. 启动 Fastify
   const app = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
+
+  // 注册 OpenAPI / Swagger
+  await app.register(fastifySwagger, {
+    openapi: {
+      openapi: '3.1.0',
+      info: {
+        title: 'BeeClaw API',
+        description: '群体智能仿真引擎 REST API',
+        version: '0.8.0',
+      },
+      tags: [
+        { name: 'status', description: '世界状态' },
+        { name: 'agents', description: 'Agent 管理' },
+        { name: 'events', description: '事件注入' },
+        { name: 'consensus', description: '共识信号' },
+        { name: 'history', description: 'Tick 历史' },
+        { name: 'scenario', description: '场景推演' },
+        { name: 'config', description: 'LLM 配置' },
+        { name: 'webhooks', description: 'Webhook 订阅' },
+        { name: 'monitoring', description: '监控指标' },
+      ],
+    },
+  });
+
+  await app.register(fastifySwaggerUi, {
+    routePrefix: '/docs',
+  });
 
   // 注册中间件（在路由之前）
   await registerCorsMiddleware(app);

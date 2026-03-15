@@ -1,6 +1,6 @@
 // ============================================================================
 // BeeClaw Server — Webhook 分发器
-// 异步发送、HMAC-SHA256 签名、自动重试、并发控制
+// 异步发送、HMAC-SHA256 签名、指数退避重试（含 jitter）、并发控制
 // ============================================================================
 
 import { createHmac } from 'node:crypto';
@@ -16,6 +16,8 @@ export interface DeliveryRecord {
   attempt: number;
   timestamp: number;
   error?: string;
+  /** 本次退避等待毫秒（首次为 0） */
+  backoffMs?: number;
 }
 
 /** WebhookDispatcher 配置 */
@@ -26,12 +28,18 @@ export interface WebhookDispatcherConfig {
   timeoutMs: number;
   /** 最大并发请求数（默认 10） */
   maxConcurrency: number;
+  /** 退避基数毫秒（默认 1000，退避公式 = base * 2^(attempt-2) + jitter） */
+  retryBaseMs: number;
+  /** 是否启用 jitter 随机偏移（默认 true，防止雷群效应） */
+  retryJitter: boolean;
 }
 
 const DEFAULT_CONFIG: WebhookDispatcherConfig = {
   maxRetries: 3,
   timeoutMs: 10_000,
   maxConcurrency: 10,
+  retryBaseMs: 1000,
+  retryJitter: true,
 };
 
 /**
@@ -41,6 +49,22 @@ export function computeSignature(payload: string, secret: string): string {
   return createHmac('sha256', secret).update(payload).digest('hex');
 }
 
+/**
+ * 计算指数退避延迟（含可选 jitter）
+ *
+ * 公式: baseMs * 2^(attempt-2) + jitter
+ * - attempt=2 → baseMs * 1 + jitter (第一次重试)
+ * - attempt=3 → baseMs * 2 + jitter (第二次重试)
+ * - attempt=4 → baseMs * 4 + jitter (第三次重试)
+ *
+ * jitter 范围: [0, baseMs * 0.5)
+ */
+export function calculateBackoff(attempt: number, baseMs: number, jitter: boolean): number {
+  const exponential = baseMs * Math.pow(2, attempt - 2);
+  const jitterMs = jitter ? Math.random() * baseMs * 0.5 : 0;
+  return Math.round(exponential + jitterMs);
+}
+
 export class WebhookDispatcher {
   private readonly config: WebhookDispatcherConfig;
   private readonly store: Store;
@@ -48,11 +72,19 @@ export class WebhookDispatcher {
   private readonly deliveryLog: DeliveryRecord[] = [];
   /** 允许外部注入 fetch 函数，便于测试 */
   private fetchFn: typeof fetch;
+  /** 允许外部注入 sleep 函数，便于测试 */
+  private sleepFn: (ms: number) => Promise<void>;
 
-  constructor(store: Store, config?: Partial<WebhookDispatcherConfig>, fetchImpl?: typeof fetch) {
+  constructor(
+    store: Store,
+    config?: Partial<WebhookDispatcherConfig>,
+    fetchImpl?: typeof fetch,
+    sleepImpl?: (ms: number) => Promise<void>,
+  ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.store = store;
     this.fetchFn = fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.sleepFn = sleepImpl ?? ((ms: number) => new Promise(resolve => setTimeout(resolve, ms)));
   }
 
   /**
@@ -114,6 +146,13 @@ export class WebhookDispatcher {
     return this.activeRequests;
   }
 
+  /**
+   * 获取当前配置（只读副本）
+   */
+  getConfig(): Readonly<WebhookDispatcherConfig> {
+    return { ...this.config };
+  }
+
   // ── 内部方法 ──
 
   /**
@@ -128,7 +167,7 @@ export class WebhookDispatcher {
   }
 
   /**
-   * 带重试的发送
+   * 带重试的发送（指数退避 + jitter）
    */
   private async sendWithRetry(
     sub: WebhookSubscription,
@@ -138,14 +177,15 @@ export class WebhookDispatcher {
     let lastRecord: DeliveryRecord | null = null;
 
     for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
+      let backoffMs = 0;
       const isRetrying = attempt > 1;
       if (isRetrying) {
-        // 指数退避: 1s, 2s, 4s ...
-        const backoffMs = Math.pow(2, attempt - 1) * 1000;
-        await this.sleep(backoffMs);
+        backoffMs = calculateBackoff(attempt, this.config.retryBaseMs, this.config.retryJitter);
+        await this.sleepFn(backoffMs);
       }
 
       const record = await this.send(sub, eventType, data, attempt);
+      record.backoffMs = backoffMs;
       lastRecord = record;
 
       this.deliveryLog.push(record);
@@ -232,9 +272,5 @@ export class WebhookDispatcher {
     } finally {
       this.activeRequests--;
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
