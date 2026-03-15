@@ -190,6 +190,93 @@ describe('Health & Metrics 端点测试', () => {
       const body = res.json();
       expect(body.wsConnections).toBe(2);
     });
+
+    it('step 后 recentTicks 应包含 tick 统计数据', async () => {
+      const agents = engine.spawner.spawnBatch(5, 0);
+      engine.addAgents(agents);
+
+      // 注入事件并执行 step 以产生 tick 历史
+      engine.injectEvent({
+        title: '指标测试事件',
+        content: '测试内容',
+        category: 'general',
+        importance: 0.9,
+        propagationRadius: 0.8,
+        tags: ['metric-test'],
+      });
+      await engine.step();
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+
+      // recentTicks 应有数据
+      expect(body.recentTicks.count).toBe(1);
+      expect(body.recentTicks.avgDurationMs).toBeGreaterThanOrEqual(0);
+      // events 应聚合 tick 历史
+      expect(body.events.totalEventsProcessed).toBeGreaterThanOrEqual(1);
+      expect(body.events.totalResponsesCollected).toBeGreaterThanOrEqual(0);
+    });
+
+    it('多次 step 后 recentTicks 平均值应正确计算', async () => {
+      const agents = engine.spawner.spawnBatch(3, 0);
+      engine.addAgents(agents);
+
+      // 执行多个 step
+      engine.injectEvent({ title: '事件1', content: '内容1', importance: 0.9, propagationRadius: 0.8 });
+      await engine.step();
+      engine.injectEvent({ title: '事件2', content: '内容2', importance: 0.7, propagationRadius: 0.5 });
+      await engine.step();
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+
+      expect(body.recentTicks.count).toBe(2);
+      expect(body.recentTicks.avgEventsPerTick).toBeGreaterThan(0);
+    });
+
+    it('有共识信号时 consensus.topics 应有内容', async () => {
+      const agents = engine.spawner.spawnBatch(10, 0);
+      engine.addAgents(agents);
+
+      // 注入高重要性事件，使足够多 Agent 产生响应以触发共识分析
+      engine.injectEvent({
+        title: '重大经济事件',
+        content: '经济形势变化',
+        category: 'finance',
+        importance: 1.0,
+        propagationRadius: 1.0,
+        tags: ['economy'],
+      });
+      await engine.step();
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+
+      // consensus 段应存在
+      expect(body.consensus).toBeDefined();
+      expect(typeof body.consensus.totalSignals).toBe('number');
+      expect(Array.isArray(body.consensus.topics)).toBe(true);
+      // 如果有信号，topics 应有值
+      if (body.consensus.latestSignalCount > 0) {
+        expect(body.consensus.topics.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('dormant 和 dead agent 应正确统计', async () => {
+      const agents = engine.spawner.spawnBatch(4, 0);
+      engine.addAgents(agents);
+      // 设置不同状态
+      agents[0]!.setStatus('dormant');
+      agents[1]!.setStatus('dead');
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+
+      expect(body.engine.totalAgents).toBe(4);
+      expect(body.engine.activeAgents).toBe(2);
+      expect(body.engine.dormantAgents).toBe(1);
+      expect(body.engine.deadAgents).toBe(1);
+    });
   });
 
   // ════════════════════════════════════════
@@ -299,6 +386,50 @@ describe('Health & Metrics 端点测试', () => {
         }
         expect(valid).toBe(true);
       }
+    });
+  });
+
+  // ════════════════════════════════════════
+  // formatUptime 边界分支覆盖（通过 /metrics 端点间接测试）
+  // ════════════════════════════════════════
+
+  describe('GET /metrics — formatUptime 分支', () => {
+    it('uptimeFormatted 应包含秒数', async () => {
+      // 默认 uptime 较小，应只产生 Xs 格式
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+      expect(body.server.uptimeFormatted).toMatch(/\d+s/);
+    });
+
+    it('长时间 uptime 应包含天/小时/分钟', async () => {
+      // mock process.uptime 返回超过 1 天的秒数
+      const originalUptime = process.uptime;
+      // 1d 2h 30m 45s = 86400+7200+1800+45 = 95445
+      vi.spyOn(process, 'uptime').mockReturnValue(95445);
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+      expect(body.server.uptimeFormatted).toContain('1d');
+      expect(body.server.uptimeFormatted).toContain('2h');
+      expect(body.server.uptimeFormatted).toContain('30m');
+      expect(body.server.uptimeFormatted).toContain('45s');
+
+      // 恢复
+      vi.mocked(process.uptime).mockRestore();
+    });
+
+    it('仅小时级别 uptime 应包含小时和分钟', async () => {
+      // 3h 15m 10s = 10800 + 900 + 10 = 11710
+      vi.spyOn(process, 'uptime').mockReturnValue(11710);
+
+      const res = await app.inject({ method: 'GET', url: '/metrics' });
+      const body = res.json();
+      expect(body.server.uptimeFormatted).not.toContain('d');
+      expect(body.server.uptimeFormatted).toContain('3h');
+      expect(body.server.uptimeFormatted).toContain('15m');
+      expect(body.server.uptimeFormatted).toContain('10s');
+
+      vi.mocked(process.uptime).mockRestore();
     });
   });
 });

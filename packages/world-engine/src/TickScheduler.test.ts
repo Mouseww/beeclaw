@@ -115,6 +115,81 @@ describe('TickScheduler', () => {
     });
   });
 
+  // ── scheduleNext (自动推进) ──
+
+  describe('scheduleNext (自动推进)', () => {
+    it('自动推进应按间隔触发 tick', async () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      const callback = vi.fn().mockResolvedValue(undefined);
+      scheduler.onTick(callback);
+
+      scheduler.start();
+
+      // 推进第一个 tick
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(1);
+
+      // 推进第二个 tick
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(2);
+
+      scheduler.stop();
+      vi.useRealTimers();
+    });
+
+    it('回调抛出异常时应捕获错误并继续调度', async () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      const error = new Error('tick callback failure');
+      let callCount = 0;
+      const callback = vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw error;
+        }
+      });
+      scheduler.onTick(callback);
+
+      scheduler.start();
+
+      // 第一个 tick — 回调抛出异常
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(1);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('Tick 1 执行出错'),
+        error,
+      );
+
+      // 第二个 tick — 应继续正常调度（不会因第一个 tick 的异常而中断）
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(2);
+      expect(callback).toHaveBeenCalledTimes(2);
+
+      scheduler.stop();
+      vi.useRealTimers();
+    });
+
+    it('stop 后不应再调度新的 tick', async () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      const callback = vi.fn().mockResolvedValue(undefined);
+      scheduler.onTick(callback);
+
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      scheduler.stop();
+
+      // 再推进时间，不应触发更多回调
+      await vi.advanceTimersByTimeAsync(300);
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      vi.useRealTimers();
+    });
+  });
+
   // ── getWorldTimestamp ──
 
   describe('getWorldTimestamp', () => {

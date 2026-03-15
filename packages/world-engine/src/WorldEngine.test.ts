@@ -174,6 +174,152 @@ describe('WorldEngine', () => {
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
 
+    it('Agent 返回 socialActions 时应处理 follow/unfollow', async () => {
+      const router = new ModelRouter(MOCK_MODEL_CONFIG);
+      // mock LLM 返回 socialActions
+      for (const tier of ['local', 'cheap', 'strong'] as const) {
+        let callCount = 0;
+        vi.spyOn(router.getClient(tier), 'chatCompletion').mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) {
+            // 第一个 agent 的响应：follow a2
+            return JSON.stringify({
+              opinion: '关注',
+              action: 'speak',
+              emotionalState: 0.3,
+              reasoning: '理由',
+              socialActions: [{ type: 'follow', targetAgentId: 'a2' }],
+            });
+          }
+          // 其他 agent 正常响应
+          return '{"opinion":"观点","action":"silent","emotionalState":0.0,"reasoning":"理由"}';
+        });
+      }
+
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const a1 = new Agent({ id: 'a1', name: 'AgentA' });
+      const a2 = new Agent({ id: 'a2', name: 'AgentB' });
+      engine.addAgent(a1);
+      engine.addAgent(a2);
+
+      engine.injectEvent({
+        title: '社交测试事件',
+        content: '内容',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      expect(result.eventsProcessed).toBe(1);
+
+      // 验证社交关系：a1 应 follow 了 a2
+      // socialGraph 应有对应边
+      expect(engine.socialGraph.getEdgeCount()).toBeGreaterThan(0);
+    });
+
+    it('Agent 返回 unfollow socialAction 时应移除社交关系', async () => {
+      const router = new ModelRouter(MOCK_MODEL_CONFIG);
+      let phase = 1;
+      for (const tier of ['local', 'cheap', 'strong'] as const) {
+        vi.spyOn(router.getClient(tier), 'chatCompletion').mockImplementation(async () => {
+          if (phase === 1) {
+            return JSON.stringify({
+              opinion: '关注',
+              action: 'speak',
+              emotionalState: 0.3,
+              reasoning: '理由',
+              socialActions: [{ type: 'follow', targetAgentId: 'a2' }],
+            });
+          } else {
+            return JSON.stringify({
+              opinion: '取关',
+              action: 'speak',
+              emotionalState: -0.1,
+              reasoning: '理由',
+              socialActions: [{ type: 'unfollow', targetAgentId: 'a2' }],
+            });
+          }
+        });
+      }
+
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const a1 = new Agent({ id: 'a1', name: 'AgentA' });
+      const a2 = new Agent({ id: 'a2', name: 'AgentB' });
+      engine.addAgent(a1);
+      engine.addAgent(a2);
+
+      // 第一步：follow
+      engine.injectEvent({ title: '事件1', content: '内容', importance: 1.0, propagationRadius: 1.0 });
+      await engine.step();
+      expect(a1.following).toContain('a2');
+
+      // 第二步：unfollow
+      phase = 2;
+      engine.injectEvent({ title: '事件2', content: '内容', importance: 1.0, propagationRadius: 1.0 });
+      await engine.step();
+      expect(a1.following).not.toContain('a2');
+    });
+
+    it('事件处理异常时应捕获并继续', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `a${i}` }));
+      engine.addAgents(agents);
+
+      // 注入两个事件
+      engine.injectEvent({ title: '正常事件', content: '内容', importance: 0.9, propagationRadius: 0.8 });
+      engine.injectEvent({ title: '异常事件', content: '内容', importance: 0.9, propagationRadius: 0.8 });
+
+      // Mock activationPool 使第二个事件计算激活时抛出异常
+      let callCount = 0;
+      const originalCompute = engine.activationPool.computeActivation.bind(engine.activationPool);
+      vi.spyOn(engine.activationPool, 'computeActivation').mockImplementation((...args) => {
+        callCount++;
+        if (callCount === 2) {
+          throw new Error('模拟事件处理失败');
+        }
+        return originalCompute(...args);
+      });
+
+      const result = await engine.step();
+      // 应跳过异常事件，但不中断总体流程
+      expect(result.eventsProcessed).toBe(2);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('处理事件'),
+        expect.any(String),
+      );
+    });
+
+    it('共识分析抛出异常时应捕获并继续', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 10 }, (_, i) => new Agent({ id: `ca${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '共识失败事件',
+        content: '内容',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      // Mock 共识引擎抛出异常
+      vi.spyOn(engine.consensusEngine, 'analyze').mockImplementation(() => {
+        throw new Error('模拟共识分析失败');
+      });
+
+      const result = await engine.step();
+      // 虽然共识分析失败，tick 仍应正常完成
+      expect(result.tick).toBe(1);
+      expect(result.signals).toBe(0);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('共识分析失败'),
+        expect.any(String),
+      );
+    });
+
     it('连续 step 应递增 tick', async () => {
       const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
       const r1 = await engine.step();
@@ -221,6 +367,131 @@ describe('WorldEngine', () => {
       expect(engine.getWorldState()).toBe(engine.worldState);
       expect(engine.getConsensusEngine()).toBe(engine.consensusEngine);
       expect(engine.getSocialGraph()).toBe(engine.socialGraph);
+    });
+
+    it('getPerformanceStats 应返回缓存、批量推理和激活池的统计', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
+      const stats = engine.getPerformanceStats();
+      expect(stats).toHaveProperty('cache');
+      expect(stats).toHaveProperty('batchInference');
+      expect(stats).toHaveProperty('activationPool');
+    });
+  });
+
+  // ── 定时孵化 ──
+
+  describe('定时孵化 (scheduledTriggers)', () => {
+    it('定时孵化规则触发时应产生新 Agent', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      // 添加孵化规则：每 1 tick 触发一次定时孵化
+      engine.spawner.addRule({
+        id: 'scheduled-rule-1',
+        trigger: { type: 'scheduled', intervalTicks: 1 },
+        count: 2,
+      });
+
+      // 初无 agent
+      expect(engine.getAgents()).toHaveLength(0);
+
+      const result = await engine.step();
+
+      // 定时孵化应产生 2 个新 Agent
+      expect(result.newAgentsSpawned).toBeGreaterThanOrEqual(2);
+      expect(engine.getAgents().length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // ── 自然选择 ──
+
+  describe('自然选择 (NaturalSelection)', () => {
+    it('启用自然选择且到达检查间隔时应执行淘汰', async () => {
+      const router = createMockModelRouter();
+      const configWithNS: WorldConfig = {
+        ...TEST_CONFIG,
+        enableNaturalSelection: true,
+      };
+      const engine = new WorldEngine({
+        config: configWithNS,
+        modelRouter: router,
+        naturalSelectionConfig: {
+          checkIntervalTicks: 1,       // 每 tick 检查
+          credibilityThreshold: 0.5,   // 信誉低于 0.5 淘汰
+          inactivityTicks: 0,          // 不活跃则立即淘汰
+        },
+      });
+
+      // 添加一些 agent，设置低信誉
+      // Agent 默认 credibility=0.5，用 updateCredibility 调整
+      const a1 = new Agent({ id: 'ns-a1', name: '低信誉Agent' });
+      a1.updateCredibility(-0.45); // 0.5 - 0.45 = 0.05, 低于阈值 0.5
+      const a2 = new Agent({ id: 'ns-a2', name: '高信誉Agent' });
+      a2.updateCredibility(0.4);  // 0.5 + 0.4 = 0.9, 高于阈值
+      engine.addAgent(a1);
+      engine.addAgent(a2);
+
+      const result = await engine.step();
+
+      // 自然选择应有淘汰
+      expect(result.agentsEliminated).toBeGreaterThanOrEqual(1);
+      // 低信誉的 agent 应被标记为 dormant
+      expect(a1.status).toBe('dormant');
+      // 高信誉的 agent 应仍然 active（如果不是因为 inactivity 被淘汰）
+    });
+
+    it('自然选择且有 targetPopulation 时应补充种群', async () => {
+      const router = createMockModelRouter();
+      const configWithNS: WorldConfig = {
+        ...TEST_CONFIG,
+        enableNaturalSelection: true,
+      };
+      const engine = new WorldEngine({
+        config: configWithNS,
+        modelRouter: router,
+        naturalSelectionConfig: {
+          checkIntervalTicks: 1,
+          credibilityThreshold: 0.5,
+          inactivityTicks: 1000,      // 不测试不活跃淘汰
+          targetPopulation: 5,         // 目标种群 5
+        },
+      });
+
+      // 只添加 2 个 agent，都是高信誉
+      const a1 = new Agent({ id: 'pop-a1' });
+      a1.updateCredibility(0.4); // 0.5 + 0.4 = 0.9
+      const a2 = new Agent({ id: 'pop-a2' });
+      a2.updateCredibility(0.4); // 0.5 + 0.4 = 0.9
+      engine.addAgent(a1);
+      engine.addAgent(a2);
+
+      const result = await engine.step();
+
+      // 应补充到目标种群
+      expect(result.newAgentsSpawned).toBeGreaterThanOrEqual(3); // 5 - 2 = 3
+      expect(engine.getAgents().length).toBeGreaterThanOrEqual(5);
+    });
+  });
+
+  // ── tickHistory 裁剪 ──
+
+  describe('tickHistory 裁剪', () => {
+    it('超过 200 个 tick 历史应自动裁剪', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      // 执行 205 个 step
+      for (let i = 0; i < 205; i++) {
+        await engine.step();
+      }
+
+      const history = engine.getTickHistory();
+      // 应裁剪到最近 200 个
+      expect(history.length).toBeLessThanOrEqual(200);
+      // 最新的 tick 应该在里面
+      expect(history[history.length - 1]!.tick).toBe(205);
+      // 最早的应该是 tick 6（205 - 200 + 1 = 6）
+      expect(history[0]!.tick).toBe(6);
     });
   });
 });
