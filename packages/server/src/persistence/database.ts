@@ -73,6 +73,15 @@ export function initDatabase(dbPath?: string): Database.Database {
       temperature REAL,
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+      id         TEXT PRIMARY KEY,
+      url        TEXT NOT NULL,
+      events     TEXT NOT NULL,
+      secret     TEXT NOT NULL,
+      active     INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   return db;

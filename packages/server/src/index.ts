@@ -26,6 +26,8 @@ import { registerMetricsRoute } from './api/metrics.js';
 import { registerHealthRoute } from './api/health.js';
 import { registerPrometheusRoute } from './api/prometheus.js';
 import { registerConfigRoute } from './api/config.js';
+import { registerWebhooksRoute } from './api/webhooks.js';
+import { WebhookDispatcher } from './webhook/dispatcher.js';
 import {
   registerAuthMiddleware,
   registerCorsMiddleware,
@@ -50,6 +52,7 @@ export interface ServerContext {
   store: Store;
   modelRouter: ModelRouter;
   getWsCount: () => number;
+  webhookDispatcher?: WebhookDispatcher;
 }
 
 // ── 主函数 ──
@@ -150,11 +153,13 @@ async function main(): Promise<void> {
   registerRequestLogger(app);
 
   // 共享上下文
+  const webhookDispatcher = new WebhookDispatcher(store);
   const ctx: ServerContext = {
     engine,
     store,
     modelRouter,
     getWsCount: getConnectionCount,
+    webhookDispatcher,
   };
 
   // 注册路由
@@ -169,6 +174,7 @@ async function main(): Promise<void> {
   registerHealthRoute(app, ctx);
   registerPrometheusRoute(app, ctx);
   registerConfigRoute(app, ctx);
+  registerWebhooksRoute(app, ctx);
 
   // 静态文件：Dashboard SPA
   const __filename = fileURLToPath(import.meta.url);
@@ -220,10 +226,31 @@ async function main(): Promise<void> {
       // WebSocket 广播 tick 结果
       broadcast('tick', result);
 
+      // Webhook: tick.completed
+      webhookDispatcher.dispatch('tick.completed', result);
+
       // 广播共识信号
       const signals = engine.getConsensusEngine().getLatestSignals();
       if (signals.length > 0) {
         broadcast('consensus', signals);
+
+        // Webhook: consensus.signal + 趋势相关事件
+        for (const signal of signals) {
+          webhookDispatcher.dispatch('consensus.signal', signal);
+          if (signal.trend === 'forming') {
+            webhookDispatcher.dispatch('trend.detected', signal);
+          } else if (signal.trend === 'reversing' || signal.trend === 'weakening') {
+            webhookDispatcher.dispatch('trend.shift', signal);
+          }
+        }
+      }
+
+      // Webhook: agent.spawned
+      if (result.newAgentsSpawned > 0) {
+        webhookDispatcher.dispatch('agent.spawned', {
+          tick: result.tick,
+          count: result.newAgentsSpawned,
+        });
       }
 
       // 定期保存

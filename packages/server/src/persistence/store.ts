@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type Database from 'better-sqlite3';
-import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult } from '@beeclaw/world-engine';
 
@@ -224,6 +224,69 @@ export class Store {
       temperature: row.temperature ?? undefined,
     };
   }
+
+  // ── Webhook 订阅 ──
+
+  /** 创建 webhook 订阅 */
+  createWebhook(sub: WebhookSubscription): void {
+    this.db
+      .prepare(
+        `INSERT INTO webhook_subscriptions (id, url, events, secret, active, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(sub.id, sub.url, JSON.stringify(sub.events), sub.secret, sub.active ? 1 : 0, sub.createdAt);
+  }
+
+  /** 获取所有 webhook 订阅 */
+  getWebhooks(): WebhookSubscription[] {
+    const rows = this.db
+      .prepare('SELECT * FROM webhook_subscriptions ORDER BY created_at DESC')
+      .all() as WebhookRow[];
+    return rows.map(rowToWebhook);
+  }
+
+  /** 获取单个 webhook 订阅 */
+  getWebhook(id: string): WebhookSubscription | null {
+    const row = this.db
+      .prepare('SELECT * FROM webhook_subscriptions WHERE id = ?')
+      .get(id) as WebhookRow | undefined;
+    return row ? rowToWebhook(row) : null;
+  }
+
+  /** 更新 webhook 订阅 */
+  updateWebhook(id: string, updates: { url?: string; events?: WebhookEventType[]; active?: boolean }): boolean {
+    const existing = this.getWebhook(id);
+    if (!existing) return false;
+
+    const url = updates.url ?? existing.url;
+    const events = updates.events ?? existing.events;
+    const active = updates.active ?? existing.active;
+
+    this.db
+      .prepare(
+        `UPDATE webhook_subscriptions SET url = ?, events = ?, active = ? WHERE id = ?`
+      )
+      .run(url, JSON.stringify(events), active ? 1 : 0, id);
+    return true;
+  }
+
+  /** 删除 webhook 订阅 */
+  deleteWebhook(id: string): boolean {
+    const result = this.db
+      .prepare('DELETE FROM webhook_subscriptions WHERE id = ?')
+      .run(id);
+    return result.changes > 0;
+  }
+
+  /** 获取所有活跃的、订阅了指定事件类型的 webhook */
+  getActiveWebhooksForEvent(eventType: WebhookEventType): WebhookSubscription[] {
+    const rows = this.db
+      .prepare('SELECT * FROM webhook_subscriptions WHERE active = 1')
+      .all() as WebhookRow[];
+    return rows
+      .map(rowToWebhook)
+      .filter(sub => sub.events.includes(eventType));
+  }
 }
 
 // ── Row 类型 ──
@@ -263,4 +326,24 @@ export interface LLMConfigRow {
   max_tokens: number | null;
   temperature: number | null;
   updated_at: number;
+}
+
+export interface WebhookRow {
+  id: string;
+  url: string;
+  events: string;   // JSON
+  secret: string;
+  active: number;    // 0 | 1
+  created_at: number;
+}
+
+function rowToWebhook(row: WebhookRow): WebhookSubscription {
+  return {
+    id: row.id,
+    url: row.url,
+    events: JSON.parse(row.events) as WebhookEventType[],
+    secret: row.secret,
+    active: row.active === 1,
+    createdAt: row.created_at,
+  };
 }

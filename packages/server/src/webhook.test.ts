@@ -1,0 +1,633 @@
+// ============================================================================
+// @beeclaw/server Webhook 系统测试
+// WebhookDispatcher 单元测试 + API 路由集成测试
+// ============================================================================
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { createHmac } from 'node:crypto';
+import { WorldEngine, type TickResult } from '@beeclaw/world-engine';
+import { ModelRouter } from '@beeclaw/agent-runtime';
+import type { WorldConfig, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
+import { initDatabase } from './persistence/database.js';
+import { Store } from './persistence/store.js';
+import { WebhookDispatcher, computeSignature } from './webhook/dispatcher.js';
+import { registerWebhooksRoute } from './api/webhooks.js';
+import type { ServerContext } from './index.js';
+
+// ── Mock 配置 ──
+
+const TEST_CONFIG: WorldConfig = {
+  tickIntervalMs: 100,
+  maxAgents: 50,
+  eventRetentionTicks: 50,
+  enableNaturalSelection: false,
+};
+
+const MOCK_MODEL_CONFIG: ModelRouterConfig = {
+  local: { baseURL: 'http://mock', apiKey: 'mock', model: 'mock-local' },
+  cheap: { baseURL: 'http://mock', apiKey: 'mock', model: 'mock-cheap' },
+  strong: { baseURL: 'http://mock', apiKey: 'mock', model: 'mock-strong' },
+};
+
+function createMockedModelRouter(): ModelRouter {
+  const router = new ModelRouter(MOCK_MODEL_CONFIG);
+  for (const tier of ['local', 'cheap', 'strong'] as const) {
+    vi.spyOn(router.getClient(tier), 'chatCompletion').mockImplementation(async () => {
+      return '{"opinion":"中立","action":"silent","emotionalState":0.0,"reasoning":"观望"}';
+    });
+  }
+  return router;
+}
+
+// ── 测试工具 ──
+
+function createTestStore(): Store {
+  const db = initDatabase(':memory:');
+  return new Store(db);
+}
+
+function createTestSubscription(overrides?: Partial<WebhookSubscription>): WebhookSubscription {
+  return {
+    id: `wh_${Math.random().toString(36).slice(2, 10)}`,
+    url: 'https://example.com/webhook',
+    events: ['consensus.signal'] as WebhookEventType[],
+    secret: 'test-secret-key',
+    active: true,
+    createdAt: Math.floor(Date.now() / 1000),
+    ...overrides,
+  };
+}
+
+function createMockFetch(statusCode = 200, delay = 0): typeof fetch {
+  return vi.fn(async () => {
+    if (delay > 0) await new Promise(r => setTimeout(r, delay));
+    return new Response('OK', { status: statusCode });
+  }) as unknown as typeof fetch;
+}
+
+function createFailingFetch(errorMessage = 'Connection refused'): typeof fetch {
+  return vi.fn(async () => {
+    throw new Error(errorMessage);
+  }) as unknown as typeof fetch;
+}
+
+async function buildWebhookTestApp(): Promise<{
+  app: FastifyInstance;
+  store: Store;
+  dispatcher: WebhookDispatcher;
+  engine: WorldEngine;
+}> {
+  const store = createTestStore();
+  const modelRouter = createMockedModelRouter();
+  const engine = new WorldEngine({
+    config: TEST_CONFIG,
+    modelRouter,
+    concurrency: 3,
+  });
+  const mockFetch = createMockFetch();
+  const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+
+  const app = Fastify({ logger: false });
+
+  const ctx: ServerContext = {
+    engine,
+    store,
+    modelRouter,
+    getWsCount: () => 0,
+    webhookDispatcher: dispatcher,
+  };
+
+  registerWebhooksRoute(app, ctx);
+  await app.ready();
+
+  return { app, store, dispatcher, engine };
+}
+
+// ════════════════════════════════════════
+// WebhookDispatcher 单元测试
+// ════════════════════════════════════════
+
+describe('WebhookDispatcher', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    store = createTestStore();
+  });
+
+  // ── 签名验证 ──
+
+  describe('HMAC-SHA256 签名', () => {
+    it('应使用 secret 生成正确的 HMAC-SHA256 签名', () => {
+      const payload = '{"event":"tick.completed","data":{},"timestamp":1234567890}';
+      const secret = 'my-secret';
+      const expected = createHmac('sha256', secret).update(payload).digest('hex');
+
+      const result = computeSignature(payload, secret);
+      expect(result).toBe(expected);
+    });
+
+    it('不同 secret 应产生不同签名', () => {
+      const payload = '{"test": true}';
+      const sig1 = computeSignature(payload, 'secret-1');
+      const sig2 = computeSignature(payload, 'secret-2');
+      expect(sig1).not.toBe(sig2);
+    });
+
+    it('不同 payload 应产生不同签名', () => {
+      const secret = 'same-secret';
+      const sig1 = computeSignature('{"a":1}', secret);
+      const sig2 = computeSignature('{"b":2}', secret);
+      expect(sig1).not.toBe(sig2);
+    });
+  });
+
+  // ── 基本分发 ──
+
+  describe('基本分发', () => {
+    it('应成功发送 webhook 到订阅者', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription({ events: ['consensus.signal'] });
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', { test: true });
+
+      expect(records).toHaveLength(1);
+      expect(records[0]!.status).toBe('success');
+      expect(records[0]!.statusCode).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('不匹配的事件类型不应触发发送', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription({ events: ['tick.completed'] });
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', { test: true });
+
+      expect(records).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('非活跃订阅不应触发发送', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription({ active: false });
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', { test: true });
+
+      expect(records).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('应向多个订阅者分发同一事件', async () => {
+      const mockFetch = createMockFetch(200);
+      store.createWebhook(createTestSubscription({ id: 'wh_1', events: ['consensus.signal'] }));
+      store.createWebhook(createTestSubscription({ id: 'wh_2', events: ['consensus.signal'] }));
+      store.createWebhook(createTestSubscription({ id: 'wh_3', events: ['tick.completed'] }));
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      expect(records).toHaveLength(2);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('发送请求应包含正确的 HTTP 头', async () => {
+      const mockFetch = vi.fn(async () => new Response('OK', { status: 200 })) as unknown as typeof fetch;
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      await dispatcher.dispatchAsync('consensus.signal', { x: 1 });
+
+      const call = (mockFetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+      const init = call[1] as RequestInit;
+      const headers = init.headers as Record<string, string>;
+
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['X-BeeClaw-Event']).toBe('consensus.signal');
+      expect(headers['X-BeeClaw-Signature']).toBeDefined();
+      expect(headers['X-BeeClaw-Timestamp']).toBeDefined();
+    });
+  });
+
+  // ── 重试逻辑 ──
+
+  describe('重试逻辑', () => {
+    it('HTTP 500 应触发重试并标记为 failed', async () => {
+      const mockFetch = createMockFetch(500);
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 2, timeoutMs: 1000 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      // 应该重试了 2 次
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(records).toHaveLength(1);
+      expect(records[0]!.status).toBe('failed');
+    });
+
+    it('网络错误应触发重试', async () => {
+      const mockFetch = createFailingFetch('ECONNREFUSED');
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 2, timeoutMs: 1000 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(records[0]!.status).toBe('failed');
+      expect(records[0]!.error).toContain('ECONNREFUSED');
+    });
+
+    it('第一次失败、第二次成功应返回 success', async () => {
+      let callCount = 0;
+      const mockFetch = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) throw new Error('temporary failure');
+        return new Response('OK', { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 3, timeoutMs: 1000 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      expect(records).toHaveLength(1);
+      expect(records[0]!.status).toBe('success');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── 并发控制 ──
+
+  describe('并发控制', () => {
+    it('应限制并发请求数量', async () => {
+      let maxConcurrent = 0;
+      let currentConcurrent = 0;
+
+      const mockFetch = vi.fn(async () => {
+        currentConcurrent++;
+        if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent;
+        await new Promise(r => setTimeout(r, 50));
+        currentConcurrent--;
+        return new Response('OK', { status: 200 });
+      }) as unknown as typeof fetch;
+
+      // 创建 15 个订阅者
+      for (let i = 0; i < 15; i++) {
+        store.createWebhook(createTestSubscription({ id: `wh_${i}`, events: ['consensus.signal'] }));
+      }
+
+      const dispatcher = new WebhookDispatcher(
+        store,
+        { maxRetries: 1, maxConcurrency: 5 },
+        mockFetch,
+      );
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      expect(records).toHaveLength(15);
+      expect(maxConcurrent).toBeLessThanOrEqual(5);
+    });
+
+    it('getActiveRequests 应追踪活跃请求数', async () => {
+      let resolveRequest: (() => void) | null = null;
+      const mockFetch = vi.fn(() => {
+        return new Promise<Response>((resolve) => {
+          resolveRequest = () => resolve(new Response('OK', { status: 200 }));
+        });
+      }) as unknown as typeof fetch;
+
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+
+      // 启动分发但不等待
+      const promise = dispatcher.dispatchAsync('consensus.signal', {});
+
+      // 等待 fetch 被调用
+      await vi.waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      expect(dispatcher.getActiveRequests()).toBe(1);
+
+      // 完成请求
+      resolveRequest!();
+      await promise;
+
+      expect(dispatcher.getActiveRequests()).toBe(0);
+    });
+  });
+
+  // ── 投递日志 ──
+
+  describe('投递日志', () => {
+    it('应记录投递历史', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      await dispatcher.dispatchAsync('consensus.signal', {});
+
+      const log = dispatcher.getDeliveryLog();
+      expect(log).toHaveLength(1);
+      expect(log[0]!.subscriptionId).toBe(sub.id);
+      expect(log[0]!.event).toBe('consensus.signal');
+      expect(log[0]!.status).toBe('success');
+      expect(log[0]!.attempt).toBe(1);
+      expect(log[0]!.timestamp).toBeGreaterThan(0);
+    });
+  });
+
+  // ── 测试发送 ──
+
+  describe('sendTest', () => {
+    it('应发送测试 payload', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription();
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const record = await dispatcher.sendTest(sub);
+
+      expect(record.status).toBe('success');
+      expect(record.event).toBe('tick.completed');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+// ════════════════════════════════════════
+// Webhook API 路由集成测试
+// ════════════════════════════════════════
+
+describe('Webhook API 路由集成测试', () => {
+  let app: FastifyInstance;
+  let store: Store;
+  let dispatcher: WebhookDispatcher;
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const built = await buildWebhookTestApp();
+    app = built.app;
+    store = built.store;
+    dispatcher = built.dispatcher;
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  // ── POST /api/webhooks ──
+
+  describe('POST /api/webhooks', () => {
+    it('应成功创建 webhook 订阅', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: {
+          url: 'https://example.com/hook',
+          events: ['consensus.signal', 'tick.completed'],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.ok).toBe(true);
+      expect(body.webhook.id).toMatch(/^wh_/);
+      expect(body.webhook.url).toBe('https://example.com/hook');
+      expect(body.webhook.events).toEqual(['consensus.signal', 'tick.completed']);
+      expect(body.webhook.active).toBe(true);
+      expect(body.webhook.secret).toBeDefined();
+      expect(body.webhook.secret.length).toBeGreaterThan(10);
+    });
+
+    it('可自定义 secret', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: {
+          url: 'https://example.com/hook',
+          events: ['tick.completed'],
+          secret: 'my-custom-secret',
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().webhook.secret).toBe('my-custom-secret');
+    });
+
+    it('缺少 url 应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { events: ['tick.completed'] },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('url');
+    });
+
+    it('events 为空数组应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: [] },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('events');
+    });
+
+    it('无效事件类型应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['invalid.event'] },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toContain('invalid.event');
+    });
+  });
+
+  // ── GET /api/webhooks ──
+
+  describe('GET /api/webhooks', () => {
+    it('无订阅时应返回空列表', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/webhooks' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.webhooks).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it('应列出所有 webhook 且 secret 被掩码', async () => {
+      // 先创建两个
+      await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://a.com', events: ['tick.completed'] },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://b.com', events: ['consensus.signal'] },
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/api/webhooks' });
+      const body = res.json();
+      expect(body.total).toBe(2);
+      expect(body.webhooks).toHaveLength(2);
+      // 验证 secret 被掩码
+      for (const wh of body.webhooks) {
+        expect(wh.secret).toContain('••••••');
+      }
+    });
+  });
+
+  // ── DELETE /api/webhooks/:id ──
+
+  describe('DELETE /api/webhooks/:id', () => {
+    it('应成功删除存在的 webhook', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({ method: 'DELETE', url: `/api/webhooks/${id}` });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+
+      // 确认已删除
+      const listRes = await app.inject({ method: 'GET', url: '/api/webhooks' });
+      expect(listRes.json().total).toBe(0);
+    });
+
+    it('删除不存在的 webhook 应返回 404', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/webhooks/nonexistent' });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
+  // ── PUT /api/webhooks/:id ──
+
+  describe('PUT /api/webhooks/:id', () => {
+    it('应成功更新 webhook 的 url', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://old.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/webhooks/${id}`,
+        payload: { url: 'https://new.com' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().webhook.url).toBe('https://new.com');
+    });
+
+    it('应成功更新 webhook 的 events', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/webhooks/${id}`,
+        payload: { events: ['consensus.signal', 'trend.detected'] },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().webhook.events).toEqual(['consensus.signal', 'trend.detected']);
+    });
+
+    it('应成功停用 webhook', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/webhooks/${id}`,
+        payload: { active: false },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().webhook.active).toBe(false);
+    });
+
+    it('更新不存在的 webhook 应返回 404', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/webhooks/nonexistent',
+        payload: { url: 'https://new.com' },
+      });
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('无效事件类型应返回 400', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/api/webhooks/${id}`,
+        payload: { events: ['bad.event'] },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ── POST /api/webhooks/:id/test ──
+
+  describe('POST /api/webhooks/:id/test', () => {
+    it('应成功发送测试 payload', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: { url: 'https://example.com', events: ['tick.completed'] },
+      });
+      const { id } = createRes.json().webhook;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/webhooks/${id}/test`,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+      expect(res.json().delivery).toBeDefined();
+      expect(res.json().delivery.status).toBe('success');
+    });
+
+    it('webhook 不存在测试应返回 404', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks/nonexistent/test',
+      });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+});

@@ -329,3 +329,34 @@ export interface ModelRouterConfig {
   cheap: LLMConfig;
   strong: LLMConfig;
 }
+
+// ── Webhook 通知 ──
+
+/** Webhook 支持的事件类型 */
+export type WebhookEventType =
+  | 'consensus.signal'
+  | 'trend.detected'
+  | 'trend.shift'
+  | 'agent.spawned'
+  | 'tick.completed';
+
+/** Webhook 订阅 */
+export interface WebhookSubscription {
+  id: string;
+  url: string;
+  events: WebhookEventType[];
+  secret: string;
+  active: boolean;
+  createdAt: number;
+}
+
+/** Webhook 投递载荷 */
+export interface WebhookPayload {
+  event: WebhookEventType;
+  data: unknown;
+  timestamp: number;
+  signature: string;
+}
+
+/** Webhook 投递状态 */
+export type WebhookDeliveryStatus = 'success' | 'failed' | 'retrying';
