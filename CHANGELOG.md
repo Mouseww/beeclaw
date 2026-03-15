@@ -23,10 +23,24 @@
 
 - 新增 24 个中间件单元测试，覆盖 auth、CORS、rate-limit、request-logger
 
+### ⚡ Performance
+
+- **基准测试套件** — 新增 5 个基准测试覆盖核心模块
+  - `agent-spawner.bench.ts` — Agent 孵化器性能基准
+  - `consensus.bench.ts` — 共识引擎聚合性能基准
+  - `event-bus.bench.ts` — 事件总线传播性能基准
+  - `social-graph.bench.ts` — 社交网络图操作性能基准
+  - `world-engine.bench.ts` — 世界引擎 tick 性能基准
+
 ### 📦 Dependencies
 
 - 新增 `@fastify/cors` — CORS 跨域支持
 - 新增 `@fastify/rate-limit` — 请求频率限制
+- 统一 vitest 版本至 v4.1.0（全 workspace 一致）
+
+### 📝 Documentation
+
+- README 新增 CI badges、覆盖率脚本和完整文档链接
 
 ## [0.6.1] - 2026-03-16
 
