@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { AgentPersona, PersonalityTraits, AgentTemplate } from '@beeclaw/shared';
-import { randomInRange, randomPick, randomSample, generateId } from '@beeclaw/shared';
+import { randomInRange, randomPick, randomSample } from '@beeclaw/shared';
 
 /**
  * 默认表达风格池

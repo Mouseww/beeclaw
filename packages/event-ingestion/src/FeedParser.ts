@@ -2,7 +2,7 @@
 // FeedParser — RSS/Atom Feed 解析器（纯手写 XML 解析，无外部依赖）
 // ============================================================================
 
-import type { ParsedFeed, FeedItem, FeedSourceType } from './types.js';
+import type { ParsedFeed, FeedItem } from './types.js';
 
 /**
  * 解析 RSS 或 Atom feed XML 字符串为结构化数据
@@ -247,7 +247,6 @@ function extractTagContent(xml: string, tagName: string): string | null {
 function extractAllTags(xml: string, tagName: string): string[] {
   const results: string[] = [];
   const regex = new RegExp(`<${tagName}(\\s[^>]*)?>`, 'gi');
-  let searchFrom = 0;
 
   let match: RegExpExecArray | null;
   while ((match = regex.exec(xml)) !== null) {
@@ -258,7 +257,7 @@ function extractAllTags(xml: string, tagName: string): string[] {
       // 跳过已处理的部分
       const closeTag = `</${tagName}>`;
       const closeIdx = xml.indexOf(closeTag, match.index + match[0].length);
-      searchFrom = closeIdx >= 0 ? closeIdx + closeTag.length : match.index + match[0].length;
+      const searchFrom = closeIdx >= 0 ? closeIdx + closeTag.length : match.index + match[0].length;
       regex.lastIndex = searchFrom;
     }
   }

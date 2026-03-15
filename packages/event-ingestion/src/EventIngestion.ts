@@ -3,9 +3,8 @@
 // 管理多个数据源，自动轮询 RSS/Atom Feed，将文章转为 WorldEvent 注入 EventBus
 // ============================================================================
 
-import type { EventCategory } from '@beeclaw/shared';
 import type { EventBus } from '@beeclaw/event-bus';
-import type { FeedSource, FeedItem, EventIngestionConfig, ParsedFeed, FinanceSourceConfig } from './types.js';
+import type { FeedSource, FeedItem, EventIngestionConfig, FinanceSourceConfig } from './types.js';
 import { parseFeed } from './FeedParser.js';
 import { ImportanceEvaluator } from './ImportanceEvaluator.js';
 import { FinanceDataSource } from './FinanceDataSource.js';

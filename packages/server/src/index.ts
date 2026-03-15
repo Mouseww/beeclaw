@@ -89,22 +89,30 @@ async function main(): Promise<void> {
   const savedAgents = store.loadAgentRows();
   if (savedAgents.length > 0) {
     console.log(`[Server] 从数据库恢复 ${savedAgents.length} 个 Agent`);
-    const agents = savedAgents.map(row => Agent.fromData({
-      id: row.id,
-      name: row.name,
-      persona: JSON.parse(row.persona) as AgentPersona,
-      memory: JSON.parse(row.memory) as AgentMemoryState,
-      relationships: [],
-      followers: JSON.parse(row.followers) as string[],
-      following: JSON.parse(row.following) as string[],
-      influence: row.influence,
-      status: row.status as AgentStatus,
-      credibility: row.credibility,
-      spawnedAtTick: row.spawned_at_tick,
-      lastActiveTick: row.last_active_tick,
-      modelTier: row.model_tier as ModelTier,
-      modelId: `${row.model_tier}-default`,
-    }));
+    const agents: Agent[] = [];
+    for (const row of savedAgents) {
+      try {
+        const agent = Agent.fromData({
+          id: row.id,
+          name: row.name,
+          persona: JSON.parse(row.persona) as AgentPersona,
+          memory: JSON.parse(row.memory) as AgentMemoryState,
+          relationships: [],
+          followers: JSON.parse(row.followers) as string[],
+          following: JSON.parse(row.following) as string[],
+          influence: row.influence,
+          status: row.status as AgentStatus,
+          credibility: row.credibility,
+          spawnedAtTick: row.spawned_at_tick,
+          lastActiveTick: row.last_active_tick,
+          modelTier: row.model_tier as ModelTier,
+          modelId: `${row.model_tier}-default`,
+        });
+        agents.push(agent);
+      } catch (err) {
+        console.error(`[Server] Agent "${row.id}" (${row.name}) 数据恢复失败，跳过:`, err);
+      }
+    }
     engine.addAgents(agents);
   } else {
     console.log(`[Server] 孵化 ${INITIAL_AGENTS} 个初始 Agent`);
@@ -183,7 +191,6 @@ async function main(): Promise<void> {
   // 7. 启动 WorldEngine 自动 tick
   // 自定义 tick 回调：保存 + 广播
   let tickCount = 0;
-  const originalStep = engine.step.bind(engine);
 
   // 用 setInterval 手动驱动 tick，这样可以在每次 tick 后做持久化
   const tickLoop = setInterval(async () => {

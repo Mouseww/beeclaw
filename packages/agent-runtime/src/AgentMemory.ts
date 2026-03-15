@@ -8,7 +8,6 @@ import type {
   MemoryEntry,
   MemoryType,
   Opinion,
-  PredictionRecord,
 } from '@beeclaw/shared';
 import type { LLMClient } from './LLMClient.js';
 

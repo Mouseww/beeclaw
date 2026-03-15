@@ -13,7 +13,7 @@ import type {
 import { generateId, extractJson, clamp } from '@beeclaw/shared';
 import { AgentMemory } from './AgentMemory.js';
 import { buildSystemPrompt, generateAgentName, generatePersona } from './AgentPersona.js';
-import { ModelRouter } from './ModelRouter.js';
+import type { ModelRouter } from './ModelRouter.js';
 import type { ChatMessage } from './LLMClient.js';
 
 export class Agent {

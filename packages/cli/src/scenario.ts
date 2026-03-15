@@ -6,7 +6,6 @@
 
 import {
   ScenarioRegistry,
-  BUILTIN_TEMPLATES,
 } from '@beeclaw/shared';
 import type { ScenarioTemplate } from '@beeclaw/shared';
 import { ScenarioRunner } from '@beeclaw/world-engine';

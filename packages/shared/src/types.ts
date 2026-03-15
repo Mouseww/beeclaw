@@ -320,6 +320,8 @@ export interface LLMConfig {
   model: string;
   maxTokens?: number;
   temperature?: number;
+  /** 请求超时时间（毫秒），默认 60000 */
+  timeoutMs?: number;
 }
 
 export interface ModelRouterConfig {

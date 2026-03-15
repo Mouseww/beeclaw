@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { WorldEngine } from '@beeclaw/world-engine';
-import { AgentSpawner, ModelRouter } from '@beeclaw/agent-runtime';
+import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, SpawnRule } from '@beeclaw/shared';
 
 // ── 默认配置 ──

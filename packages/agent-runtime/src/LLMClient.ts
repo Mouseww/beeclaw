@@ -26,12 +26,16 @@ export interface ChatCompletionResponse {
   };
 }
 
+/** 默认请求超时时间（毫秒） */
+const DEFAULT_TIMEOUT_MS = 60_000;
+
 export class LLMClient {
   private baseURL: string;
   private apiKey: string;
   private model: string;
   private maxTokens: number;
   private temperature: number;
+  private timeoutMs: number;
 
   constructor(config: LLMConfig) {
     this.baseURL = config.baseURL.replace(/\/+$/, '');
@@ -39,10 +43,12 @@ export class LLMClient {
     this.model = config.model;
     this.maxTokens = config.maxTokens ?? 2048;
     this.temperature = config.temperature ?? 0.7;
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**
    * 发送 chat completion 请求
+   * 带超时控制（默认 60s），超时后抛出 AbortError
    */
   async chatCompletion(messages: ChatMessage[]): Promise<string> {
     const url = `${this.baseURL}/v1/chat/completions`;
@@ -60,6 +66,7 @@ export class LLMClient {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!response.ok) {
