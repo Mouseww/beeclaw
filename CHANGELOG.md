@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1] - 2026-03-16
+
+### 📝 Documentation
+
+- 新增 `docs/API.md` — 完整的 REST API 参考文档（所有端点、参数、响应格式）
+- 新增 `docs/DEPLOYMENT.md` — 部署指南（Docker、环境变量、生产建议、监控、故障排查）
+- 新增 `docs/DEVELOPMENT.md` — 开发者指南（项目结构、包依赖、测试约定、如何添加新包）
+
+### 🧹 Code Quality
+
+- 修复所有 ESLint 警告和错误（lint 全量清理）
+
 ## [0.5.0] - 2026-03-16
 
 ### 🔧 Robustness & Reliability
