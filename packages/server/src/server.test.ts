@@ -3,10 +3,10 @@
 // 测试 API 路由注册函数 + Store 持久化 + WebSocket 广播
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
-import { broadcast, getConnectionCount, stopHeartbeat } from './ws/handler.js';
+import { broadcast, getConnectionCount } from './ws/handler.js';
 import type { TickResult } from '@beeclaw/world-engine';
 
 // ── Database + Store 测试 ──

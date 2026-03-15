@@ -4,14 +4,12 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScenarioRunner } from './ScenarioRunner.js';
-import type { ScenarioStatus, ScenarioSummary } from './ScenarioRunner.js';
+import type { ScenarioStatus } from './ScenarioRunner.js';
 import { WorldEngine } from './WorldEngine.js';
-import type { TickResult } from './WorldEngine.js';
 import { ModelRouter } from '@beeclaw/agent-runtime';
 import type {
   ScenarioTemplate,
   ModelRouterConfig,
-  WorldConfig,
 } from '@beeclaw/shared';
 
 // ── Mock 配置 ──
@@ -405,7 +403,7 @@ describe('ScenarioRunner', () => {
 
       // 在 onTick 中的第 2 个 tick 后停止
       let tickCount = 0;
-      const runPromise = runner.run(100);
+      const _runPromise = runner.run(100);
 
       // 等一下让第一个 tick 执行，然后直接通过 stop 停止
       // 由于 run 是同步循环 await step()，我们需要在 onTick 回调中调用 stop

@@ -8,11 +8,11 @@ import type {
   AgentProfile,
   EventSourceConfig,
   WorldConfig,
-  SpawnRule,
 } from '@beeclaw/shared';
 import { WorldEngine } from './WorldEngine.js';
 import type { WorldEngineOptions, TickResult } from './WorldEngine.js';
-import { Agent, AgentSpawner, ModelRouter } from '@beeclaw/agent-runtime';
+import type { Agent } from '@beeclaw/agent-runtime';
+import { AgentSpawner, ModelRouter } from '@beeclaw/agent-runtime';
 
 /**
  * ScenarioRunner 配置选项

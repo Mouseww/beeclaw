@@ -11,6 +11,8 @@ import {
   applySocialRoles,
 } from './CommunityDetection.js';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 function createClusteredGraph(): SocialGraph {
   const graph = new SocialGraph();
   // 社区 A: a1, a2, a3（互相连接）

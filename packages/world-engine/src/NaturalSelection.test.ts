@@ -3,8 +3,7 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NaturalSelection, DEFAULT_SELECTION_CONFIG } from './NaturalSelection.js';
-import type { NaturalSelectionConfig, SelectionResult } from './NaturalSelection.js';
+import { NaturalSelection } from './NaturalSelection.js';
 import { Agent, AgentSpawner } from '@beeclaw/agent-runtime';
 
 // ── 测试辅助函数 ──

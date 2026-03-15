@@ -8,7 +8,7 @@ import type { WebSocket } from 'ws';
 /** 心跳间隔（30 秒） */
 const HEARTBEAT_INTERVAL_MS = 30_000;
 /** 心跳超时（连续 2 次无 pong 视为断开） */
-const HEARTBEAT_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 2 + 5_000;
+const _HEARTBEAT_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS * 2 + 5_000;
 
 interface ClientMeta {
   socket: WebSocket;

@@ -12,7 +12,6 @@ import type {
 import { createLogger } from '@beeclaw/shared';
 import { EventBus } from '@beeclaw/event-bus';
 import {
-  Agent,
   AgentSpawner,
   ModelRouter,
   ResponseCache,
@@ -22,8 +21,9 @@ import type {
   ResponseCacheConfig,
   BatchInferenceConfig,
   InferenceRequest,
-} from '@beeclaw/agent-runtime';
-import { SocialGraph, calculatePropagation } from '@beeclaw/social-graph';
+
+  Agent} from '@beeclaw/agent-runtime';
+import { SocialGraph } from '@beeclaw/social-graph';
 import { ConsensusEngine } from '@beeclaw/consensus';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 import { TickScheduler } from './TickScheduler.js';
@@ -196,7 +196,7 @@ export class WorldEngine {
    * 手动推进一个 tick
    */
   async step(): Promise<TickResult> {
-    const tick = await this.scheduler.advance();
+    const _tick = await this.scheduler.advance();
     return this.tickHistory[this.tickHistory.length - 1]!;
   }
 
@@ -407,7 +407,7 @@ export class WorldEngine {
     let agentsEliminated = 0;
     if (this.config.enableNaturalSelection && this.naturalSelection.shouldCheck(tick)) {
       const allAgents = this.getAgents();
-      const { result, event: selectionEvent } = this.naturalSelection.evaluate(
+      const { result, event: _selectionEvent } = this.naturalSelection.evaluate(
         tick,
         allAgents,
         this.spawner,

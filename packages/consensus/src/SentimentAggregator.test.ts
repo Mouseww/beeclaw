@@ -5,6 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { aggregateSentiment, type AgentResponseRecord } from './SentimentAggregator.js';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 function createRecord(
   emotionalState: number,
   credibility: number = 0.5,

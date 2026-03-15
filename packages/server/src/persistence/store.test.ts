@@ -2,11 +2,13 @@
 // @beeclaw/server — persistence/store 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { initDatabase } from './database.js';
 import { Store } from './store.js';
 import type { ConsensusSignal, LLMConfig, ModelRouterConfig } from '@beeclaw/shared';
 import type { TickResult } from '@beeclaw/world-engine';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe('Store', () => {
   let db: ReturnType<typeof initDatabase>;

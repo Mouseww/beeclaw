@@ -2,7 +2,7 @@
 // ResponseCache 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ResponseCache } from './ResponseCache.js';
 
 describe('ResponseCache', () => {

@@ -4,7 +4,7 @@
 // ============================================================================
 
 import type { SocialRole } from '@beeclaw/shared';
-import { SocialGraph } from './SocialGraph.js';
+import type { SocialGraph } from './SocialGraph.js';
 
 /**
  * 社区发现结果

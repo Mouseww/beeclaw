@@ -180,7 +180,7 @@ export class Agent {
   /**
    * 构建默认响应（LLM 调用失败时使用）
    */
-  private buildDefaultResponse(event: WorldEvent): AgentResponse {
+  private buildDefaultResponse(_event: WorldEvent): AgentResponse {
     return {
       opinion: `作为${this.persona.profession}，我注意到了这个事件但需要更多信息。`,
       action: 'silent',

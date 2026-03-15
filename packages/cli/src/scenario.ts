@@ -7,7 +7,6 @@
 import {
   ScenarioRegistry,
 } from '@beeclaw/shared';
-import type { ScenarioTemplate } from '@beeclaw/shared';
 import { ScenarioRunner } from '@beeclaw/world-engine';
 import { ModelRouter } from '@beeclaw/agent-runtime';
 
@@ -24,6 +23,7 @@ interface ScenarioArgs {
 
 function parseScenarioArgs(): ScenarioArgs {
   const args = process.argv.slice(2);
+  // eslint-disable-next-line no-useless-assignment
   let subCommand: SubCommand = 'help';
   let templateName: string | undefined;
   let maxTicks: number | undefined;

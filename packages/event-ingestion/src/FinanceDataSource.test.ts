@@ -5,8 +5,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FinanceDataSource, POPULAR_STOCKS, POPULAR_CRYPTO } from './FinanceDataSource.js';
-import type { FinanceSourceConfig, FinanceSymbol, QuoteData } from './types.js';
+import type { FinanceSourceConfig } from './types.js';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ── Mock EventBus ──
 function createMockEventBus() {
   return {
@@ -610,7 +611,7 @@ describe('FinanceDataSource', () => {
   describe('事件重要性等级', () => {
     async function testImportance(changePercent: number, expectedMin: number) {
       const price = 100 + changePercent;
-      const src = new FinanceDataSource(mockBus as any, {
+      const _src = new FinanceDataSource(mockBus as any, {
         id: 'imp-test',
         name: 'Importance Test',
         symbols: [{ symbol: 'TEST', name: 'Test', type: 'stock' }],

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorldEngine } from '@beeclaw/world-engine';
-import { ModelRouter, Agent } from '@beeclaw/agent-runtime';
+import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig } from '@beeclaw/shared';
 
 // ── Mock 配置 ──

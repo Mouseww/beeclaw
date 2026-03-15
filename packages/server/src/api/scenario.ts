@@ -44,7 +44,7 @@ export function registerScenarioRoute(app: FastifyInstance, ctx: ServerContext):
     });
 
     // 复用主引擎的孵化规则
-    const mainSpawner = ctx.engine.spawner;
+    const _mainSpawner = ctx.engine.spawner;
     // 生成 agents
     const agents = engine.spawner.spawnBatch(Math.min(agentCount, 50), 0);
     engine.addAgents(agents);

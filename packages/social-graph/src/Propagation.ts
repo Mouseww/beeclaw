@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { WorldEvent } from '@beeclaw/shared';
-import { SocialGraph } from './SocialGraph.js';
+import type { SocialGraph } from './SocialGraph.js';
 
 export interface PropagationResult {
   /** 能"看到"该事件的 Agent ID 列表 */

@@ -135,7 +135,7 @@ describe('Agent', () => {
 
     it('updateInfluence 应限制在 0~100', () => {
       const agent = new Agent();
-      const initial = agent.influence;
+      const _initial = agent.influence;
       agent.updateInfluence(200);
       expect(agent.influence).toBe(100);
       agent.updateInfluence(-200);

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BatchInference } from './BatchInference.js';
-import type { InferenceRequest, InferenceResult } from './BatchInference.js';
+import type { InferenceRequest } from './BatchInference.js';
 
 describe('BatchInference', () => {
   let batch: BatchInference;

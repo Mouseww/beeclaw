@@ -2,7 +2,7 @@
 // AgentActivationPool 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { AgentActivationPool } from './AgentActivationPool.js';
 import { SocialGraph } from '@beeclaw/social-graph';
 import type { WorldEvent } from '@beeclaw/shared';

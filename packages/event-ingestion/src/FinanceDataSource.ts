@@ -8,6 +8,7 @@ import type {
   FinanceSourceConfig,
   FinanceSymbol,
   QuoteData,
+  MarketSentimentResult,
 } from './types.js';
 import { MarketSentiment } from './MarketSentiment.js';
 
@@ -426,7 +427,7 @@ export class FinanceDataSource {
    */
   private emitSentimentEvent(
     quote: QuoteData,
-    sentimentResult: import('./types.js').MarketSentimentResult,
+    sentimentResult: MarketSentimentResult,
   ): void {
     const title = `市场情绪: ${quote.name}(${quote.symbol}) — ${this.getSentimentLabel(sentimentResult.sentiment)}`;
 

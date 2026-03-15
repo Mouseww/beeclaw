@@ -3,7 +3,6 @@
 // 定期评估 Agent 信誉和活跃度，淘汰低效 Agent，补充新 Agent 维持种群规模
 // ============================================================================
 
-import type { WorldEvent } from '@beeclaw/shared';
 import type { Agent, AgentSpawner } from '@beeclaw/agent-runtime';
 
 /**

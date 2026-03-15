@@ -9,6 +9,8 @@ import { ImportanceEvaluator } from './ImportanceEvaluator.js';
 import { EventIngestion } from './EventIngestion.js';
 import type { FeedItem } from './types.js';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // ── FeedParser 测试 ──
 
 describe('parseFeed', () => {

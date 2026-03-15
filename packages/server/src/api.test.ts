@@ -6,8 +6,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { WorldEngine, type TickResult } from '@beeclaw/world-engine';
-import { ModelRouter, Agent } from '@beeclaw/agent-runtime';
-import type { WorldConfig, ModelRouterConfig, ConsensusSignal } from '@beeclaw/shared';
+import { ModelRouter } from '@beeclaw/agent-runtime';
+import type { WorldConfig, ModelRouterConfig } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
 import { registerStatusRoute } from './api/status.js';

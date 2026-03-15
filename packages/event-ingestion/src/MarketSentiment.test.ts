@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MarketSentiment } from './MarketSentiment.js';
-import type { QuoteData, MarketSentimentType } from './types.js';
+import type { QuoteData } from './types.js';
 
 function createQuote(overrides: Partial<QuoteData> = {}): QuoteData {
   return {

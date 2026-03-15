@@ -274,7 +274,7 @@ describe('DEFAULT_TEMPLATE', () => {
 
   it('性格范围应在 0-1 之间', () => {
     const ranges = DEFAULT_TEMPLATE.traitRanges;
-    for (const [key, [min, max]] of Object.entries(ranges)) {
+    for (const [_key, [min, max]] of Object.entries(ranges)) {
       expect(min).toBeGreaterThanOrEqual(0);
       expect(max).toBeLessThanOrEqual(1);
       expect(min).toBeLessThanOrEqual(max);
