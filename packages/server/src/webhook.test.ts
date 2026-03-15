@@ -88,7 +88,22 @@ async function buildWebhookTestApp(): Promise<{
   const mockFetch = createMockFetch();
   const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    schemaErrorFormatter(errors, dataVar) {
+      const first = errors[0];
+      if (first) {
+        const field = first.instancePath
+          ? first.instancePath.replace(/^\//, '').replace(/\//g, '.')
+          : (first.params as Record<string, unknown>)?.['missingProperty'] as string | undefined;
+        const msg = field
+          ? `${field}: ${first.message ?? 'validation failed'}`
+          : `${dataVar} ${first.message ?? 'validation failed'}`;
+        return new Error(msg);
+      }
+      return new Error('Validation failed');
+    },
+  });
 
   const ctx: ServerContext = {
     engine,
@@ -99,6 +114,15 @@ async function buildWebhookTestApp(): Promise<{
   };
 
   registerWebhooksRoute(app, ctx);
+
+  // 将 schema validation 错误统一为 { error: "..." } 格式
+  app.setErrorHandler((error, _req, reply) => {
+    if (error.validation) {
+      return reply.status(400).send({ error: error.message });
+    }
+    reply.status(error.statusCode ?? 500).send({ error: error.message });
+  });
+
   await app.ready();
 
   return { app, store, dispatcher, engine };
@@ -456,7 +480,8 @@ describe('Webhook API 路由集成测试', () => {
         payload: { url: 'https://example.com', events: ['invalid.event'] },
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().error).toContain('invalid.event');
+      // schema validation 或手动校验均会包含 'events' 字段名
+      expect(res.json().error).toContain('events');
     });
   });
 

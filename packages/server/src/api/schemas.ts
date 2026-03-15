@@ -26,7 +26,7 @@ export const statusSchema = {
         activeAgents: { type: 'integer' as const },
         sentiment: { type: 'object' as const, additionalProperties: true },
         activeEvents: { type: 'integer' as const },
-        lastTick: { type: ['object', 'null'] as const },
+        lastTick: { type: ['object', 'null'] as const, additionalProperties: true },
         wsConnections: { type: 'integer' as const },
         uptime: { type: 'number' as const },
         running: { type: 'boolean' as const },
@@ -194,7 +194,7 @@ export const scenarioSchema = {
           tags: { type: 'array' as const, items: { type: 'string' as const } },
         },
       },
-      agentCount: { type: 'integer' as const, minimum: 1, maximum: 50, description: 'Agent 数量（默认 10）' },
+      agentCount: { type: 'integer' as const, minimum: 1, description: 'Agent 数量（默认 10，超过 50 会被 clamp）' },
       ticks: { type: 'integer' as const, minimum: 1, maximum: 20, description: '推演 Tick 数（默认 5，最大 20）' },
     },
   },
@@ -324,7 +324,7 @@ export const putLLMTierConfigSchema = {
   params: {
     type: 'object' as const,
     properties: {
-      tier: { type: 'string' as const, enum: ['local', 'cheap', 'strong'] },
+      tier: { type: 'string' as const, description: 'LLM tier (local, cheap, strong)' },
     },
     required: ['tier'],
   },

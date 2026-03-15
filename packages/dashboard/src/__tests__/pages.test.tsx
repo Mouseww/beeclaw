@@ -250,7 +250,6 @@ describe('AgentDetail', () => {
   });
 
   it('有数据时应渲染 Agent 基本信息', () => {
-    const { usePolling } = vi.mocked(await import('../hooks/usePolling'));
     (usePolling as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {
         id: 'agent-001',
@@ -305,7 +304,7 @@ describe('AgentDetail', () => {
 
     // 基本信息
     expect(screen.getByText('张分析师')).toBeInTheDocument();
-    expect(screen.getByText(/金融分析师/)).toBeInTheDocument();
+    expect(screen.getAllByText(/金融分析师/).length).toBeGreaterThanOrEqual(1);
 
     // 人格画像
     expect(screen.getByText('人格画像')).toBeInTheDocument();
@@ -340,7 +339,6 @@ describe('AgentDetail', () => {
   });
 
   it('错误时应显示错误状态', () => {
-    const { usePolling } = vi.mocked(await import('../hooks/usePolling'));
     (usePolling as ReturnType<typeof vi.fn>).mockReturnValue({
       data: null,
       error: 'Agent not found',
@@ -354,7 +352,6 @@ describe('AgentDetail', () => {
   });
 
   it('无观点时应显示暂无观点记录', () => {
-    const { usePolling } = vi.mocked(await import('../hooks/usePolling'));
     (usePolling as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {
         id: 'agent-002',

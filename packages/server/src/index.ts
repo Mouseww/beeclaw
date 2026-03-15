@@ -145,7 +145,23 @@ async function main(): Promise<void> {
   }
 
   // 6. 启动 Fastify
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    schemaErrorFormatter(errors, dataVar) {
+      // 返回包含字段名的描述性验证错误消息
+      const first = errors[0];
+      if (first) {
+        const field = first.instancePath
+          ? first.instancePath.replace(/^\//, '').replace(/\//g, '.')
+          : (first.params as Record<string, unknown>)?.['missingProperty'] as string | undefined;
+        const msg = field
+          ? `${field}: ${first.message ?? 'validation failed'}`
+          : `${dataVar} ${first.message ?? 'validation failed'}`;
+        return new Error(msg);
+      }
+      return new Error('Validation failed');
+    },
+  });
   await app.register(fastifyWebsocket);
 
   // 注册 OpenAPI / Swagger
@@ -204,6 +220,14 @@ async function main(): Promise<void> {
   registerPrometheusRoute(app, ctx);
   registerConfigRoute(app, ctx);
   registerWebhooksRoute(app, ctx);
+
+  // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
+  app.setErrorHandler((error, _req, reply) => {
+    if (error.validation) {
+      return reply.status(400).send({ error: error.message });
+    }
+    reply.status(error.statusCode ?? 500).send({ error: error.message });
+  });
 
   // 静态文件：Dashboard SPA
   const __filename = fileURLToPath(import.meta.url);

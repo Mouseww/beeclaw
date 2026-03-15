@@ -61,7 +61,23 @@ export async function buildTestContext(wsCount = 0): Promise<TestContext> {
     concurrency: 3,
   });
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    schemaErrorFormatter(errors, dataVar) {
+      // 提取第一个验证错误，返回包含字段名的描述性消息
+      const first = errors[0];
+      if (first) {
+        const field = first.instancePath
+          ? first.instancePath.replace(/^\//, '').replace(/\//g, '.')
+          : (first.params as Record<string, unknown>)?.['missingProperty'] as string | undefined;
+        const msg = field
+          ? `${field}: ${first.message ?? 'validation failed'}`
+          : `${dataVar} ${first.message ?? 'validation failed'}`;
+        return new Error(msg);
+      }
+      return new Error('Validation failed');
+    },
+  });
 
   const ctx: ServerContext = {
     engine,
@@ -69,6 +85,14 @@ export async function buildTestContext(wsCount = 0): Promise<TestContext> {
     modelRouter,
     getWsCount: () => wsCount,
   };
+
+  // 将 schema validation 错误统一为 { error: "..." } 格式（与路由手动验证一致）
+  app.setErrorHandler((error, _req, reply) => {
+    if (error.validation) {
+      return reply.status(400).send({ error: error.message });
+    }
+    reply.status(error.statusCode ?? 500).send({ error: error.message });
+  });
 
   return { app, engine, store, modelRouter, ctx };
 }
