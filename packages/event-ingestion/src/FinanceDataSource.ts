@@ -241,31 +241,44 @@ export class FinanceDataSource {
   }
 
   /**
-   * 获取单个标的的行情
+   * 获取单个标的的行情（带指数退避重试）
    */
-  private async fetchSingleQuote(symbol: FinanceSymbol): Promise<QuoteData | null> {
-    try {
-      const url = `${YAHOO_FINANCE_API}/${encodeURIComponent(symbol.symbol)}?range=1d&interval=1d`;
-      const response = await this.fetchFn(url, {
-        headers: {
-          'User-Agent': 'BeeClaw/0.1.0 FinanceDataSource',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(15_000),
-      });
+  private async fetchSingleQuote(symbol: FinanceSymbol, retries = 3): Promise<QuoteData | null> {
+    let lastError: string | null = null;
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const url = `${YAHOO_FINANCE_API}/${encodeURIComponent(symbol.symbol)}?range=1d&interval=1d`;
+        const response = await this.fetchFn(url, {
+          headers: {
+            'User-Agent': 'BeeClaw/0.5.0 FinanceDataSource',
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json() as YahooChartResponse;
+        return this.parseYahooChartResponse(data, symbol);
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+        if (attempt < retries) {
+          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10_000);
+          console.warn(
+            `[FinanceDataSource] 获取 ${symbol.symbol} 失败 (第 ${attempt}/${retries} 次), ` +
+            `${delayMs}ms 后重试: ${lastError}`
+          );
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
       }
-
-      const data = await response.json() as YahooChartResponse;
-      return this.parseYahooChartResponse(data, symbol);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this._lastFetchError = msg;
-      console.warn(`[FinanceDataSource] 获取 ${symbol.symbol} 行情失败: ${msg}`);
-      return null;
     }
+
+    this._lastFetchError = lastError ?? undefined;
+    console.warn(`[FinanceDataSource] 获取 ${symbol.symbol} 行情最终失败: ${lastError}`);
+    return null;
   }
 
   /**

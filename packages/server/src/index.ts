@@ -15,7 +15,7 @@ import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
-import { registerWs, broadcast, getConnectionCount } from './ws/handler.js';
+import { registerWs, broadcast, getConnectionCount, stopHeartbeat, closeAllConnections } from './ws/handler.js';
 import { registerStatusRoute } from './api/status.js';
 import { registerAgentsRoute } from './api/agents.js';
 import { registerEventsRoute } from './api/events.js';
@@ -191,9 +191,16 @@ async function main(): Promise<void> {
   // 7. 启动 WorldEngine 自动 tick
   // 自定义 tick 回调：保存 + 广播
   let tickCount = 0;
+  let tickRunning = false; // 防止 tick 堆积
 
   // 用 setInterval 手动驱动 tick，这样可以在每次 tick 后做持久化
   const tickLoop = setInterval(async () => {
+    // 如果上一个 tick 还未完成，跳过本轮避免堆积
+    if (tickRunning) {
+      console.warn('[Server] ⚠️ 上一个 tick 仍在执行中，跳过本轮');
+      return;
+    }
+    tickRunning = true;
     try {
       const result = await engine.step();
       tickCount++;
@@ -218,6 +225,13 @@ async function main(): Promise<void> {
         console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库`);
       }
 
+      // 警告 tick 耗时过长
+      if (result.durationMs > TICK_INTERVAL * 0.8) {
+        console.warn(
+          `[Server] ⚠️ Tick ${result.tick} 耗时 ${result.durationMs}ms，接近间隔 ${TICK_INTERVAL}ms，可能需要调大间隔或减少 Agent`
+        );
+      }
+
       console.log(
         `[Server] Tick ${result.tick} — ` +
         `事件:${result.eventsProcessed} 响应:${result.responsesCollected} ` +
@@ -225,33 +239,57 @@ async function main(): Promise<void> {
       );
     } catch (err) {
       console.error('[Server] Tick 执行错误:', err);
+    } finally {
+      tickRunning = false;
     }
   }, TICK_INTERVAL);
 
   console.log(`[Server] 🚀 自动 tick 循环已启动\n`);
 
-  // 8. 优雅退出
-  const shutdown = async () => {
-    console.log('\n[Server] 收到退出信号，保存状态...');
+  // 8. 优雅退出（带超时保护）
+  let shuttingDown = false;
+  const SHUTDOWN_TIMEOUT_MS = 10_000;
+
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n[Server] 收到 ${signal} 信号，保存状态...`);
     clearInterval(tickLoop);
 
-    // 最终保存
-    const tick = engine.getCurrentTick();
-    store.setTick(tick);
-    store.saveAgents(engine.getAgents());
-    const lastResult = engine.getLastTickResult();
-    if (lastResult) store.saveTickResult(lastResult);
+    // 超时强制退出保护
+    const forceExitTimer = setTimeout(() => {
+      console.error('[Server] ⚠️ 优雅退出超时，强制退出');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    // 允许进程自然退出，不因此 timer 阻塞
+    forceExitTimer.unref();
 
-    console.log(`[Server] 状态已保存 (Tick ${tick}, ${engine.getAgents().length} agents)`);
+    try {
+      // 最终保存
+      const tick = engine.getCurrentTick();
+      store.setTick(tick);
+      store.saveAgents(engine.getAgents());
+      const lastResult = engine.getLastTickResult();
+      if (lastResult) store.saveTickResult(lastResult);
+      console.log(`[Server] 状态已保存 (Tick ${tick}, ${engine.getAgents().length} agents)`);
 
-    await app.close();
-    db.close();
-    console.log('[Server] 🐝 BeeClaw Server 已停止');
+      // 关闭所有 WebSocket 连接
+      stopHeartbeat();
+      closeAllConnections();
+
+      await app.close();
+      db.close();
+      console.log('[Server] 🐝 BeeClaw Server 已停止');
+    } catch (err) {
+      console.error('[Server] 退出过程中出错:', err);
+    }
+
     process.exit(0);
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGHUP', () => shutdown('SIGHUP'));
 }
 
 main().catch((err) => {

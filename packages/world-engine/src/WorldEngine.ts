@@ -227,7 +227,7 @@ export class WorldEngine {
   // ── 核心 Tick 处理 ──
 
   /**
-   * 处理单个 Tick 的所有逻辑
+   * 处理单个 Tick 的所有逻辑（包含整体异常保护）
    */
   private async processTick(tick: number): Promise<void> {
     const startTime = Date.now();
@@ -250,128 +250,139 @@ export class WorldEngine {
 
     // 3. 对每个事件进行传播和 Agent 响应
     for (const event of events) {
-      // 3a. 使用 AgentActivationPool 计算激活范围
-      const activeAgentIds: string[] = [];
-      for (const agent of this.agents.values()) {
-        if (agent.status === 'active') {
-          activeAgentIds.push(agent.id);
-        }
-      }
-
-      const activation = this.activationPool.computeActivation(
-        event,
-        this.socialGraph,
-        activeAgentIds,
-      );
-
-      totalFiltered += activation.filteredCount;
-
-      console.log(
-        `[WorldEngine] 事件 "${event.title}" 激活 ${activation.activatedIds.length} 个 Agent` +
-        (activation.filteredCount > 0 ? `（过滤 ${activation.filteredCount}）` : ''),
-      );
-
-      // 3b. 筛选出对事件感兴趣的 Agent
-      const interestedAgents: Agent[] = [];
-      for (const agentId of activation.activatedIds) {
-        const agent = this.agents.get(agentId);
-        if (agent && agent.isInterestedIn(event)) {
-          interestedAgents.push(agent);
-        }
-      }
-
-      totalActivated += interestedAgents.length;
-
-      if (interestedAgents.length === 0) continue;
-
-      // 3c. 使用 BatchInference 批量并发调用 Agent
-      const responseRecords: AgentResponseRecord[] = [];
-
-      const inferenceRequests: InferenceRequest<{ agent: Agent; response: AgentResponse }>[] =
-        interestedAgents.map((agent) => ({
-          id: agent.id,
-          execute: async () => {
-            const response = await agent.react(event, this.modelRouter, tick);
-            return { agent, response };
-          },
-        }));
-
-      const inferenceResults = await this.batchInference.executeBatch(inferenceRequests);
-
-      for (const inferResult of inferenceResults) {
-        if (!inferResult.success || !inferResult.result) {
-          console.error(
-            `[WorldEngine] Agent ${inferResult.id} 推理失败:`,
-            inferResult.error?.message,
-          );
-          continue;
-        }
-
-        const { agent, response } = inferResult.result;
-
-        responseRecords.push({
-          agentId: agent.id,
-          agentName: agent.name,
-          credibility: agent.credibility,
-          response,
-        });
-
-        // 3d. Agent 发言/转发 → 产生内部事件（级联传播）
-        if (response.action === 'speak' || response.action === 'forward') {
-          this.eventBus.emitAgentEvent({
-            agentId: agent.id,
-            agentName: agent.name,
-            title: `${agent.name}(${agent.persona.profession})的观点`,
-            content: response.opinion,
-            category: event.category,
-            importance: Math.min(event.importance * 0.5, agent.influence / 100),
-            propagationRadius: 0.1,
-            tick,
-            tags: event.tags,
-          });
-        }
-
-        // 3e. 处理社交行为（follow/unfollow）
-        if (response.socialActions) {
-          for (const socialAction of response.socialActions) {
-            if (socialAction.type === 'follow') {
-              agent.follow(socialAction.targetAgentId);
-              this.socialGraph.addEdge(agent.id, socialAction.targetAgentId, 'follow', 0.5, tick);
-              const target = this.agents.get(socialAction.targetAgentId);
-              if (target) target.addFollower(agent.id);
-            } else if (socialAction.type === 'unfollow') {
-              agent.unfollow(socialAction.targetAgentId);
-              this.socialGraph.removeEdge(agent.id, socialAction.targetAgentId);
-              const target = this.agents.get(socialAction.targetAgentId);
-              if (target) target.removeFollower(agent.id);
-            }
+      try {
+        // 3a. 使用 AgentActivationPool 计算激活范围
+        const activeAgentIds: string[] = [];
+        for (const agent of this.agents.values()) {
+          if (agent.status === 'active') {
+            activeAgentIds.push(agent.id);
           }
         }
 
-        totalResponses++;
-      }
+        const activation = this.activationPool.computeActivation(
+          event,
+          this.socialGraph,
+          activeAgentIds,
+        );
 
-      allResponseRecords.push({ event, records: responseRecords });
+        totalFiltered += activation.filteredCount;
+
+        console.log(
+          `[WorldEngine] 事件 "${event.title}" 激活 ${activation.activatedIds.length} 个 Agent` +
+          (activation.filteredCount > 0 ? `（过滤 ${activation.filteredCount}）` : ''),
+        );
+
+        // 3b. 筛选出对事件感兴趣的 Agent
+        const interestedAgents: Agent[] = [];
+        for (const agentId of activation.activatedIds) {
+          const agent = this.agents.get(agentId);
+          if (agent && agent.isInterestedIn(event)) {
+            interestedAgents.push(agent);
+          }
+        }
+
+        totalActivated += interestedAgents.length;
+
+        if (interestedAgents.length === 0) continue;
+
+        // 3c. 使用 BatchInference 批量并发调用 Agent
+        const responseRecords: AgentResponseRecord[] = [];
+
+        const inferenceRequests: InferenceRequest<{ agent: Agent; response: AgentResponse }>[] =
+          interestedAgents.map((agent) => ({
+            id: agent.id,
+            execute: async () => {
+              const response = await agent.react(event, this.modelRouter, tick);
+              return { agent, response };
+            },
+          }));
+
+        const inferenceResults = await this.batchInference.executeBatch(inferenceRequests);
+
+        for (const inferResult of inferenceResults) {
+          if (!inferResult.success || !inferResult.result) {
+            console.error(
+              `[WorldEngine] Agent ${inferResult.id} 推理失败:`,
+              inferResult.error?.message,
+            );
+            continue;
+          }
+
+          const { agent, response } = inferResult.result;
+
+          responseRecords.push({
+            agentId: agent.id,
+            agentName: agent.name,
+            credibility: agent.credibility,
+            response,
+          });
+
+          // 3d. Agent 发言/转发 → 产生内部事件（级联传播）
+          if (response.action === 'speak' || response.action === 'forward') {
+            this.eventBus.emitAgentEvent({
+              agentId: agent.id,
+              agentName: agent.name,
+              title: `${agent.name}(${agent.persona.profession})的观点`,
+              content: response.opinion,
+              category: event.category,
+              importance: Math.min(event.importance * 0.5, agent.influence / 100),
+              propagationRadius: 0.1,
+              tick,
+              tags: event.tags,
+            });
+          }
+
+          // 3e. 处理社交行为（follow/unfollow）
+          if (response.socialActions) {
+            for (const socialAction of response.socialActions) {
+              if (socialAction.type === 'follow') {
+                agent.follow(socialAction.targetAgentId);
+                this.socialGraph.addEdge(agent.id, socialAction.targetAgentId, 'follow', 0.5, tick);
+                const target = this.agents.get(socialAction.targetAgentId);
+                if (target) target.addFollower(agent.id);
+              } else if (socialAction.type === 'unfollow') {
+                agent.unfollow(socialAction.targetAgentId);
+                this.socialGraph.removeEdge(agent.id, socialAction.targetAgentId);
+                const target = this.agents.get(socialAction.targetAgentId);
+                if (target) target.removeFollower(agent.id);
+              }
+            }
+          }
+
+          totalResponses++;
+        }
+
+        allResponseRecords.push({ event, records: responseRecords });
+      } catch (eventError) {
+        console.error(
+          `[WorldEngine] 处理事件 "${event.title}" 时出错，跳过:`,
+          eventError instanceof Error ? eventError.message : eventError,
+        );
+      }
     }
 
     // 4. 共识引擎分析
     let signalCount = 0;
     for (const { event, records } of allResponseRecords) {
       if (records.length >= 2) {
-        const signal = this.consensusEngine.analyze(tick, event, records);
-        signalCount++;
+        try {
+          const signal = this.consensusEngine.analyze(tick, event, records);
+          signalCount++;
 
-        // 更新世界情绪地图
-        const emotionValue = signal.sentimentDistribution.bullish - signal.sentimentDistribution.bearish;
-        this.worldState.updateSentiment(signal.topic, emotionValue);
+          // 更新世界情绪地图
+          const emotionValue = signal.sentimentDistribution.bullish - signal.sentimentDistribution.bearish;
+          this.worldState.updateSentiment(signal.topic, emotionValue);
 
-        console.log(
-          `[Consensus] "${signal.topic}": ` +
-          `📈${(signal.sentimentDistribution.bullish * 100).toFixed(0)}% ` +
-          `📉${(signal.sentimentDistribution.bearish * 100).toFixed(0)}% ` +
-          `➡️${(signal.sentimentDistribution.neutral * 100).toFixed(0)}% ` +
-          `趋势:${signal.trend}`
-        );
+          console.log(
+            `[Consensus] "${signal.topic}": ` +
+            `📈${(signal.sentimentDistribution.bullish * 100).toFixed(0)}% ` +
+            `📉${(signal.sentimentDistribution.bearish * 100).toFixed(0)}% ` +
+            `➡️${(signal.sentimentDistribution.neutral * 100).toFixed(0)}% ` +
+            `趋势:${signal.trend}`
+          );
+        } catch (consensusError) {
+          console.error(`[WorldEngine] 共识分析失败:`, consensusError instanceof Error ? consensusError.message : consensusError);
+        }
       }
     }
 

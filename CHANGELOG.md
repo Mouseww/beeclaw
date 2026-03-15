@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0] - 2026-03-16
+
+### 🔧 Robustness & Reliability
+
+- **WebSocket:** 广播容错 — `send()` 失败自动清理断联客户端，不再静默忽略异常
+- **WebSocket:** 心跳检测 — 30s 间隔 ping/pong 机制，自动淘汰无响应连接
+- **WebSocket:** 优雅退出时关闭所有 WebSocket 连接
+- **Dashboard:** WebSocket 重连改为指数退避策略（1s → 30s），限制最大重连 20 次
+- **Dashboard:** WebSocket 消息解析失败记录 warn 日志而非完全静默
+- **Server:** tick 循环防堆积 — 上一个 tick 未完成时跳过本轮，避免 `setInterval` 累积
+- **Server:** tick 耗时超过间隔 80% 时输出预警日志
+- **Server/CLI:** 优雅退出增加 10s 超时保护，防止 shutdown 卡死
+- **Server/CLI:** 增加 SIGHUP 信号处理
+- **EventIngestion:** RSS/Atom 网络请求增加指数退避重试（最多 3 次，1s → 4s）
+- **EventIngestion:** 请求超时从 30s 调整为 20s
+- **FinanceDataSource:** Yahoo Finance API 请求增加指数退避重试（最多 3 次）
+- **WorldEngine:** `processTick` 单个事件处理失败不再中断整个 tick，记录错误后继续
+- **WorldEngine:** 共识引擎分析失败增加 try-catch 保护
+
+### 🧹 Code Quality
+
+- 代码质量审查：错误处理完善、类型安全检查
+- 全量测试覆盖 799+ tests passing
+
 ## [0.4.0] - 2026-03-15
 
 ### 🐛 Bug Fixes

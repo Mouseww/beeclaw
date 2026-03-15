@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
-import { broadcast, getConnectionCount } from './ws/handler.js';
+import { broadcast, getConnectionCount, stopHeartbeat } from './ws/handler.js';
 import type { TickResult } from '@beeclaw/world-engine';
 
 // ── Database + Store 测试 ──

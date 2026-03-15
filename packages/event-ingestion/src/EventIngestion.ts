@@ -317,22 +317,40 @@ export class EventIngestion {
   }
 
   /**
-   * 获取 Feed XML 内容
+   * 获取 Feed XML 内容（带指数退避重试）
    */
-  private async fetchFeed(url: string): Promise<string> {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'BeeClaw/0.1.0 EventIngestion',
-        'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
+  private async fetchFeed(url: string, retries = 3): Promise<string> {
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'BeeClaw/0.5.0 EventIngestion',
+            'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          },
+          signal: AbortSignal.timeout(20_000),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+
+        return response.text();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < retries) {
+          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10_000);
+          console.warn(
+            `[EventIngestion] 请求失败 (${url}), 第 ${attempt}/${retries} 次重试, ` +
+            `${delayMs}ms 后重试: ${lastError.message}`
+          );
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
     }
 
-    return response.text();
+    throw lastError!;
   }
 
   /**

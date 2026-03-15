@@ -170,13 +170,22 @@ async function main(): Promise<void> {
     console.log('');
   }
 
-  // 6. 优雅退出处理
+  // 6. 优雅退出处理（带超时保护）
   let stopping = false;
-  const gracefulShutdown = () => {
+  const SHUTDOWN_TIMEOUT_MS = 10_000;
+
+  const gracefulShutdown = (signal?: string) => {
     if (stopping) return;
     stopping = true;
-    console.log('\n[CLI] 收到退出信号，正在停止...');
+    console.log(`\n[CLI] 收到${signal ? ' ' + signal : ''}退出信号，正在停止...`);
     engine.stop();
+
+    // 超时强制退出保护
+    const forceExitTimer = setTimeout(() => {
+      console.error('[CLI] ⚠️ 优雅退出超时，强制退出');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExitTimer.unref();
 
     // 打印最终状态
     const state = engine.worldState.getState();
@@ -198,8 +207,9 @@ async function main(): Promise<void> {
     process.exit(0);
   };
 
-  process.on('SIGINT', gracefulShutdown);
-  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
 
   // 7. 运行 tick 循环
   if (opts.maxTicks > 0) {

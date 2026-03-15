@@ -183,9 +183,9 @@ describe('useWebSocket', () => {
 
     expect(result.current.state).toBe('disconnected');
 
-    // 3 秒后应该重新尝试连接
+    // 第一次重连间隔为 1s（指数退避起始值）
     act(() => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(1000);
     });
 
     // 应该创建了新的 WebSocket 实例
