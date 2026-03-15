@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.1] - 2026-03-16
+
+### 🐛 Bug Fixes
+
+- **修复 EventIngestion 测试不稳定** — 使用 fake timer advancement 替代真实超时
+
+### 🧪 Testing
+
+- 新增 event-ingestion 和 server WebSocket handler 测试
+- 改进 metrics、TickScheduler、WorldEngine 测试覆盖率
+
+### 🧹 Code Quality
+
+- 修复 ESLint unused variable 警告
+- 添加 `coverage/` 到 ESLint 忽略列表并修复 `no-unsafe-function-type` 错误
+
 ## [0.6.0] - 2026-03-16
 
 ### 🧪 Testing
