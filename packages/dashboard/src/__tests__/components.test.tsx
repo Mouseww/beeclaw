@@ -254,6 +254,6 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>,
     );
-    expect(screen.getByText('BeeClaw v1.0.1')).toBeInTheDocument();
+    expect(screen.getByText('BeeClaw v1.0.0')).toBeInTheDocument();
   });
 });

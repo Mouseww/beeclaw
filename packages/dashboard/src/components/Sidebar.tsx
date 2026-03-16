@@ -41,7 +41,7 @@ export function Sidebar() {
       {/* 底部信息 */}
       <div className="p-4 border-t theme-border">
         <p className="text-xs theme-text-faint text-center" style={{ color: 'var(--text-faint)' }}>
-          BeeClaw v1.0.1
+          BeeClaw v1.0.0
         </p>
       </div>
     </aside>
