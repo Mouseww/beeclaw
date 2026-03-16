@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
-import { WorldEngine, type TickResult } from '@beeclaw/world-engine';
+import { WorldEngine } from '@beeclaw/world-engine';
 import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
@@ -398,8 +398,8 @@ describe('WebhookDispatcher', () => {
 
 describe('Webhook API 路由集成测试', () => {
   let app: FastifyInstance;
-  let store: Store;
-  let dispatcher: WebhookDispatcher;
+  let _store: Store;
+  let _dispatcher: WebhookDispatcher;
 
   beforeEach(async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -408,8 +408,8 @@ describe('Webhook API 路由集成测试', () => {
 
     const built = await buildWebhookTestApp();
     app = built.app;
-    store = built.store;
-    dispatcher = built.dispatcher;
+    _store = built.store;
+    _dispatcher = built.dispatcher;
   });
 
   afterEach(async () => {
