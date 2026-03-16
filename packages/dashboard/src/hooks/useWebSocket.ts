@@ -28,6 +28,21 @@ export function useWebSocket(): UseWebSocketReturn {
   const [lastConsensus, setLastConsensus] = useState<ConsensusSignal[]>([]);
   const [tickHistory, setTickHistory] = useState<TickResult[]>([]);
 
+  // ── 启动时从 REST API 预加载历史 tick ──
+  useEffect(() => {
+    fetch('/api/history?limit=50')
+      .then(r => r.json())
+      .then((data: { history: TickResult[] }) => {
+        if (data.history && data.history.length > 0) {
+          // history API 返回降序排列，这里转为升序
+          const sorted = [...data.history].reverse();
+          setTickHistory(sorted);
+          setLastTick(sorted[sorted.length - 1] ?? null);
+        }
+      })
+      .catch(() => {/* 静默失败，等 WebSocket 推送 */});
+  }, []);
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -60,7 +75,15 @@ export function useWebSocket(): UseWebSocketReturn {
             const tickData = msg.data as TickResult;
             setLastTick(tickData);
             setTickHistory((prev) => {
-              const next = [...prev, tickData];
+              // 去重：如果该 tick 已存在（来自历史预加载），替换它
+              const existing = prev.findIndex(t => t.tick === tickData.tick);
+              let next: TickResult[];
+              if (existing >= 0) {
+                next = [...prev];
+                next[existing] = tickData;
+              } else {
+                next = [...prev, tickData];
+              }
               // 保留最近 100 条
               return next.length > 100 ? next.slice(-100) : next;
             });
