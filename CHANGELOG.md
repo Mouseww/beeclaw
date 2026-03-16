@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.7] - 2026-03-16
+
+### 🐛 Bug Fixes
+
+- **E2E Tests:** 修复 WebSocket 测试超时和连接数断言问题
+
+### 🧹 Code Quality
+
+- 移除 e2e 测试中未使用的 `beforeEach` import，lint 零警告
+
 ## [1.0.6] - 2026-03-16
 
 ### 🧹 Code Quality & Bug Fixes
