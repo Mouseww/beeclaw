@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.6] - 2026-03-16
+
+### 🧹 Code Quality & Bug Fixes
+
+- **Consensus & Ingestion API:** 替换 `any` 为正确类型定义，修复 lint 警告
+- **Dashboard:** 对齐 EventFeed 测试文本与实际组件输出
+- **Dashboard:** 同步 TickResult 类型定义与 world-engine（添加缺失字段）
+
 ## [1.0.5] - 2026-03-16
 
 ### 🧹 Code Quality
