@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.14] - 2026-03-17
+
+### 🧹 Code Quality
+
+- **Lint:** 消除所有 lint 警告 — `any` 替换为 `unknown`，移除未使用的 import
+
+### 📖 Documentation
+
+- **API:** 补全 webhook、ingestion、API Key 端点文档和认证说明
+
 ## [1.0.13] - 2026-03-16
 
 ### ✨ Features
