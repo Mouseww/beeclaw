@@ -21,6 +21,12 @@ export interface TickResult {
   eventsProcessed: number;
   responsesCollected: number;
   agentsActivated: number;
+  signals: number;
+  newAgentsSpawned?: number;
+  agentsEliminated?: number;
+  cacheHits?: number;
+  cacheMisses?: number;
+  agentsFiltered?: number;
   durationMs: number;
   timestamp?: string;
   events?: TickEvent[];

@@ -100,12 +100,14 @@ function SignalCard({ signal }: { signal: ConsensusSignal }) {
           value={signal.sentimentDistribution.bullish}
           color="text-green-400"
           suffix="%"
+          isPercent
         />
         <MetricBox
           label="看空比例"
           value={signal.sentimentDistribution.bearish}
           color="text-red-400"
           suffix="%"
+          isPercent
         />
       </div>
 
@@ -163,16 +165,18 @@ function MetricBox({
   value,
   color,
   suffix = '',
+  isPercent = false,
 }: {
   label: string;
   value: number;
   color: string;
   suffix?: string;
+  isPercent?: boolean;
 }) {
   return (
     <div className="text-center">
       <p className={`text-xl font-bold ${color}`}>
-        {typeof value === 'number' ? value.toFixed(1) : value}
+        {isPercent ? Math.round(value) : (typeof value === 'number' ? value.toFixed(1) : value)}
         {suffix}
       </p>
       <p className="text-xs text-gray-500 mt-0.5">{label}</p>

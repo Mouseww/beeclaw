@@ -418,7 +418,7 @@ export class WorldEngine {
 
     // 5. Agent 孵化检查
     let newAgentsSpawned = 0;
-    const maxAgents = this.options.config.maxAgents ?? 500;
+    const maxAgents = this.config.maxAgents ?? 500;
     for (const event of events) {
       if (this.agents.size >= maxAgents) break;
       const newAgents = this.spawner.checkEventTriggers(event, this.agents.size, tick);

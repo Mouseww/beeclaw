@@ -1,6 +1,6 @@
 // ============================================================================
 // BeeClaw Server — API: /api/ingestion
-// RSS 事件接入状态查询
+// RSS 事件接入状态查询 + CRUD 管理
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
@@ -24,12 +24,76 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       if (!ctx.ingestion) {
         return reply.status(503).send({ error: 'EventIngestion not available' });
       }
-
       const status = ctx.ingestion.getSourceStatus(req.params.sourceId);
       if (!status) {
         return reply.status(404).send({ error: `Source "${req.params.sourceId}" not found` });
       }
       return status;
+    },
+  );
+
+  // POST /api/ingestion/sources — 新增 RSS 数据源
+  app.post<{
+    Body: { id: string; name: string; url: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean };
+  }>('/api/ingestion/sources', async (req, reply) => {
+    if (!ctx.ingestion) {
+      return reply.status(503).send({ error: 'EventIngestion not available' });
+    }
+    const { id, name, url, category, tags, pollIntervalMs, enabled } = req.body;
+    if (!id || !name || !url) {
+      return reply.status(400).send({ error: 'id, name, url are required' });
+    }
+    ctx.ingestion.addSource({
+      id,
+      name,
+      url,
+      category: (category as any) ?? 'general',
+      tags: tags ?? [],
+      pollIntervalMs: pollIntervalMs ?? 300_000,
+      enabled: enabled ?? true,
+    });
+    return { ok: true, id };
+  });
+
+  // PUT /api/ingestion/sources/:sourceId — 更新 RSS 数据源
+  app.put<{
+    Params: { sourceId: string };
+    Body: { name?: string; url?: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean };
+  }>('/api/ingestion/sources/:sourceId', async (req, reply) => {
+    if (!ctx.ingestion) {
+      return reply.status(503).send({ error: 'EventIngestion not available' });
+    }
+    const existing = ctx.ingestion.getSourceStatus(req.params.sourceId);
+    if (!existing) {
+      return reply.status(404).send({ error: `Source "${req.params.sourceId}" not found` });
+    }
+    // 先删除旧的，再添加更新后的
+    ctx.ingestion.removeSource(req.params.sourceId);
+    ctx.ingestion.addSource({
+      id: req.params.sourceId,
+      name: req.body.name ?? existing.name,
+      url: req.body.url ?? existing.url,
+      category: (req.body.category as any) ?? 'general',
+      tags: req.body.tags ?? [],
+      pollIntervalMs: req.body.pollIntervalMs ?? 300_000,
+      enabled: req.body.enabled ?? existing.enabled,
+    });
+    return { ok: true, id: req.params.sourceId };
+  });
+
+  // DELETE /api/ingestion/sources/:sourceId — 删除 RSS 数据源
+  app.delete<{ Params: { sourceId: string } }>(
+    '/api/ingestion/sources/:sourceId',
+    async (req, reply) => {
+      if (!ctx.ingestion) {
+        return reply.status(503).send({ error: 'EventIngestion not available' });
+      }
+      const existing = ctx.ingestion.getSourceStatus(req.params.sourceId);
+      if (!existing) {
+        return reply.status(404).send({ error: `Source "${req.params.sourceId}" not found` });
+      }
+      ctx.ingestion.removeSource(req.params.sourceId);
+      return { ok: true, deleted: req.params.sourceId };
     },
   );
 }

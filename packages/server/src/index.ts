@@ -86,10 +86,12 @@ async function main(): Promise<void> {
     console.log(`[Server] 使用环境变量默认 LLM 配置`);
   }
 
+  const MAX_AGENTS = parseInt(process.env.BEECLAW_MAX_AGENTS ?? '100', 10);
+
   // 3. 初始化 WorldEngine
   const config: WorldConfig = {
     tickIntervalMs: TICK_INTERVAL,
-    maxAgents: 500,
+    maxAgents: MAX_AGENTS,
     eventRetentionTicks: 100,
     enableNaturalSelection: false,
   };
@@ -145,7 +147,6 @@ async function main(): Promise<void> {
   }
 
   // 5.1 配置自动扩展规则
-  const MAX_AGENTS = parseInt(process.env.BEECLAW_MAX_AGENTS ?? '100', 10);
 
   // 规则1: 高影响力事件触发孵化（财经/政治危机词）
   engine.spawner.addRule({

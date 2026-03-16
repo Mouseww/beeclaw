@@ -12,16 +12,41 @@ export function registerConsensusRoute(app: FastifyInstance, ctx: ServerContext)
   }>('/api/consensus', { schema: consensusSchema }, async (req) => {
     const limit = Math.min(50, parseInt(req.query.limit ?? '20', 10) || 20);
 
+    const engine = ctx.engine.getConsensusEngine();
+
     if (req.query.topic) {
+      const signals = engine.getSignalHistory(req.query.topic).slice(-limit);
       return {
         topic: req.query.topic,
-        signals: ctx.engine.getConsensusEngine().getSignalHistory(req.query.topic).slice(-limit),
+        signals: normalizeSentimentDistributions(signals),
       };
     }
 
+    const latest = engine.getLatestSignals();
     return {
-      topics: ctx.engine.getConsensusEngine().getAllTopics(),
-      latest: ctx.engine.getConsensusEngine().getLatestSignals(),
+      topics: engine.getAllTopics(),
+      latest: normalizeSentimentDistributions(latest),
+    };
+  });
+}
+
+/** 将原始计数转换为百分比 */
+function normalizeSentimentDistributions(signals: any[]): any[] {
+  return signals.map((signal) => {
+    const dist = signal.sentimentDistribution;
+    const total = (dist.bullish || 0) + (dist.bearish || 0) + (dist.neutral || 0);
+
+    if (total === 0) {
+      return signal; // 没有数据，保持原样
+    }
+
+    return {
+      ...signal,
+      sentimentDistribution: {
+        bullish: Math.round((dist.bullish / total) * 100),
+        bearish: Math.round((dist.bearish / total) * 100),
+        neutral: Math.round((dist.neutral / total) * 100),
+      },
     };
   });
 }
