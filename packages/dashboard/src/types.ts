@@ -176,3 +176,38 @@ export interface WsConsensusMessage extends WsMessage {
   type: 'consensus';
   data: ConsensusSignal[];
 }
+
+/** RSS 数据源状态 */
+export interface IngestionSourceStatus {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  lastPollTime: string | null;
+  lastError: string | null;
+  itemsFetched: number;
+  eventsEmitted: number;
+}
+
+/** 金融数据源状态 */
+export interface IngestionFinanceSourceStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  running: boolean;
+  lastPollTime: string | null;
+  lastError: string | null;
+  symbolCount: number;
+  quotesPolled: number;
+  eventsEmitted: number;
+}
+
+/** Ingestion 整体状态 */
+export interface IngestionStatus {
+  running: boolean;
+  sourceCount: number;
+  financeSourceCount: number;
+  deduplicationCacheSize: number;
+  sources: IngestionSourceStatus[];
+  financeSources: IngestionFinanceSourceStatus[];
+}

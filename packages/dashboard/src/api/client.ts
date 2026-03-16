@@ -8,6 +8,8 @@ import type {
   AgentDetailData,
   ConsensusResponse,
   HistoryResponse,
+  IngestionStatus,
+  IngestionSourceStatus,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -63,4 +65,14 @@ export async function injectEvent(body: {
     throw new Error(`API Error: ${res.status}`);
   }
   return res.json() as Promise<{ ok: boolean }>;
+}
+
+/** 获取 Ingestion 状态 */
+export function fetchIngestionStatus(): Promise<IngestionStatus> {
+  return fetchJSON<IngestionStatus>('/ingestion');
+}
+
+/** 获取单个数据源详情 */
+export function fetchIngestionSource(sourceId: string): Promise<IngestionSourceStatus> {
+  return fetchJSON<IngestionSourceStatus>(`/ingestion/${sourceId}`);
 }
