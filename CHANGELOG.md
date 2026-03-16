@@ -5,12 +5,18 @@
 ### 🚀 New Features
 
 - **WebSocket 实时推送增强** — Tick 广播中流式传输 event/response 详细信息 (`4d06663`)
+- **并发翻倍** — WorldEngine 并发从 5 提升到 10，提高 tick 吞吐 (`3fc63b4`)
+- **markRunning API** — WorldEngine 新增 `markRunning()` 方法，Server 外部 tick 循环可正确管理引擎状态 (`3fc63b4`)
 
 ### 🐛 Bug Fixes
 
 - 修复 store.ts 中 timestamp 类型转换错误 (`5cae621`)
 - 修复 health 端点测试以匹配 v1.0.0 预期 (`54ee355`)
 - 修复 Dashboard tick 显示中缺失时间戳的问题，并在 store 中添加时间戳映射 (`cefefd1`)
+
+### ⚙️ Configuration
+
+- 默认 tick 间隔从 30s 调整为 60s，提高稳定性 (`3fc63b4`)
 
 ### 🧹 Code Quality
 
