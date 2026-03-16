@@ -5,6 +5,7 @@
 ## 目录
 
 - [基础信息](#基础信息)
+- [认证](#认证)
 - [健康检查](#健康检查)
 - [世界状态](#世界状态)
 - [Agent 管理](#agent-管理)
@@ -13,6 +14,9 @@
 - [Tick 历史](#tick-历史)
 - [场景推演](#场景推演)
 - [LLM 配置管理](#llm-配置管理)
+- [Webhook 管理](#webhook-管理)
+- [数据源管理（Ingestion）](#数据源管理ingestion)
+- [API Key 管理](#api-key-管理)
 - [运行时指标 (JSON)](#运行时指标-json)
 - [Prometheus 指标](#prometheus-指标)
 - [WebSocket](#websocket)
@@ -27,8 +31,61 @@
 | 框架 | Fastify v5.3 |
 | 默认端口 | `3000`（环境变量 `BEECLAW_PORT`） |
 | 默认主机 | `0.0.0.0`（环境变量 `BEECLAW_HOST`） |
-| 认证 | 无（所有端点公开访问） |
+| 认证 | API Key / Bearer Token（见下方[认证](#认证)章节） |
 | 数据格式 | JSON（除 Prometheus 端点外） |
+
+---
+
+## 认证
+
+**源码**: `packages/server/src/middleware/auth.ts`
+
+通过环境变量 `BEECLAW_API_KEY` 启用认证。未设置时所有端点公开访问（开发模式）。
+
+### 认证方式
+
+支持两种方式提供凭证：
+
+| 方式 | 格式 | 说明 |
+|------|------|------|
+| Bearer Token | `Authorization: Bearer <key>` | 标准 HTTP Bearer 认证 |
+| API Key Header | `X-API-Key: <key>` | 自定义 Header |
+| WebSocket Query | `?token=<key>` | 仅用于 WebSocket 连接 |
+
+### 密钥类型
+
+| 类型 | 说明 |
+|------|------|
+| Master Key | 通过 `BEECLAW_API_KEY` 环境变量配置，拥有完全访问权限 |
+| 托管 API Key | 通过 `/api/keys` 端点动态创建，Hash 存储于数据库 |
+
+### 公开路由（无需认证）
+
+| 路由 | 说明 |
+|------|------|
+| `/health` | 健康检查 |
+| `/metrics/prometheus` | Prometheus 指标 |
+| `/`、`/index.html` | Dashboard 首页 |
+| `/assets/*`、`/bee.svg` | 静态资源 |
+
+### 请求示例
+
+```bash
+# Bearer Token 方式
+curl -H "Authorization: Bearer bk_abc123..." http://localhost:3000/api/status
+
+# X-API-Key 方式
+curl -H "X-API-Key: bk_abc123..." http://localhost:3000/api/status
+
+# WebSocket 连接
+wscat -c "ws://localhost:3000/ws?token=bk_abc123..."
+```
+
+**未认证响应**: 401
+
+```json
+{ "error": "Unauthorized", "message": "Missing or invalid API key" }
+```
 
 ---
 
@@ -485,6 +542,515 @@
 
 ```json
 { "error": "Invalid tier: xxx. Must be one of: local, cheap, strong" }
+```
+
+---
+
+## Webhook 管理
+
+### `POST /api/webhooks`
+
+**源码**: `packages/server/src/api/webhooks.ts`
+
+注册新的 Webhook 订阅。创建后会自动生成唯一 ID 和 secret（若未指定）。
+
+**请求体**:
+
+```json
+{
+  "url": "https://example.com/webhook",
+  "events": ["consensus.signal", "trend.detected"],
+  "secret": "my-custom-secret"
+}
+```
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `url` | `string` | ✅ | — | Webhook 回调 URL |
+| `events` | `string[]` | ✅ | — | 订阅的事件类型列表 |
+| `secret` | `string` | ❌ | 自动生成 | 用于签名验证的密钥 |
+
+**可订阅事件类型**:
+
+| 事件类型 | 说明 |
+|----------|------|
+| `consensus.signal` | 产生新的共识信号 |
+| `trend.detected` | 检测到新趋势 |
+| `trend.shift` | 趋势发生变化 |
+| `agent.spawned` | 新 Agent 孵化 |
+| `tick.completed` | Tick 完成 |
+
+**成功响应**: 201
+
+```json
+{
+  "ok": true,
+  "webhook": {
+    "id": "wh_a1b2c3d4e5f67890",
+    "url": "https://example.com/webhook",
+    "events": ["consensus.signal", "trend.detected"],
+    "secret": "abcdef1234567890...",
+    "active": true,
+    "createdAt": 1710000000
+  }
+}
+```
+
+**错误响应**: 400
+
+```json
+{ "error": "url is required" }
+```
+
+```json
+{ "error": "events array is required and must not be empty" }
+```
+
+```json
+{ "error": "Invalid event types: foo. Valid types: consensus.signal, trend.detected, trend.shift, agent.spawned, tick.completed" }
+```
+
+---
+
+### `GET /api/webhooks`
+
+**源码**: `packages/server/src/api/webhooks.ts`
+
+获取所有已注册的 Webhook 列表。secret 字段仅返回前 6 位 + 掩码。
+
+**响应示例**:
+
+```json
+{
+  "webhooks": [
+    {
+      "id": "wh_a1b2c3d4e5f67890",
+      "url": "https://example.com/webhook",
+      "events": ["consensus.signal"],
+      "secret": "abcdef••••••",
+      "active": true,
+      "createdAt": 1710000000
+    }
+  ],
+  "total": 1
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `webhooks` | `Webhook[]` | Webhook 列表（secret 已脱敏） |
+| `total` | `number` | 总数 |
+
+---
+
+### `PUT /api/webhooks/:id`
+
+**源码**: `packages/server/src/api/webhooks.ts`
+
+更新已有 Webhook 的配置。所有字段均为可选，仅更新传入的字段。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | Webhook ID |
+
+**请求体**:
+
+```json
+{
+  "url": "https://new-endpoint.com/hook",
+  "events": ["tick.completed"],
+  "active": false
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `url` | `string` | ❌ | 新的回调 URL |
+| `events` | `string[]` | ❌ | 新的事件类型列表 |
+| `active` | `boolean` | ❌ | 是否启用 |
+
+**成功响应**: 200
+
+```json
+{
+  "ok": true,
+  "webhook": { ... }
+}
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "Webhook not found" }
+```
+
+**错误响应**: 400
+
+```json
+{ "error": "events array must not be empty" }
+```
+
+---
+
+### `DELETE /api/webhooks/:id`
+
+**源码**: `packages/server/src/api/webhooks.ts`
+
+删除指定 Webhook。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | Webhook ID |
+
+**成功响应**: 200
+
+```json
+{ "ok": true }
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "Webhook not found" }
+```
+
+---
+
+### `POST /api/webhooks/:id/test`
+
+**源码**: `packages/server/src/api/webhooks.ts`
+
+向指定 Webhook 发送测试 payload，验证回调端点是否可达。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | Webhook ID |
+
+**成功响应**: 200
+
+```json
+{
+  "ok": true,
+  "delivery": {
+    "status": "success",
+    ...
+  }
+}
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "Webhook not found" }
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "Webhook dispatcher not available" }
+```
+
+---
+
+## 数据源管理（Ingestion）
+
+### `GET /api/ingestion`
+
+**源码**: `packages/server/src/api/ingestion.ts`
+
+获取所有 RSS 数据源的状态汇总。
+
+**响应示例**:
+
+```json
+{
+  "enabled": true,
+  "sources": [
+    {
+      "id": "reuters-finance",
+      "name": "Reuters Finance",
+      "url": "https://feeds.reuters.com/finance",
+      "enabled": true,
+      "lastPoll": 1710000000,
+      "itemsIngested": 42
+    }
+  ]
+}
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "EventIngestion not available" }
+```
+
+---
+
+### `GET /api/ingestion/sources/:sourceId`
+
+**源码**: `packages/server/src/api/ingestion.ts`
+
+获取单个 RSS 数据源的详细状态。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `sourceId` | `string` | 数据源 ID |
+
+**成功响应**: 200 — 数据源的详细状态对象
+
+**错误响应**: 404
+
+```json
+{ "error": "Source \"reuters-finance\" not found" }
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "EventIngestion not available" }
+```
+
+---
+
+### `POST /api/ingestion/sources`
+
+**源码**: `packages/server/src/api/ingestion.ts`
+
+新增 RSS 数据源。同步持久化到数据库。
+
+**请求体**:
+
+```json
+{
+  "id": "reuters-finance",
+  "name": "Reuters Finance",
+  "url": "https://feeds.reuters.com/finance",
+  "category": "finance",
+  "tags": ["金融", "国际"],
+  "pollIntervalMs": 300000,
+  "enabled": true
+}
+```
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `id` | `string` | ✅ | — | 数据源唯一标识 |
+| `name` | `string` | ✅ | — | 数据源名称 |
+| `url` | `string` | ✅ | — | RSS 订阅 URL |
+| `category` | `EventCategory` | ❌ | `"general"` | 事件分类 |
+| `tags` | `string[]` | ❌ | `[]` | 标签 |
+| `pollIntervalMs` | `number` | ❌ | `300000` | 轮询间隔（毫秒） |
+| `enabled` | `boolean` | ❌ | `true` | 是否启用 |
+
+**成功响应**: 200
+
+```json
+{ "ok": true, "id": "reuters-finance" }
+```
+
+**错误响应**: 400
+
+```json
+{ "error": "id, name, url are required" }
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "EventIngestion not available" }
+```
+
+---
+
+### `PUT /api/ingestion/sources/:sourceId`
+
+**源码**: `packages/server/src/api/ingestion.ts`
+
+更新指定 RSS 数据源。未传入的字段保持原值（`category`、`tags`、`pollIntervalMs` 除外，它们回落到默认值）。同步持久化到数据库。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `sourceId` | `string` | 数据源 ID |
+
+**请求体**:
+
+```json
+{
+  "name": "Reuters Finance v2",
+  "url": "https://feeds.reuters.com/finance/v2",
+  "category": "finance",
+  "enabled": false
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | `string` | ❌ | 数据源名称 |
+| `url` | `string` | ❌ | RSS 订阅 URL |
+| `category` | `EventCategory` | ❌ | 事件分类（默认 `"general"`） |
+| `tags` | `string[]` | ❌ | 标签（默认 `[]`） |
+| `pollIntervalMs` | `number` | ❌ | 轮询间隔（默认 `300000`） |
+| `enabled` | `boolean` | ❌ | 是否启用 |
+
+**成功响应**: 200
+
+```json
+{ "ok": true, "id": "reuters-finance" }
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "Source \"reuters-finance\" not found" }
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "EventIngestion not available" }
+```
+
+---
+
+### `DELETE /api/ingestion/sources/:sourceId`
+
+**源码**: `packages/server/src/api/ingestion.ts`
+
+删除指定 RSS 数据源。同步从数据库移除。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `sourceId` | `string` | 数据源 ID |
+
+**成功响应**: 200
+
+```json
+{ "ok": true, "deleted": "reuters-finance" }
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "Source \"reuters-finance\" not found" }
+```
+
+**错误响应**: 503
+
+```json
+{ "error": "EventIngestion not available" }
+```
+
+---
+
+## API Key 管理
+
+### `POST /api/keys`
+
+**源码**: `packages/server/src/api/keys.ts`
+
+创建新的 API Key。明文密钥仅在创建时返回一次，后续无法再获取。密钥格式为 `bk_` 前缀 + 48 位 hex 随机字符串。
+
+**请求体**:
+
+```json
+{
+  "name": "Dashboard 集成",
+  "permissions": ["read", "write"],
+  "rateLimit": 100
+}
+```
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `name` | `string` | ✅ | — | 密钥名称 |
+| `permissions` | `string[]` | ❌ | `["read", "write"]` | 权限列表 |
+| `rateLimit` | `number` | ❌ | `100` | 速率限制（次/分钟） |
+
+**成功响应**: 200
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Dashboard 集成",
+  "key": "bk_a1b2c3d4e5f6...",
+  "permissions": ["read", "write"],
+  "rateLimit": 100,
+  "message": "请妥善保存此 key，它不会再显示"
+}
+```
+
+> ⚠️ **重要**: `key` 字段仅在此响应中返回，请务必安全保存。
+
+**错误响应**: 400
+
+```json
+{ "error": "name is required" }
+```
+
+---
+
+### `GET /api/keys`
+
+**源码**: `packages/server/src/api/keys.ts`
+
+列出所有 API Key 的元数据。不返回明文密钥或哈希值。
+
+**响应示例**:
+
+```json
+{
+  "keys": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Dashboard 集成",
+      "permissions": ["read", "write"],
+      "rateLimit": 100,
+      "createdAt": 1710000000
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `keys` | `ApiKeyMeta[]` | API Key 元数据列表 |
+
+---
+
+### `DELETE /api/keys/:id`
+
+**源码**: `packages/server/src/api/keys.ts`
+
+删除指定 API Key，立即失效。
+
+**URL 参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | API Key ID（UUID） |
+
+**成功响应**: 200
+
+```json
+{ "ok": true, "deleted": "550e8400-e29b-41d4-a716-446655440000" }
+```
+
+**错误响应**: 404
+
+```json
+{ "error": "API key not found" }
 ```
 
 ---
