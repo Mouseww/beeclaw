@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.4] - 2026-03-16
+
+### 🐛 Bug Fixes
+
+- **Dashboard:** 页面加载时从 REST API 预加载 tick 历史记录 (`91833e8`)
+- **Event Ingestion:** 替换已被封锁的 Reuters RSS 源，改用 WSJ + CNBC (`88f0bb8`)
+
+### 🧹 Code Quality
+
+- 修复测试文件中的 lint 警告（未使用的 import、no-explicit-any）(`d571ea7`)
+
 ## [1.0.3] - 2026-03-16
 
 ### 🚀 New Features
