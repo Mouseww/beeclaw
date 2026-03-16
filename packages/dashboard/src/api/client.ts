@@ -111,11 +111,11 @@ export async function deleteRssSource(sourceId: string): Promise<{ ok: boolean }
 }
 
 /** 获取 Tick 的事件 */
-export function fetchTickEvents(tick: number): Promise<{ events: any[]; total: number }> {
+export function fetchTickEvents(tick: number): Promise<{ events: unknown[]; total: number }> {
   return fetchJSON(`/ticks/${tick}/events`);
 }
 
 /** 获取 Tick 的响应 */
-export function fetchTickResponses(tick: number): Promise<{ responses: any[]; total: number }> {
+export function fetchTickResponses(tick: number): Promise<{ responses: unknown[]; total: number }> {
   return fetchJSON(`/ticks/${tick}/responses`);
 }

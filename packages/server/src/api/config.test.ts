@@ -7,7 +7,6 @@ import type { FastifyInstance } from 'fastify';
 import {
   buildTestContext,
   silenceConsole,
-  MOCK_MODEL_CONFIG,
   type TestContext,
 } from './__test_helpers__.js';
 import { registerConfigRoute } from './config.js';
