@@ -20,4 +20,7 @@ export type {
   QuoteData,
   MarketSentimentType,
   MarketSentimentResult,
+  IngestionStatus,
+  IngestionSourceStatus,
+  IngestionFinanceSourceStatus,
 } from './types.js';

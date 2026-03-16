@@ -4,7 +4,15 @@
 // ============================================================================
 
 import type { EventBus } from '@beeclaw/event-bus';
-import type { FeedSource, FeedItem, EventIngestionConfig, FinanceSourceConfig } from './types.js';
+import type {
+  FeedSource,
+  FeedItem,
+  EventIngestionConfig,
+  FinanceSourceConfig,
+  IngestionStatus,
+  IngestionSourceStatus,
+  IngestionFinanceSourceStatus,
+} from './types.js';
 import { parseFeed } from './FeedParser.js';
 import { ImportanceEvaluator } from './ImportanceEvaluator.js';
 import { FinanceDataSource } from './FinanceDataSource.js';
@@ -426,6 +434,64 @@ export class EventIngestion {
       tags: [...new Set(tags)], // 去重
       type: 'external',
     });
+  }
+
+  /**
+   * 获取整体运行状态 + 各数据源详情
+   */
+  getStatus(): IngestionStatus {
+    const sources: IngestionSourceStatus[] = Array.from(this.sources.values()).map(s => ({
+      id: s.source.id,
+      name: s.source.name,
+      url: s.source.url,
+      enabled: s.source.enabled ?? true,
+      lastPollTime: s.lastPollTime?.toISOString() ?? null,
+      lastError: s.lastError ?? null,
+      itemsFetched: s.itemsFetched,
+      eventsEmitted: s.eventsEmitted,
+    }));
+
+    const financeSources: IngestionFinanceSourceStatus[] = Array.from(this.financeSources.values()).map(fs => {
+      const status = fs.getStatus();
+      return {
+        id: status.id,
+        name: status.name,
+        enabled: status.enabled,
+        running: status.running,
+        lastPollTime: status.lastPollTime?.toISOString() ?? null,
+        lastError: status.lastError ?? null,
+        symbolCount: status.symbolCount,
+        quotesPolled: status.quotesPolled,
+        eventsEmitted: status.eventsEmitted,
+      };
+    });
+
+    return {
+      running: this.running,
+      sourceCount: this.sources.size,
+      financeSourceCount: this.financeSources.size,
+      deduplicationCacheSize: this.seenGuids.size,
+      sources,
+      financeSources,
+    };
+  }
+
+  /**
+   * 查询单个 RSS 数据源的状态
+   */
+  getSourceStatus(sourceId: string): IngestionSourceStatus | undefined {
+    const s = this.sources.get(sourceId);
+    if (!s) return undefined;
+    return {
+      id: s.source.id,
+      name: s.source.name,
+      url: s.source.url,
+      enabled: s.source.enabled ?? true,
+      lastPollTime: s.lastPollTime?.toISOString() ?? null,
+      lastError: s.lastError ?? null,
+      itemsFetched: s.itemsFetched,
+      eventsEmitted: s.eventsEmitted,
+    };
   }
 
   /**

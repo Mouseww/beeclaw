@@ -29,6 +29,7 @@ import { registerHealthRoute } from './api/health.js';
 import { registerPrometheusRoute } from './api/prometheus.js';
 import { registerConfigRoute } from './api/config.js';
 import { registerWebhooksRoute } from './api/webhooks.js';
+import { registerIngestionRoute } from './api/ingestion.js';
 import { WebhookDispatcher } from './webhook/dispatcher.js';
 import { EventIngestion } from '@beeclaw/event-ingestion';
 import {
@@ -56,6 +57,7 @@ export interface ServerContext {
   modelRouter: ModelRouter;
   getWsCount: () => number;
   webhookDispatcher?: WebhookDispatcher;
+  ingestion?: EventIngestion;
 }
 
 // ── 主函数 ──
@@ -256,6 +258,7 @@ async function main(): Promise<void> {
         { name: 'scenario', description: '场景推演' },
         { name: 'config', description: 'LLM 配置' },
         { name: 'webhooks', description: 'Webhook 订阅' },
+        { name: 'ingestion', description: '事件接入状态' },
         { name: 'monitoring', description: '监控指标' },
       ],
     },
@@ -279,6 +282,7 @@ async function main(): Promise<void> {
     modelRouter,
     getWsCount: getConnectionCount,
     webhookDispatcher,
+    ingestion,
   };
 
   // 注册路由
@@ -294,6 +298,7 @@ async function main(): Promise<void> {
   registerPrometheusRoute(app, ctx);
   registerConfigRoute(app, ctx);
   registerWebhooksRoute(app, ctx);
+  registerIngestionRoute(app, ctx);
 
   // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
   app.setErrorHandler((error: FastifyError, _req, reply) => {

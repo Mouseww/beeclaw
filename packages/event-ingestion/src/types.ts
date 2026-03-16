@@ -157,6 +157,68 @@ export interface QuoteData {
 /** 市场情绪类型 */
 export type MarketSentimentType = 'extreme_fear' | 'fear' | 'neutral' | 'greed' | 'extreme_greed';
 
+// ============================================================================
+// EventIngestion 状态查询类型
+// ============================================================================
+
+/** 单个 RSS 数据源的运行时状态 */
+export interface IngestionSourceStatus {
+  /** 数据源 ID */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** Feed URL */
+  url: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 最后一次轮询时间（ISO 字符串） */
+  lastPollTime: string | null;
+  /** 最后一次错误信息 */
+  lastError: string | null;
+  /** 累计抓取条目数 */
+  itemsFetched: number;
+  /** 累计注入事件数 */
+  eventsEmitted: number;
+}
+
+/** 单个金融数据源的运行时状态 */
+export interface IngestionFinanceSourceStatus {
+  /** 数据源 ID */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 是否正在运行 */
+  running: boolean;
+  /** 最后一次轮询时间（ISO 字符串） */
+  lastPollTime: string | null;
+  /** 最后一次错误信息 */
+  lastError: string | null;
+  /** 关注标的数量 */
+  symbolCount: number;
+  /** 累计查询次数 */
+  quotesPolled: number;
+  /** 累计注入事件数 */
+  eventsEmitted: number;
+}
+
+/** EventIngestion 整体运行状态 */
+export interface IngestionStatus {
+  /** 是否正在运行 */
+  running: boolean;
+  /** RSS 数据源总数 */
+  sourceCount: number;
+  /** 金融数据源总数 */
+  financeSourceCount: number;
+  /** 去重缓存大小 */
+  deduplicationCacheSize: number;
+  /** RSS 数据源状态列表 */
+  sources: IngestionSourceStatus[];
+  /** 金融数据源状态列表 */
+  financeSources: IngestionFinanceSourceStatus[];
+}
+
 /** 市场情绪评估结果 */
 export interface MarketSentimentResult {
   /** 标的符号 */

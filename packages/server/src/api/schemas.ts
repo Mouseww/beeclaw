@@ -465,3 +465,78 @@ export const testWebhookSchema = {
     503: ErrorResponseSchema,
   },
 };
+
+// ── /api/ingestion ──
+
+/** 单个 RSS 数据源状态 */
+const ingestionSourceStatusSchema = {
+  type: 'object' as const,
+  properties: {
+    id: { type: 'string' as const },
+    name: { type: 'string' as const },
+    url: { type: 'string' as const },
+    enabled: { type: 'boolean' as const },
+    lastPollTime: { type: ['string', 'null'] as const },
+    lastError: { type: ['string', 'null'] as const },
+    itemsFetched: { type: 'integer' as const },
+    eventsEmitted: { type: 'integer' as const },
+  },
+};
+
+/** 单个金融数据源状态 */
+const ingestionFinanceSourceStatusSchema = {
+  type: 'object' as const,
+  properties: {
+    id: { type: 'string' as const },
+    name: { type: 'string' as const },
+    enabled: { type: 'boolean' as const },
+    running: { type: 'boolean' as const },
+    lastPollTime: { type: ['string', 'null'] as const },
+    lastError: { type: ['string', 'null'] as const },
+    symbolCount: { type: 'integer' as const },
+    quotesPolled: { type: 'integer' as const },
+    eventsEmitted: { type: 'integer' as const },
+  },
+};
+
+export const ingestionStatusSchema = {
+  tags: ['ingestion'],
+  summary: '获取事件接入状态汇总',
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        running: { type: 'boolean' as const },
+        sourceCount: { type: 'integer' as const },
+        financeSourceCount: { type: 'integer' as const },
+        deduplicationCacheSize: { type: 'integer' as const },
+        sources: {
+          type: 'array' as const,
+          items: ingestionSourceStatusSchema,
+        },
+        financeSources: {
+          type: 'array' as const,
+          items: ingestionFinanceSourceStatusSchema,
+        },
+      },
+    },
+    503: ErrorResponseSchema,
+  },
+};
+
+export const ingestionSourceDetailSchema = {
+  tags: ['ingestion'],
+  summary: '获取单个 RSS 数据源详情',
+  params: {
+    type: 'object' as const,
+    properties: {
+      sourceId: { type: 'string' as const, description: '数据源 ID' },
+    },
+    required: ['sourceId'],
+  },
+  response: {
+    200: ingestionSourceStatusSchema,
+    404: ErrorResponseSchema,
+    503: ErrorResponseSchema,
+  },
+};
