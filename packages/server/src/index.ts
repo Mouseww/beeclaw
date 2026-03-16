@@ -93,7 +93,7 @@ async function main(): Promise<void> {
   const engine = new WorldEngine({
     config,
     modelRouter,
-    concurrency: 5,
+    concurrency: 10,
   });
 
   // 4. 加载或创建 Agents
@@ -264,6 +264,9 @@ async function main(): Promise<void> {
   let tickCount = 0;
   let tickRunning = false; // 防止 tick 堆积
 
+  // 标记引擎为运行状态
+  engine.markRunning(true);
+
   // 用 setInterval 手动驱动 tick，这样可以在每次 tick 后做持久化
   const tickLoop = setInterval(async () => {
     // 如果上一个 tick 还未完成，跳过本轮避免堆积
@@ -347,6 +350,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log(`\n[Server] 收到 ${signal} 信号，保存状态...`);
     clearInterval(tickLoop);
+    engine.markRunning(false);
 
     // 超时强制退出保护
     const forceExitTimer = setTimeout(() => {

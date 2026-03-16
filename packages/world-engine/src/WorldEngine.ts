@@ -231,6 +231,13 @@ export class WorldEngine {
   }
 
   /**
+   * 外部设置运行状态（当 Server 用自己的 tick 循环时使用）
+   */
+  markRunning(value: boolean): void {
+    this.running = value;
+  }
+
+  /**
    * 注入外部事件
    */
   injectEvent(params: {
