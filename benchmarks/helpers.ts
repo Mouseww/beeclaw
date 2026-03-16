@@ -3,17 +3,13 @@
 // 提供 Mock 对象工厂、测试数据生成器和格式化输出
 // ============================================================================
 
-import { Agent, AgentSpawner, ModelRouter, LLMClient } from '@beeclaw/agent-runtime';
-import { SocialGraph, calculatePropagation } from '@beeclaw/social-graph';
-import { EventBus } from '@beeclaw/event-bus';
-import { ConsensusEngine } from '@beeclaw/consensus';
+import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
+import { SocialGraph } from '@beeclaw/social-graph';
 import type {
   WorldConfig,
   WorldEvent,
   ModelRouterConfig,
   AgentResponseRecord,
-  AgentPersona,
-  AgentTemplate,
   ModelTier,
 } from '@beeclaw/shared';
 

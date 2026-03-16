@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { buildTestWorld, silenceConsole, TEST_PERSONA, createMockModelRouter } from './helpers.js';
+import { buildTestWorld, silenceConsole, TEST_PERSONA } from './helpers.js';
 import { Agent, AgentMemory, AgentSpawner } from '@beeclaw/agent-runtime';
 import type { WorldEngine } from '@beeclaw/world-engine';
 import type { ModelRouter } from '@beeclaw/agent-runtime';
@@ -145,8 +145,6 @@ describe('Agent 生命周期', () => {
     });
 
     it('多轮 tick 后记忆应持续增长', async () => {
-      const agent = agents[0]!;
-
       // 注入多个事件并执行多轮 tick
       for (let i = 1; i <= 3; i++) {
         engine.injectEvent({

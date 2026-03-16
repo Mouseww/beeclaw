@@ -125,7 +125,7 @@ export class Store {
       newAgentsSpawned: r.new_agents_spawned,
       signals: r.signals,
       durationMs: r.duration_ms,
-      timestamp: new Date((r as Record<string, unknown>).created_at as number * 1000).toISOString(),
+      timestamp: new Date(r.created_at * 1000).toISOString(),
     }));
   }
 
