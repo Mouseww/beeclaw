@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/events', label: '事件流', icon: '⚡' },
   { path: '/consensus', label: '共识引擎', icon: '📊' },
   { path: '/social-graph', label: '社交网络', icon: '🔗' },
+  { path: '/settings', label: '系统设置', icon: '⚙️' },
 ];
 
 export function Sidebar() {

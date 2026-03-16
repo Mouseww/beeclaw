@@ -12,6 +12,7 @@ import { AgentDetail } from './pages/AgentDetail';
 import { EventFeed } from './pages/EventFeed';
 import { ConsensusView } from './pages/ConsensusView';
 import { SocialGraphView } from './pages/SocialGraphView';
+import { Settings } from './pages/Settings';
 
 export function App() {
   const { state: wsState, lastTick } = useWebSocket();
@@ -34,6 +35,7 @@ export function App() {
             <Route path="/events" element={<EventFeed />} />
             <Route path="/consensus" element={<ConsensusView />} />
             <Route path="/social-graph" element={<SocialGraphView />} />
+            <Route path="/settings" element={<Settings />} />
             {/* 未匹配路由重定向到首页 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
