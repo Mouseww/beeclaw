@@ -9,9 +9,27 @@ import { consensusSchema } from './schemas.js';
 
 export function registerConsensusRoute(app: FastifyInstance, ctx: ServerContext): void {
   app.get<{
-    Querystring: { topic?: string; limit?: string };
+    Querystring: { topic?: string; limit?: string; from_db?: string };
   }>('/api/consensus', { schema: consensusSchema }, async (req) => {
     const limit = Math.min(50, parseInt(req.query.limit ?? '20', 10) || 20);
+    const fromDb = req.query.from_db === 'true';
+
+    // v2.0: 支持从数据库查询历史共识
+    if (fromDb) {
+      if (req.query.topic) {
+        const signals = ctx.store.getSignalsByTopic(req.query.topic, limit);
+        return {
+          topic: req.query.topic,
+          signals: normalizeSentimentDistributions(signals),
+          source: 'db',
+        };
+      }
+      const signals = ctx.store.getLatestSignals(limit);
+      return {
+        latest: normalizeSentimentDistributions(signals),
+        source: 'db',
+      };
+    }
 
     const engine = ctx.engine.getConsensusEngine();
 

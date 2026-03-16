@@ -141,6 +141,7 @@ export const consensusSchema = {
     properties: {
       topic: { type: 'string' as const, description: '按话题过滤' },
       limit: { type: 'string' as const, description: '返回数量上限（默认 20，最大 50）' },
+      from_db: { type: 'string' as const, description: '从数据库查询历史（true/false）' },
     },
   },
   response: {
@@ -538,5 +539,157 @@ export const ingestionSourceDetailSchema = {
     200: ingestionSourceStatusSchema,
     404: ErrorResponseSchema,
     503: ErrorResponseSchema,
+  },
+};
+
+// ── v2.0: /api/ticks/:tick/events ──
+
+export const tickEventsSchema = {
+  tags: ['history'],
+  summary: '获取某个 Tick 的所有事件',
+  params: {
+    type: 'object' as const,
+    properties: {
+      tick: { type: 'string' as const, description: 'Tick 编号' },
+    },
+    required: ['tick'],
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        tick: { type: 'integer' as const },
+        events: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: true } },
+        count: { type: 'integer' as const },
+      },
+    },
+  },
+};
+
+// ── v2.0: /api/ticks/:tick/responses ──
+
+export const tickResponsesSchema = {
+  tags: ['history'],
+  summary: '获取某个 Tick 的所有 Agent 响应',
+  params: {
+    type: 'object' as const,
+    properties: {
+      tick: { type: 'string' as const, description: 'Tick 编号' },
+    },
+    required: ['tick'],
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        tick: { type: 'integer' as const },
+        responses: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: true } },
+        count: { type: 'integer' as const },
+      },
+    },
+  },
+};
+
+// ── v2.0: /api/events/search ──
+
+export const eventSearchSchema = {
+  tags: ['events'],
+  summary: '搜索事件',
+  querystring: {
+    type: 'object' as const,
+    properties: {
+      q: { type: 'string' as const, description: '搜索关键词' },
+      limit: { type: 'string' as const, description: '返回数量上限（默认 20，最大 100）' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string' as const },
+        events: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: true } },
+        count: { type: 'integer' as const },
+      },
+    },
+    400: ErrorResponseSchema,
+  },
+};
+
+// ── v2.0: /api/keys ──
+
+export const createApiKeySchema = {
+  tags: ['auth'],
+  summary: '创建新 API Key',
+  body: {
+    type: 'object' as const,
+    required: ['name'],
+    properties: {
+      name: { type: 'string' as const, description: 'API Key 名称' },
+      permissions: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
+        description: '权限列表',
+      },
+      rateLimit: { type: 'integer' as const, minimum: 1, description: '速率限制（每分钟请求数，默认 100）' },
+    },
+  },
+  response: {
+    201: {
+      type: 'object' as const,
+      properties: {
+        ok: { type: 'boolean' as const },
+        id: { type: 'string' as const },
+        name: { type: 'string' as const },
+        key: { type: 'string' as const, description: '仅返回一次的明文 API Key' },
+      },
+    },
+    400: ErrorResponseSchema,
+  },
+};
+
+export const listApiKeysSchema = {
+  tags: ['auth'],
+  summary: '列出所有 API Key',
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        keys: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              id: { type: 'string' as const },
+              name: { type: 'string' as const },
+              permissions: { type: 'array' as const, items: { type: 'string' as const } },
+              rateLimit: { type: 'integer' as const },
+              createdAt: { type: 'integer' as const },
+              lastUsedAt: { type: ['integer', 'null'] as const },
+              active: { type: 'boolean' as const },
+            },
+          },
+        },
+        total: { type: 'integer' as const },
+      },
+    },
+  },
+};
+
+export const deleteApiKeySchema = {
+  tags: ['auth'],
+  summary: '删除 API Key',
+  params: {
+    type: 'object' as const,
+    properties: {
+      id: { type: 'string' as const, description: 'API Key ID' },
+    },
+    required: ['id'],
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: { ok: { type: 'boolean' as const } },
+    },
+    404: ErrorResponseSchema,
   },
 };

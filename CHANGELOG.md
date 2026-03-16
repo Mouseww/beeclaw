@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.8] - 2026-03-16
+
+### 🐛 Bug Fixes
+
+- **World Engine:** 导出 `TickEventSummary` 和 `TickResponseSummary` 类型，修复 server 包构建失败
+
 ## [1.0.7] - 2026-03-16
 
 ### 🐛 Bug Fixes
