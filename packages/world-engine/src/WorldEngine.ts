@@ -68,6 +68,29 @@ export interface TickResult {
   cacheMisses?: number;
   /** 被激活池过滤的 Agent 数量 */
   agentsFiltered?: number;
+  /** 本轮处理的事件摘要 */
+  events?: TickEventSummary[];
+  /** 本轮收集的 Agent 响应摘要 */
+  responses?: TickResponseSummary[];
+  /** 时间戳 */
+  timestamp?: string;
+}
+
+/** Tick 事件摘要（用于前端展示） */
+export interface TickEventSummary {
+  id: string;
+  title: string;
+  category: string;
+  importance: number;
+}
+
+/** Tick 响应摘要（用于前端展示） */
+export interface TickResponseSummary {
+  agentId: string;
+  agentName: string;
+  opinion: string;
+  action: string;
+  emotionalState: number;
 }
 
 export class WorldEngine {
@@ -443,6 +466,29 @@ export class WorldEngine {
 
     // 10. 记录结果
     const durationMs = Date.now() - startTime;
+
+    // 构建事件摘要
+    const eventSummaries: TickEventSummary[] = events.map(e => ({
+      id: e.id,
+      title: e.title,
+      category: e.category,
+      importance: e.importance,
+    }));
+
+    // 构建响应摘要
+    const responseSummaries: TickResponseSummary[] = [];
+    for (const { records } of allResponseRecords) {
+      for (const rec of records) {
+        responseSummaries.push({
+          agentId: rec.agentId,
+          agentName: rec.agentName,
+          opinion: rec.response.opinion,
+          action: rec.response.action,
+          emotionalState: rec.response.emotionalState,
+        });
+      }
+    }
+
     const tickResult: TickResult = {
       tick,
       eventsProcessed: events.length,
@@ -455,6 +501,9 @@ export class WorldEngine {
       cacheHits: tickCacheHits > 0 ? tickCacheHits : undefined,
       cacheMisses: tickCacheMisses > 0 ? tickCacheMisses : undefined,
       agentsFiltered: totalFiltered > 0 ? totalFiltered : undefined,
+      events: eventSummaries.length > 0 ? eventSummaries : undefined,
+      responses: responseSummaries.length > 0 ? responseSummaries : undefined,
+      timestamp: new Date().toISOString(),
     };
 
     this.tickHistory.push(tickResult);
