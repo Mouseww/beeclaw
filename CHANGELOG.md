@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.5] - 2026-03-16
+
+### 🧹 Code Quality
+
+- **Dashboard:** 清除 AgentList 测试文件中的未使用 import (`within`, `userEvent`)，lint 零警告
+
 ## [1.0.4] - 2026-03-16
 
 ### 🐛 Bug Fixes

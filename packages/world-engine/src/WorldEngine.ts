@@ -418,19 +418,25 @@ export class WorldEngine {
 
     // 5. Agent 孵化检查
     let newAgentsSpawned = 0;
+    const maxAgents = this.options.config.maxAgents ?? 500;
     for (const event of events) {
+      if (this.agents.size >= maxAgents) break;
       const newAgents = this.spawner.checkEventTriggers(event, this.agents.size, tick);
       if (newAgents.length > 0) {
-        this.addAgents(newAgents);
-        newAgentsSpawned += newAgents.length;
+        const allowed = newAgents.slice(0, maxAgents - this.agents.size);
+        this.addAgents(allowed);
+        newAgentsSpawned += allowed.length;
       }
     }
 
     // 定时孵化检查
-    const scheduledAgents = this.spawner.checkScheduledTriggers(tick, this.agents.size);
-    if (scheduledAgents.length > 0) {
-      this.addAgents(scheduledAgents);
-      newAgentsSpawned += scheduledAgents.length;
+    if (this.agents.size < maxAgents) {
+      const scheduledAgents = this.spawner.checkScheduledTriggers(tick, this.agents.size);
+      if (scheduledAgents.length > 0) {
+        const allowed = scheduledAgents.slice(0, maxAgents - this.agents.size);
+        this.addAgents(allowed);
+        newAgentsSpawned += allowed.length;
+      }
     }
 
     // 6. 自然选择（信誉淘汰）
