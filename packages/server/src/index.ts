@@ -196,6 +196,68 @@ async function main(): Promise<void> {
   }
 
   // 5.5. 启动 RSS 事件接入
+  // v2.0: 优先从数据库加载 RSS 配置
+  const defaultRssSources = [
+    {
+      id: 'wsj-markets',
+      name: 'WSJ Markets',
+      url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
+      category: 'finance' as const,
+      tags: ['wsj', 'markets'],
+      pollIntervalMs: 300_000,
+    },
+    {
+      id: 'wsj-world',
+      name: 'WSJ World News',
+      url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml',
+      category: 'politics' as const,
+      tags: ['wsj', 'world'],
+      pollIntervalMs: 300_000,
+    },
+    {
+      id: 'cnbc-top',
+      name: 'CNBC Top News',
+      url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114',
+      category: 'finance' as const,
+      tags: ['cnbc', 'finance'],
+      pollIntervalMs: 300_000,
+    },
+    {
+      id: 'cnbc-tech',
+      name: 'CNBC Technology',
+      url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664',
+      category: 'tech' as const,
+      tags: ['cnbc', 'tech'],
+      pollIntervalMs: 300_000,
+    },
+    {
+      id: 'cnbc-finance',
+      name: 'CNBC Finance',
+      url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069',
+      category: 'finance' as const,
+      tags: ['cnbc', 'finance'],
+      pollIntervalMs: 300_000,
+    },
+    {
+      id: 'hackernews-best',
+      name: 'Hacker News Best',
+      url: 'https://hnrss.org/best',
+      category: 'tech' as const,
+      tags: ['hackernews', 'tech'],
+      pollIntervalMs: 600_000,
+    },
+  ];
+
+  // 从数据库加载已有 RSS 源，为空则使用默认配置并写入 DB
+  let rssSources = store.loadRssSources();
+  if (rssSources.length === 0) {
+    store.saveRssSources(defaultRssSources);
+    rssSources = defaultRssSources;
+    console.log(`[Server] 使用默认 RSS 配置并写入数据库`);
+  } else {
+    console.log(`[Server] 从数据库加载 ${rssSources.length} 个 RSS 数据源`);
+  }
+
   const ingestion = new EventIngestion(engine.eventBus, {
     defaultPollIntervalMs: 300_000, // 5 分钟
     maxItemsPerPoll: 10,
@@ -212,60 +274,11 @@ async function main(): Promise<void> {
       '利率', '汇率', '原油', '黄金', '房地产',
       'stock', 'bond', 'market', 'earnings', 'inflation',
     ],
-    sources: [
-      {
-        id: 'wsj-markets',
-        name: 'WSJ Markets',
-        url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
-        category: 'finance',
-        tags: ['wsj', 'markets'],
-        pollIntervalMs: 300_000,
-      },
-      {
-        id: 'wsj-world',
-        name: 'WSJ World News',
-        url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml',
-        category: 'politics',
-        tags: ['wsj', 'world'],
-        pollIntervalMs: 300_000,
-      },
-      {
-        id: 'cnbc-top',
-        name: 'CNBC Top News',
-        url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114',
-        category: 'finance',
-        tags: ['cnbc', 'finance'],
-        pollIntervalMs: 300_000,
-      },
-      {
-        id: 'cnbc-tech',
-        name: 'CNBC Technology',
-        url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664',
-        category: 'tech',
-        tags: ['cnbc', 'tech'],
-        pollIntervalMs: 300_000,
-      },
-      {
-        id: 'cnbc-finance',
-        name: 'CNBC Finance',
-        url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069',
-        category: 'finance',
-        tags: ['cnbc', 'finance'],
-        pollIntervalMs: 300_000,
-      },
-      {
-        id: 'hackernews-best',
-        name: 'Hacker News Best',
-        url: 'https://hnrss.org/best',
-        category: 'tech',
-        tags: ['hackernews', 'tech'],
-        pollIntervalMs: 600_000,
-      },
-    ],
+    sources: rssSources,
   });
 
   ingestion.start();
-  console.log(`[Server] RSS 事件接入已启动，${5} 个数据源`);
+  console.log(`[Server] RSS 事件接入已启动，${rssSources.length} 个数据源`);
 
   // 6. 启动 Fastify
   const app = Fastify({
@@ -441,10 +454,20 @@ async function main(): Promise<void> {
         store.setTick(result.tick);
         store.saveTickResult(result);
         store.saveAgents(engine.getAgents());
-        for (const signal of signals) {
-          store.saveConsensusSignal(signal);
-        }
         console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库`);
+      }
+
+      // 每个 tick 保存事件和响应（v2.0: 内容持久化）
+      if (result.events && result.events.length > 0) {
+        store.saveEvents(result.events, result.tick);
+      }
+      if (result.responses && result.responses.length > 0) {
+        store.saveResponses(result.responses, result.tick);
+      }
+
+      // 每个 tick 保存共识信号（v2.0: 不再等 SAVE_INTERVAL）
+      for (const signal of signals) {
+        store.saveConsensusSignal(signal);
       }
 
       // 警告 tick 耗时过长

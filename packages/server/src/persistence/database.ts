@@ -82,6 +82,63 @@ export function initDatabase(dbPath?: string): Database.Database {
       active     INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    -- v2.0: 事件内容持久化
+    CREATE TABLE IF NOT EXISTS events (
+      id          TEXT PRIMARY KEY,
+      tick        INTEGER NOT NULL,
+      title       TEXT NOT NULL,
+      content     TEXT NOT NULL DEFAULT '',
+      category    TEXT NOT NULL DEFAULT 'general',
+      importance  REAL NOT NULL DEFAULT 0.5,
+      tags        TEXT NOT NULL DEFAULT '[]',
+      source_id   TEXT,
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_tick ON events(tick);
+
+    -- v2.0: Agent 响应内容持久化
+    CREATE TABLE IF NOT EXISTS agent_responses (
+      id               TEXT PRIMARY KEY,
+      tick             INTEGER NOT NULL,
+      event_id         TEXT NOT NULL,
+      agent_id         TEXT NOT NULL,
+      agent_name       TEXT NOT NULL,
+      opinion          TEXT NOT NULL DEFAULT '',
+      action           TEXT NOT NULL DEFAULT 'silent',
+      sentiment        TEXT NOT NULL DEFAULT 'neutral',
+      emotional_state  REAL NOT NULL DEFAULT 0,
+      reasoning        TEXT NOT NULL DEFAULT '',
+      created_at       INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_responses_tick ON agent_responses(tick);
+    CREATE INDEX IF NOT EXISTS idx_responses_event ON agent_responses(event_id);
+    CREATE INDEX IF NOT EXISTS idx_responses_agent ON agent_responses(agent_id);
+
+    -- v2.0: RSS 数据源配置持久化
+    CREATE TABLE IF NOT EXISTS rss_sources (
+      id               TEXT PRIMARY KEY,
+      name             TEXT NOT NULL,
+      url              TEXT NOT NULL,
+      category         TEXT NOT NULL DEFAULT 'general',
+      tags             TEXT NOT NULL DEFAULT '[]',
+      poll_interval_ms INTEGER NOT NULL DEFAULT 300000,
+      enabled          INTEGER NOT NULL DEFAULT 1,
+      created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    -- v2.0: API Key 管理
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      key_hash     TEXT NOT NULL UNIQUE,
+      permissions  TEXT NOT NULL DEFAULT '[]',
+      rate_limit   INTEGER NOT NULL DEFAULT 100,
+      created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      last_used_at INTEGER,
+      active       INTEGER NOT NULL DEFAULT 1
+    );
   `);
 
   return db;
