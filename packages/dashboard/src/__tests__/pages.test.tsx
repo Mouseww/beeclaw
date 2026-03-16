@@ -149,7 +149,7 @@ describe('EventFeed', () => {
   it('应该渲染页面标题', () => {
     renderInRouter(<EventFeed />);
     expect(screen.getByText('事件流')).toBeInTheDocument();
-    expect(screen.getByText('实时事件和 Agent 响应')).toBeInTheDocument();
+    expect(screen.getByText(/实时事件和 Agent 响应/)).toBeInTheDocument();
   });
 
   it('应该渲染事件注入表单', () => {

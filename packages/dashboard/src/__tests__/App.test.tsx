@@ -138,7 +138,7 @@ describe('App', () => {
 
   it('"/events" 路由应该显示事件流页面', () => {
     renderWithRouter('/events');
-    expect(screen.getByText('实时事件和 Agent 响应')).toBeInTheDocument();
+    expect(screen.getByText(/实时事件和 Agent 响应/)).toBeInTheDocument();
   });
 
   it('"/consensus" 路由应该显示共识引擎页面', () => {

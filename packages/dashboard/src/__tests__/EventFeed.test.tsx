@@ -61,7 +61,7 @@ describe('EventFeed', () => {
   it('应该渲染页面标题和描述', () => {
     renderEventFeed();
     expect(screen.getByText('事件流')).toBeInTheDocument();
-    expect(screen.getByText('实时事件和 Agent 响应')).toBeInTheDocument();
+    expect(screen.getByText(/实时事件和 Agent 响应/)).toBeInTheDocument();
   });
 
   it('应该渲染事件注入表单', () => {
@@ -91,8 +91,8 @@ describe('EventFeed', () => {
 
     expect(screen.getByText('Tick #10')).toBeInTheDocument();
     expect(screen.getByText('3 事件')).toBeInTheDocument();
-    expect(screen.getByText('5 Agent 激活')).toBeInTheDocument();
-    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByText('5 Agent')).toBeInTheDocument();
+    expect(screen.getByText('0.2s')).toBeInTheDocument();
   });
 
   it('最新 tick 应显示 "最新" 标记', () => {
@@ -206,7 +206,7 @@ describe('EventFeed', () => {
 
     renderEventFeed();
 
-    expect(screen.getByText('Agent 响应 (2)')).toBeInTheDocument();
+    expect(screen.getByText(/Agent 响应（2）/)).toBeInTheDocument();
     expect(screen.getByText('张分析师')).toBeInTheDocument();
     expect(screen.getByText('看涨后市')).toBeInTheDocument();
     expect(screen.getByText('+0.50')).toBeInTheDocument();
@@ -252,8 +252,8 @@ describe('EventFeed', () => {
     expect(screen.getByText('+0.10')).toHaveClass('text-gray-400');
   });
 
-  it('超过 6 个响应时应显示更多提示', () => {
-    const responses = Array.from({ length: 8 }, (_, i) => ({
+  it('超过 8 个响应时应显示更多提示', () => {
+    const responses = Array.from({ length: 10 }, (_, i) => ({
       agentId: `a${i}`,
       agentName: `Agent ${i}`,
       opinion: `观点 ${i}`,
@@ -266,11 +266,11 @@ describe('EventFeed', () => {
 
     renderEventFeed();
 
-    // 只显示前 6 个
+    // 只显示前 8 个
     expect(screen.getByText('Agent 0')).toBeInTheDocument();
-    expect(screen.getByText('Agent 5')).toBeInTheDocument();
-    expect(screen.queryByText('Agent 6')).not.toBeInTheDocument();
-    expect(screen.queryByText('Agent 7')).not.toBeInTheDocument();
+    expect(screen.getByText('Agent 7')).toBeInTheDocument();
+    expect(screen.queryByText('Agent 8')).not.toBeInTheDocument();
+    expect(screen.queryByText('Agent 9')).not.toBeInTheDocument();
 
     // 显示剩余数量
     expect(screen.getByText('+2 更多响应')).toBeInTheDocument();
@@ -285,7 +285,7 @@ describe('EventFeed', () => {
 
     renderEventFeed();
 
-    // "事件" 小标题不应存在（注意页面描述 "实时事件和 Agent 响应" 会存在）
+    // "事件" 小标题不应存在（注意页面描述 "实时事件和 Agent 响应 ·..." 会存在）
     expect(screen.queryByText('事件', { selector: 'p.text-xs' })).not.toBeInTheDocument();
     // "Agent 响应 (N)" 格式的标题不应存在
     expect(screen.queryByText(/^Agent 响应 \(\d+\)$/)).not.toBeInTheDocument();
