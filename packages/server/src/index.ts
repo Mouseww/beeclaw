@@ -22,6 +22,7 @@ import { registerWs, broadcast, getConnectionCount, stopHeartbeat, closeAllConne
 import { registerStatusRoute } from './api/status.js';
 import { registerAgentsRoute } from './api/agents.js';
 import { registerEventsRoute } from './api/events.js';
+import { registerKeysRoute } from './api/keys.js';
 import { registerConsensusRoute } from './api/consensus.js';
 import { registerHistoryRoute } from './api/history.js';
 import { registerScenarioRoute } from './api/scenario.js';
@@ -331,7 +332,7 @@ async function main(): Promise<void> {
   // 注册中间件（在路由之前）
   await registerCorsMiddleware(app);
   await registerRateLimitMiddleware(app);
-  registerAuthMiddleware(app);
+  registerAuthMiddleware(app, () => store.getActiveApiKeyHashes());
   registerRequestLogger(app);
 
   // 共享上下文
@@ -350,6 +351,7 @@ async function main(): Promise<void> {
   registerStatusRoute(app, ctx);
   registerAgentsRoute(app, ctx);
   registerEventsRoute(app, ctx);
+  registerKeysRoute(app, ctx);
   registerConsensusRoute(app, ctx);
   registerHistoryRoute(app, ctx);
   registerScenarioRoute(app, ctx);

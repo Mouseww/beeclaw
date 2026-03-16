@@ -471,6 +471,14 @@ export class Store {
       .run(id);
     return result.changes > 0;
   }
+
+  /** 获取所有活跃 API Key 的哈希集合（用于鉴权快速查找） */
+  getActiveApiKeyHashes(): Set<string> {
+    const rows = this.db
+      .prepare('SELECT key_hash FROM api_keys WHERE active = 1')
+      .all() as { key_hash: string }[];
+    return new Set(rows.map(r => r.key_hash));
+  }
 }
 
 // ── Row 类型 ──

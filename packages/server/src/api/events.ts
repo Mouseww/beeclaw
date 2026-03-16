@@ -1,5 +1,5 @@
 // ============================================================================
-// BeeClaw Server — API: /api/events
+// BeeClaw Server — API: /api/events (事件注入)
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
@@ -18,6 +18,7 @@ interface InjectEventBody {
 }
 
 export function registerEventsRoute(app: FastifyInstance, ctx: ServerContext): void {
+  // POST /api/events — 注入事件
   app.post<{ Body: InjectEventBody }>('/api/events', { schema: injectEventSchema }, async (req, reply) => {
     const { title, content, category, importance, propagationRadius, tags } = req.body;
 

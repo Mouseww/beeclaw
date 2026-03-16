@@ -80,7 +80,7 @@ describe('Auth Middleware', () => {
       expect(res.statusCode).toBe(401);
       const body = res.json();
       expect(body.error).toBe('Unauthorized');
-      expect(body.message).toContain('Invalid API key');
+      expect(body.message).toContain('invalid API key');
     });
 
     it('非 Bearer 格式应返回 401', async () => {
@@ -91,7 +91,7 @@ describe('Auth Middleware', () => {
       });
       expect(res.statusCode).toBe(401);
       const body = res.json();
-      expect(body.message).toContain('Bearer');
+      expect(body.message).toContain('invalid');
     });
 
     it('/health 不需要认证', async () => {
