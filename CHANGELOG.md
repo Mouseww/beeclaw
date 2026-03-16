@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.12] - 2026-03-16
+
+### 🧪 Tests
+
+- **Server:** 补全 agents、consensus、scenario、history 路由单元测试
+
 ## [1.0.11] - 2026-03-16
 
 ### 🧪 Tests
