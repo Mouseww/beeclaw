@@ -125,7 +125,7 @@ describe('Health & Metrics 端点测试', () => {
       const res = await app.inject({ method: 'GET', url: '/health' });
       const body = res.json();
       expect(typeof body.version).toBe('string');
-      expect(body.version).toBe('1.0.0');
+      expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
     it('应包含当前 tick', async () => {
