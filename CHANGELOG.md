@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.9] - 2026-03-16
+
+### 🚀 New Features
+
+- **Server:** RSS 数据源 CRUD 持久化 — POST/PUT/DELETE `/api/ingestion/sources` 同步写入 SQLite 数据库
+
+### 🧪 Tests
+
+- **Ingestion API:** 补全 POST/PUT/DELETE 路由测试，覆盖正常 CRUD、参数校验（400）、源不存在（404）、无实例（503）等场景
+- 验证 `store.saveRssSource` / `store.deleteRssSource` 被正确调用
+- 验证 `ingestion.addSource` / `ingestion.removeSource` 调用顺序
+
 ## [1.0.8] - 2026-03-16
 
 ### 🐛 Bug Fixes

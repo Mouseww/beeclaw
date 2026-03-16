@@ -64,6 +64,8 @@ function createMockIngestion(overrides?: Partial<{
   return {
     getStatus: vi.fn().mockReturnValue(overrides?.status ?? defaultStatus),
     getSourceStatus: vi.fn().mockReturnValue(overrides?.sourceStatus ?? undefined),
+    addSource: vi.fn(),
+    removeSource: vi.fn(),
   };
 }
 
@@ -229,6 +231,366 @@ describe('GET /api/ingestion/:sourceId', () => {
         url: '/api/ingestion/any-id',
       });
       expect(res.statusCode).toBe(503);
+    });
+  });
+});
+
+// ── POST /api/ingestion/sources ──
+
+describe('POST /api/ingestion/sources', () => {
+  let app: FastifyInstance;
+
+  describe('有 ingestion 实例时', () => {
+    let mockIngestion: ReturnType<typeof createMockIngestion>;
+    let saveRssSourceSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      mockIngestion = createMockIngestion();
+      (testCtx.ctx as any).ingestion = mockIngestion;
+      saveRssSourceSpy = vi.spyOn(testCtx.store, 'saveRssSource').mockImplementation(() => {});
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应成功创建数据源并返回 200', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'new-src', name: 'New Source', url: 'https://example.com/feed' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toEqual({ ok: true, id: 'new-src' });
+    });
+
+    it('应调用 ingestion.addSource 传入正确的参数', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'new-src', name: 'New Source', url: 'https://example.com/feed' },
+      });
+      expect(mockIngestion.addSource).toHaveBeenCalledTimes(1);
+      expect(mockIngestion.addSource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'new-src',
+          name: 'New Source',
+          url: 'https://example.com/feed',
+          category: 'general',
+          tags: [],
+          pollIntervalMs: 300_000,
+          enabled: true,
+        }),
+      );
+    });
+
+    it('应调用 store.saveRssSource 持久化', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'new-src', name: 'New Source', url: 'https://example.com/feed' },
+      });
+      expect(saveRssSourceSpy).toHaveBeenCalledTimes(1);
+      expect(saveRssSourceSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'new-src', name: 'New Source' }),
+      );
+    });
+
+    it('应支持自定义可选字段', async () => {
+      await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: {
+          id: 'custom-src',
+          name: 'Custom',
+          url: 'https://custom.com/feed',
+          category: 'finance',
+          tags: ['stock'],
+          pollIntervalMs: 60_000,
+          enabled: false,
+        },
+      });
+      expect(mockIngestion.addSource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 'finance',
+          tags: ['stock'],
+          pollIntervalMs: 60_000,
+          enabled: false,
+        }),
+      );
+    });
+
+    it('缺少 id 应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { name: 'No ID', url: 'https://example.com/feed' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toBeDefined();
+    });
+
+    it('缺少 name 应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'no-name', url: 'https://example.com/feed' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toBeDefined();
+    });
+
+    it('缺少 url 应返回 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'no-url', name: 'No URL' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json();
+      expect(body.error).toBeDefined();
+    });
+  });
+
+  describe('无 ingestion 实例时', () => {
+    beforeEach(async () => {
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应返回 503', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingestion/sources',
+        payload: { id: 'test', name: 'Test', url: 'https://example.com/feed' },
+      });
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.error).toContain('not available');
+    });
+  });
+});
+
+// ── PUT /api/ingestion/sources/:sourceId ──
+
+describe('PUT /api/ingestion/sources/:sourceId', () => {
+  let app: FastifyInstance;
+
+  describe('源存在时', () => {
+    let mockIngestion: ReturnType<typeof createMockIngestion>;
+    let saveRssSourceSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      const sourceStatus: IngestionSourceStatus = {
+        id: 'existing-src',
+        name: 'Existing Source',
+        url: 'https://old.com/feed',
+        enabled: true,
+        lastPollTime: '2024-01-01T00:00:00.000Z',
+        lastError: null,
+        itemsFetched: 10,
+        eventsEmitted: 5,
+      };
+      mockIngestion = createMockIngestion({ sourceStatus });
+      (testCtx.ctx as any).ingestion = mockIngestion;
+      saveRssSourceSpy = vi.spyOn(testCtx.store, 'saveRssSource').mockImplementation(() => {});
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应成功更新数据源并返回 200', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/existing-src',
+        payload: { name: 'Updated Name' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toEqual({ ok: true, id: 'existing-src' });
+    });
+
+    it('应先 removeSource 再 addSource', async () => {
+      await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/existing-src',
+        payload: { name: 'Updated Name' },
+      });
+      expect(mockIngestion.removeSource).toHaveBeenCalledWith('existing-src');
+      expect(mockIngestion.addSource).toHaveBeenCalledTimes(1);
+      // removeSource 应在 addSource 之前被调用
+      const removeOrder = mockIngestion.removeSource.mock.invocationCallOrder[0]!;
+      const addOrder = mockIngestion.addSource.mock.invocationCallOrder[0]!;
+      expect(removeOrder).toBeLessThan(addOrder);
+    });
+
+    it('应调用 store.saveRssSource 持久化更新后的源', async () => {
+      await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/existing-src',
+        payload: { name: 'Updated', url: 'https://new.com/feed' },
+      });
+      expect(saveRssSourceSpy).toHaveBeenCalledTimes(1);
+      expect(saveRssSourceSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'existing-src', name: 'Updated', url: 'https://new.com/feed' }),
+      );
+    });
+
+    it('未提供的字段应从 existing 继承', async () => {
+      await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/existing-src',
+        payload: { url: 'https://new-url.com/feed' },
+      });
+      expect(mockIngestion.addSource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'existing-src',
+          name: 'Existing Source',
+          url: 'https://new-url.com/feed',
+          enabled: true,
+        }),
+      );
+    });
+  });
+
+  describe('源不存在时', () => {
+    let mockIngestion: ReturnType<typeof createMockIngestion>;
+
+    beforeEach(async () => {
+      mockIngestion = createMockIngestion({ sourceStatus: undefined });
+      (testCtx.ctx as any).ingestion = mockIngestion;
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应返回 404', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/nonexistent',
+        payload: { name: 'No Such Source' },
+      });
+      expect(res.statusCode).toBe(404);
+      const body = res.json();
+      expect(body.error).toContain('not found');
+    });
+  });
+
+  describe('无 ingestion 实例时', () => {
+    beforeEach(async () => {
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应返回 503', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/ingestion/sources/any-id',
+        payload: { name: 'Test' },
+      });
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.error).toContain('not available');
+    });
+  });
+});
+
+// ── DELETE /api/ingestion/sources/:sourceId ──
+
+describe('DELETE /api/ingestion/sources/:sourceId', () => {
+  let app: FastifyInstance;
+
+  describe('源存在时', () => {
+    let mockIngestion: ReturnType<typeof createMockIngestion>;
+    let deleteRssSourceSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      const sourceStatus: IngestionSourceStatus = {
+        id: 'del-src',
+        name: 'To Delete',
+        url: 'https://delete.com/feed',
+        enabled: true,
+        lastPollTime: '2024-01-01T00:00:00.000Z',
+        lastError: null,
+        itemsFetched: 20,
+        eventsEmitted: 15,
+      };
+      mockIngestion = createMockIngestion({ sourceStatus });
+      (testCtx.ctx as any).ingestion = mockIngestion;
+      deleteRssSourceSpy = vi.spyOn(testCtx.store, 'deleteRssSource').mockImplementation(() => true);
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应成功删除数据源并返回 200', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/ingestion/sources/del-src',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toEqual({ ok: true, deleted: 'del-src' });
+    });
+
+    it('应调用 ingestion.removeSource', async () => {
+      await app.inject({
+        method: 'DELETE',
+        url: '/api/ingestion/sources/del-src',
+      });
+      expect(mockIngestion.removeSource).toHaveBeenCalledWith('del-src');
+    });
+
+    it('应调用 store.deleteRssSource 从数据库删除', async () => {
+      await app.inject({
+        method: 'DELETE',
+        url: '/api/ingestion/sources/del-src',
+      });
+      expect(deleteRssSourceSpy).toHaveBeenCalledWith('del-src');
+    });
+  });
+
+  describe('源不存在时', () => {
+    let mockIngestion: ReturnType<typeof createMockIngestion>;
+
+    beforeEach(async () => {
+      mockIngestion = createMockIngestion({ sourceStatus: undefined });
+      (testCtx.ctx as any).ingestion = mockIngestion;
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应返回 404', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/ingestion/sources/nonexistent',
+      });
+      expect(res.statusCode).toBe(404);
+      const body = res.json();
+      expect(body.error).toContain('not found');
+    });
+  });
+
+  describe('无 ingestion 实例时', () => {
+    beforeEach(async () => {
+      registerIngestionRoute(testCtx.app, testCtx.ctx);
+      await testCtx.app.ready();
+      app = testCtx.app;
+    });
+
+    it('应返回 503', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/ingestion/sources/any-id',
+      });
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.error).toContain('not available');
     });
   });
 });
