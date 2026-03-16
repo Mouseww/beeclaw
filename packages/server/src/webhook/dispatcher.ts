@@ -5,7 +5,7 @@
 
 import { createHmac } from 'node:crypto';
 import type { WebhookSubscription, WebhookEventType, WebhookPayload, WebhookDeliveryStatus } from '@beeclaw/shared';
-import type { Store } from '../persistence/store.js';
+import type { DatabaseAdapter } from '../persistence/adapter.js';
 
 /** 单次投递记录 */
 export interface DeliveryRecord {
@@ -67,7 +67,7 @@ export function calculateBackoff(attempt: number, baseMs: number, jitter: boolea
 
 export class WebhookDispatcher {
   private readonly config: WebhookDispatcherConfig;
-  private readonly store: Store;
+  private readonly store: DatabaseAdapter;
   private activeRequests = 0;
   private readonly deliveryLog: DeliveryRecord[] = [];
   /** 允许外部注入 fetch 函数，便于测试 */
@@ -76,7 +76,7 @@ export class WebhookDispatcher {
   private sleepFn: (ms: number) => Promise<void>;
 
   constructor(
-    store: Store,
+    store: DatabaseAdapter,
     config?: Partial<WebhookDispatcherConfig>,
     fetchImpl?: typeof fetch,
     sleepImpl?: (ms: number) => Promise<void>,

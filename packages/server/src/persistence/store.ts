@@ -8,8 +8,9 @@ import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
 import type { FeedSource } from '@beeclaw/event-ingestion';
 import { generateId } from '@beeclaw/shared';
+import type { DatabaseAdapter } from './adapter.js';
 
-export class Store {
+export class Store implements DatabaseAdapter {
   private db: Database.Database;
 
   constructor(db: Database.Database) {

@@ -18,6 +18,7 @@ import { DEFAULT_TEMPLATE } from '@beeclaw/agent-runtime';
 import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
+import type { DatabaseAdapter } from './persistence/adapter.js';
 import { registerWs, broadcast, getConnectionCount, stopHeartbeat, closeAllConnections } from './ws/handler.js';
 import { registerStatusRoute } from './api/status.js';
 import { registerAgentsRoute } from './api/agents.js';
@@ -55,7 +56,7 @@ const SAVE_INTERVAL = parseInt(process.env['BEECLAW_SAVE_INTERVAL'] ?? '5', 10);
 
 export interface ServerContext {
   engine: WorldEngine;
-  store: Store;
+  store: DatabaseAdapter;
   modelRouter: ModelRouter;
   getWsCount: () => number;
   webhookDispatcher?: WebhookDispatcher;
