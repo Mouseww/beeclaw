@@ -4,6 +4,7 @@
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
+import type { EventCategory } from '@beeclaw/shared';
 import type { ServerContext } from '../index.js';
 import { ingestionStatusSchema, ingestionSourceDetailSchema } from './schemas.js';
 
@@ -47,7 +48,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       id,
       name,
       url,
-      category: (category as any) ?? 'general',
+      category: (category as EventCategory) ?? 'general',
       tags: tags ?? [],
       pollIntervalMs: pollIntervalMs ?? 300_000,
       enabled: enabled ?? true,
@@ -73,7 +74,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       id: req.params.sourceId,
       name: req.body.name ?? existing.name,
       url: req.body.url ?? existing.url,
-      category: (req.body.category as any) ?? 'general',
+      category: (req.body.category as EventCategory) ?? 'general',
       tags: req.body.tags ?? [],
       pollIntervalMs: req.body.pollIntervalMs ?? 300_000,
       enabled: req.body.enabled ?? existing.enabled,

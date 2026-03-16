@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
+import type { ConsensusSignal } from '@beeclaw/shared';
 import type { ServerContext } from '../index.js';
 import { consensusSchema } from './schemas.js';
 
@@ -31,7 +32,7 @@ export function registerConsensusRoute(app: FastifyInstance, ctx: ServerContext)
 }
 
 /** 将原始计数转换为百分比 */
-function normalizeSentimentDistributions(signals: any[]): any[] {
+function normalizeSentimentDistributions(signals: ConsensusSignal[]): ConsensusSignal[] {
   return signals.map((signal) => {
     const dist = signal.sentimentDistribution;
     const total = (dist.bullish || 0) + (dist.bearish || 0) + (dist.neutral || 0);
