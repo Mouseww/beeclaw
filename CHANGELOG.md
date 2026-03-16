@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.15] - 2026-03-17
+
+### ⚡ Performance
+
+- **Benchmarks:** 新增 agent-memory、batch-inference 综合性能基准测试，扩展 world-engine bench
+
+### 🏗️ Architecture
+
+- **DatabaseAdapter:** 新增数据库适配器接口，为 Phase 2 PostgreSQL 支持打基础
+- **ROADMAP:** 完整的 Phase 2 路线图（PostgreSQL、Agent 持久化、分布式 Tick、实时 Dashboard 等）
+
 ## [1.0.14] - 2026-03-17
 
 ### 🧹 Code Quality
