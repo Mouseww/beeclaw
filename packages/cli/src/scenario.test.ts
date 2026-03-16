@@ -19,7 +19,6 @@ interface ScenarioArgs {
 
 /** 复现 scenario.ts 中的 parseScenarioArgs 逻辑 */
 function parseScenarioArgs(args: string[]): ScenarioArgs {
-  let subCommand: SubCommand = 'help';
   let templateName: string | undefined;
   let maxTicks: number | undefined;
   let concurrency: number | undefined;
@@ -29,6 +28,7 @@ function parseScenarioArgs(args: string[]): ScenarioArgs {
   }
 
   const cmd = args[0]!;
+  let subCommand: SubCommand;
   if (['list', 'describe', 'run', 'help'].includes(cmd)) {
     subCommand = cmd as SubCommand;
   } else {
