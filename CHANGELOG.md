@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.10] - 2026-03-16
+
+### 🧪 Tests
+
+- **CLI:** 补全 `inject`、`scenario`、`status` 命令测试，覆盖参数解析、错误处理、输出格式
+- **Agent Runtime:** 补全 `LLMClient` 单元测试，覆盖重试逻辑、超时处理、模型路由
+
 ## [1.0.9] - 2026-03-16
 
 ### 🚀 New Features
