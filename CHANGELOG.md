@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.11] - 2026-03-16
+
+### 🧪 Tests
+
+- **Store Persistence:** 补全 events、responses、tick history 持久化存储测试
+
+### 🧹 Code Quality
+
+- **CLI:** 修复 `scenario.test.ts` lint warning（移除无效初始赋值），lint 零问题
+
 ## [1.0.10] - 2026-03-16
 
 ### 🧪 Tests
