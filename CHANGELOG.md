@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.1] - 2026-03-16
+
+### 🚀 New Features
+
+- **WebSocket 实时推送增强** — Tick 广播中流式传输 event/response 详细信息 (`4d06663`)
+
+### 🐛 Bug Fixes
+
+- 修复 store.ts 中 timestamp 类型转换错误 (`5cae621`)
+- 修复 health 端点测试以匹配 v1.0.0 预期 (`54ee355`)
+- 修复 Dashboard tick 显示中缺失时间戳的问题，并在 store 中添加时间戳映射 (`cefefd1`)
+
+### 🧹 Code Quality
+
+- 清理 benchmarks 和 e2e 测试中未使用的变量 (`dee1a68`)
+
 ## [1.0.0] - 2026-03-16
 
 ### 🎉 首个正式版本发布
