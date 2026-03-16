@@ -4,7 +4,7 @@
 // 使用 mock LLM 响应，确保离线可运行
 // ============================================================================
 
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import { WorldEngine } from '@beeclaw/world-engine';
