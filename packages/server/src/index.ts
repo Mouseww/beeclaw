@@ -171,7 +171,7 @@ async function main(): Promise<void> {
       info: {
         title: 'BeeClaw API',
         description: '群体智能仿真引擎 REST API',
-        version: '0.8.0',
+        version: '1.0.0',
       },
       tags: [
         { name: 'status', description: '世界状态' },
