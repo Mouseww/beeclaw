@@ -14,3 +14,4 @@ export {
 export type { ConnectionState } from './StatusBadge';
 export { SentimentBar } from './SentimentBar';
 export { EventInjectForm } from './EventInjectForm';
+export { ThemeToggle } from './ThemeToggle';

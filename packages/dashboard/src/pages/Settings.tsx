@@ -27,6 +27,13 @@ const TIER_META: Record<string, { label: string; icon: string; desc: string }> =
 
 const TIERS = ['local', 'cheap', 'strong'] as const;
 
+const inputStyle = {
+  backgroundColor: 'var(--input-bg)',
+  borderWidth: '1px',
+  borderColor: 'var(--input-border)',
+  color: 'var(--text-secondary)',
+} as const;
+
 function TierCard({
   tier,
   config,
@@ -65,39 +72,42 @@ function TierCard({
       <div className="flex items-center gap-3 mb-4">
         <span className="text-2xl">{meta.icon}</span>
         <div>
-          <h3 className="text-lg font-semibold text-white">{meta.label}</h3>
-          <p className="text-xs text-gray-500">{meta.desc}</p>
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>{meta.label}</h3>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{meta.desc}</p>
         </div>
       </div>
 
       <div className="space-y-3">
         {/* Base URL */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Base URL</label>
+          <label className="block text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Base URL</label>
           <input
             type="text"
             value={form.baseURL}
             onChange={(e) => update('baseURL', e.target.value)}
             placeholder="http://localhost:11434"
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+            className="w-full px-3 py-2 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition-colors"
+            style={inputStyle}
           />
         </div>
 
         {/* API Key */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">API Key</label>
+          <label className="block text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>API Key</label>
           <div className="relative">
             <input
               type={showKey ? 'text' : 'password'}
               value={form.apiKey}
               onChange={(e) => update('apiKey', e.target.value)}
               placeholder="sk-..."
-              className="w-full px-3 py-2 pr-10 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 pr-10 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              style={inputStyle}
             />
             <button
               type="button"
               onClick={() => setShowKey(!showKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-sm"
+              style={{ color: 'var(--text-muted)' }}
             >
               {showKey ? '🙈' : '👁️'}
             </button>
@@ -106,20 +116,21 @@ function TierCard({
 
         {/* Model */}
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Model</label>
+          <label className="block text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Model</label>
           <input
             type="text"
             value={form.model}
             onChange={(e) => update('model', e.target.value)}
             placeholder="qwen2.5:7b"
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+            className="w-full px-3 py-2 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition-colors"
+            style={inputStyle}
           />
         </div>
 
         {/* Max Tokens + Temperature */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Max Tokens</label>
+            <label className="block text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Max Tokens</label>
             <input
               type="number"
               value={form.maxTokens ?? ''}
@@ -128,11 +139,12 @@ function TierCard({
               }
               placeholder="4096"
               min={1}
-              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              style={inputStyle}
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Temperature</label>
+            <label className="block text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Temperature</label>
             <input
               type="number"
               value={form.temperature ?? ''}
@@ -143,7 +155,8 @@ function TierCard({
               min={0}
               max={2}
               step={0.1}
-              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              className="w-full px-3 py-2 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition-colors"
+              style={inputStyle}
             />
           </div>
         </div>
@@ -156,8 +169,9 @@ function TierCard({
             className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
               dirty && !isSaving
                 ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
-                : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                : 'cursor-not-allowed'
             }`}
+            style={!dirty || isSaving ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-faint)' } : undefined}
           >
             {isSaving ? '保存中...' : dirty ? '💾 保存配置' : '无更改'}
           </button>
@@ -222,8 +236,8 @@ export function Settings() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h2 className="text-2xl font-bold text-white">⚙️ 系统设置</h2>
-        <p className="text-sm text-gray-500 mt-1">LLM 模型配置 — 设置不同用途的模型端点</p>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>⚙️ 系统设置</h2>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>LLM 模型配置 — 设置不同用途的模型端点</p>
       </div>
 
       {/* Toast */}
@@ -259,7 +273,7 @@ export function Settings() {
       ) : null}
 
       {/* 说明 */}
-      <div className="text-xs text-gray-600 space-y-1">
+      <div className="text-xs space-y-1" style={{ color: 'var(--text-faint)' }}>
         <p>💡 配置修改即时生效，无需重启服务。</p>
         <p>
           🏠 <strong>Local</strong> — 本地 Ollama 等，无 API 费用 &nbsp;|&nbsp; 💰{' '}

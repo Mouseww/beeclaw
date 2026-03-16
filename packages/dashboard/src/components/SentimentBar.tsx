@@ -21,7 +21,7 @@ export function SentimentBar({
   const total = bullish + bearish + neutral;
   if (total === 0) {
     return (
-      <div className={`w-full ${height} bg-gray-800 rounded-full overflow-hidden`} />
+      <div className={`w-full ${height} rounded-full overflow-hidden`} style={{ backgroundColor: 'var(--bg-tertiary)' }} />
     );
   }
 
@@ -31,7 +31,7 @@ export function SentimentBar({
 
   return (
     <div>
-      <div className={`w-full ${height} bg-gray-800 rounded-full overflow-hidden flex`}>
+      <div className={`w-full ${height} rounded-full overflow-hidden flex`} style={{ backgroundColor: 'var(--bg-tertiary)' }}>
         {bPct > 0 && (
           <div
             className="bg-green-500 transition-all duration-500"
@@ -54,7 +54,7 @@ export function SentimentBar({
       {showLabels && (
         <div className="flex justify-between mt-1 text-xs">
           <span className="text-green-400">看多 {bPct.toFixed(0)}%</span>
-          <span className="text-gray-400">中立 {nPct.toFixed(0)}%</span>
+          <span style={{ color: 'var(--text-tertiary)' }}>中立 {nPct.toFixed(0)}%</span>
           <span className="text-red-400">看空 {sPct.toFixed(0)}%</span>
         </div>
       )}

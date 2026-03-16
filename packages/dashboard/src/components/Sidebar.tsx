@@ -21,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   return (
-    <aside className="w-56 border-r border-gray-800 bg-gray-950 flex flex-col shrink-0 overflow-y-auto">
+    <aside className="w-56 border-r theme-border flex flex-col shrink-0 overflow-y-auto" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <nav className="flex-1 py-4 px-3 space-y-1.5">
         {NAV_ITEMS.map((item) => (
           <NavLink
@@ -39,9 +39,9 @@ export function Sidebar() {
       </nav>
 
       {/* 底部信息 */}
-      <div className="p-4 border-t border-gray-800">
-        <p className="text-xs text-gray-600 text-center">
-          BeeClaw v0.1.0
+      <div className="p-4 border-t theme-border">
+        <p className="text-xs theme-text-faint text-center" style={{ color: 'var(--text-faint)' }}>
+          BeeClaw v1.0.1
         </p>
       </div>
     </aside>

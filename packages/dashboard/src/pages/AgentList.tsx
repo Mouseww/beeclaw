@@ -24,8 +24,8 @@ export function AgentList() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Agent 列表</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Agent 列表</h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
             {data ? `共 ${data.total} 个 Agent` : '加载中...'}
           </p>
         </div>
@@ -36,7 +36,7 @@ export function AgentList() {
         {loading && !data ? (
           <div className="animate-pulse space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 bg-gray-800 rounded" />
+              <div key={i} className="h-12 rounded" style={{ backgroundColor: 'var(--skeleton-bg)' }} />
             ))}
           </div>
         ) : data && data.agents.length > 0 ? (
@@ -44,7 +44,7 @@ export function AgentList() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-gray-500 text-xs uppercase border-b border-gray-800">
+                  <tr className="text-xs uppercase border-b" style={{ color: 'var(--text-muted)', borderColor: 'var(--border-primary)' }}>
                     <th className="text-left py-3 pr-4">名称</th>
                     <th className="text-left py-3 pr-4">职业</th>
                     <th className="text-center py-3 pr-4">状态</th>
@@ -59,7 +59,8 @@ export function AgentList() {
                   {data.agents.map((agent) => (
                     <tr
                       key={agent.id}
-                      className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                      className="border-b transition-colors hover:opacity-80"
+                      style={{ borderColor: 'var(--border-primary)' }}
                     >
                       <td className="py-3 pr-4">
                         <Link to={`/agents/${agent.id}`} className="flex items-center gap-2 group">
@@ -67,12 +68,12 @@ export function AgentList() {
                             {agent.name.charAt(0)}
                           </span>
                           <div>
-                            <p className="font-medium text-gray-100 group-hover:text-bee-400 transition-colors">{agent.name}</p>
-                            <p className="text-xs text-gray-500 font-mono">{agent.id.slice(0, 8)}</p>
+                            <p className="font-medium group-hover:text-bee-400 transition-colors" style={{ color: 'var(--text-primary)' }}>{agent.name}</p>
+                            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{agent.id.slice(0, 8)}</p>
                           </div>
                         </Link>
                       </td>
-                      <td className="py-3 pr-4 text-gray-300">{agent.profession}</td>
+                      <td className="py-3 pr-4" style={{ color: 'var(--text-secondary)' }}>{agent.profession}</td>
                       <td className="py-3 pr-4 text-center">
                         <AgentStatusBadge status={agent.status} />
                       </td>
@@ -81,13 +82,13 @@ export function AgentList() {
                       </td>
                       <td className="py-3 pr-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                             <div
                               className="h-full bg-bee-500 rounded-full transition-all"
                               style={{ width: `${agent.influence}%` }}
                             />
                           </div>
-                          <span className="text-gray-300 w-8 text-right">{agent.influence}</span>
+                          <span className="w-8 text-right" style={{ color: 'var(--text-secondary)' }}>{agent.influence}</span>
                         </div>
                       </td>
                       <td className="py-3 pr-4 text-right">
@@ -95,10 +96,10 @@ export function AgentList() {
                           {agent.credibility}
                         </span>
                       </td>
-                      <td className="py-3 pr-4 text-right text-gray-400">
+                      <td className="py-3 pr-4 text-right" style={{ color: 'var(--text-tertiary)' }}>
                         {agent.followers}
                       </td>
-                      <td className="py-3 text-right text-gray-500 font-mono text-xs">
+                      <td className="py-3 text-right font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
                         Tick #{agent.lastActiveTick}
                       </td>
                     </tr>
@@ -109,22 +110,24 @@ export function AgentList() {
 
             {/* 分页 */}
             {data.pages > 1 && (
-              <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-                <p className="text-xs text-gray-500">
+              <div className="flex items-center justify-between pt-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   第 {data.page} / {data.pages} 页
                 </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="px-3 py-1 rounded bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                   >
                     上一页
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
                     disabled={page >= data.pages}
-                    className="px-3 py-1 rounded bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                   >
                     下一页
                   </button>

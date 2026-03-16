@@ -212,7 +212,7 @@ describe('Header', () => {
   it('应该渲染 logo 和 Tick 信息', () => {
     render(
       <MemoryRouter>
-        <Header wsState="connected" tick={42} />
+        <Header wsState="connected" tick={42} theme="system" onThemeCycle={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('Bee')).toBeInTheDocument();
@@ -224,7 +224,7 @@ describe('Header', () => {
   it('断开连接时应显示对应状态', () => {
     render(
       <MemoryRouter>
-        <Header wsState="disconnected" tick={0} />
+        <Header wsState="disconnected" tick={0} theme="system" onThemeCycle={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('已断开')).toBeInTheDocument();
@@ -254,6 +254,6 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>,
     );
-    expect(screen.getByText('BeeClaw v0.1.0')).toBeInTheDocument();
+    expect(screen.getByText('BeeClaw v1.0.1')).toBeInTheDocument();
   });
 });

@@ -33,7 +33,7 @@ export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps)
   const trendColor = {
     up: 'text-green-400',
     down: 'text-red-400',
-    neutral: 'text-gray-400',
+    neutral: '',
   };
 
   return (
@@ -43,7 +43,7 @@ export function StatCard({ title, value, subtitle, icon, trend }: StatCardProps)
           <h3 className="card-header">{title}</h3>
           <p className="stat-value">{value}</p>
           {subtitle && (
-            <p className={`text-sm mt-1 ${trend ? trendColor[trend] : 'text-gray-500'}`}>
+            <p className={`text-sm mt-1 ${trend ? trendColor[trend] : ''}`} style={!trend || trend === 'neutral' ? { color: 'var(--text-muted)' } : undefined}>
               {subtitle}
             </p>
           )}
@@ -60,8 +60,8 @@ export function CardSkeleton({ count = 1 }: { count?: number }) {
     <>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="card animate-pulse">
-          <div className="h-3 w-20 bg-gray-800 rounded mb-3" />
-          <div className="h-8 w-24 bg-gray-800 rounded" />
+          <div className="h-3 w-20 rounded mb-3" style={{ backgroundColor: 'var(--skeleton-bg)' }} />
+          <div className="h-8 w-24 rounded" style={{ backgroundColor: 'var(--skeleton-bg)' }} />
         </div>
       ))}
     </>
@@ -71,7 +71,7 @@ export function CardSkeleton({ count = 1 }: { count?: number }) {
 /** 空状态提示 */
 export function EmptyState({ icon, message }: { icon: string; message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
       <span className="text-5xl mb-4 opacity-40">{icon}</span>
       <p className="text-sm">{message}</p>
     </div>
@@ -81,13 +81,14 @@ export function EmptyState({ icon, message }: { icon: string; message: string })
 /** 错误提示 */
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+    <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
       <span className="text-5xl mb-4 opacity-40">⚠️</span>
       <p className="text-sm text-red-400 mb-3">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-4 py-1.5 rounded-lg bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-colors"
+          className="px-4 py-1.5 rounded-lg text-sm transition-colors"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
         >
           重试
         </button>

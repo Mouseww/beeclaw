@@ -4,6 +4,7 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useTheme } from './hooks/useTheme';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { WorldOverview } from './pages/WorldOverview';
@@ -16,11 +17,12 @@ import { Settings } from './pages/Settings';
 
 export function App() {
   const { state: wsState, lastTick } = useWebSocket();
+  const { theme, cycleTheme } = useTheme();
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-950 text-gray-100">
+    <div className="min-h-screen flex flex-col theme-bg-primary theme-text-primary">
       {/* 顶部导航 */}
-      <Header wsState={wsState} tick={lastTick?.tick ?? 0} />
+      <Header wsState={wsState} tick={lastTick?.tick ?? 0} theme={theme} onThemeCycle={cycleTheme} />
 
       <div className="flex flex-1 min-h-0">
         {/* 侧边栏 */}

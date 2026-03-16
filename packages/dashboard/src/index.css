@@ -3,14 +3,61 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── 暗色主题变量（默认） ── */
   :root {
     --color-bullish: #22c55e;
     --color-bearish: #ef4444;
     --color-neutral: #6b7280;
+
+    /* 主题语义色 */
+    --bg-primary: #030712;      /* gray-950 */
+    --bg-secondary: #111827;    /* gray-900 */
+    --bg-tertiary: #1f2937;     /* gray-800 */
+    --bg-hover: rgba(31, 41, 55, 0.6); /* gray-800/60 */
+    --bg-card: #111827;         /* gray-900 */
+    --border-primary: #1f2937;  /* gray-800 */
+    --border-secondary: #374151; /* gray-700 */
+    --text-primary: #f3f4f6;    /* gray-100 */
+    --text-secondary: #d1d5db;  /* gray-300 */
+    --text-tertiary: #9ca3af;   /* gray-400 */
+    --text-muted: #6b7280;      /* gray-500 */
+    --text-faint: #4b5563;      /* gray-600 */
+    --text-heading: #ffffff;
+    --scrollbar-track: #111827;
+    --scrollbar-thumb: #374151;
+    --scrollbar-thumb-hover: #4b5563;
+    --input-bg: #1f2937;
+    --input-border: #374151;
+    --skeleton-bg: #1f2937;
+  }
+
+  /* ── 亮色主题变量 ── */
+  .light {
+    --bg-primary: #f9fafb;      /* gray-50 */
+    --bg-secondary: #ffffff;    /* white */
+    --bg-tertiary: #f3f4f6;     /* gray-100 */
+    --bg-hover: rgba(243, 244, 246, 0.8); /* gray-100/80 */
+    --bg-card: #ffffff;
+    --border-primary: #e5e7eb;  /* gray-200 */
+    --border-secondary: #d1d5db; /* gray-300 */
+    --text-primary: #111827;    /* gray-900 */
+    --text-secondary: #374151;  /* gray-700 */
+    --text-tertiary: #4b5563;   /* gray-600 */
+    --text-muted: #6b7280;      /* gray-500 */
+    --text-faint: #9ca3af;      /* gray-400 */
+    --text-heading: #030712;    /* gray-950 */
+    --scrollbar-track: #f3f4f6;
+    --scrollbar-thumb: #d1d5db;
+    --scrollbar-thumb-hover: #9ca3af;
+    --input-bg: #f9fafb;
+    --input-border: #d1d5db;
+    --skeleton-bg: #e5e7eb;
   }
 
   body {
     @apply antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
   }
 
   /* 自定义滚动条 */
@@ -19,27 +66,32 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-gray-900;
+    background-color: var(--scrollbar-track);
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-700 rounded-full;
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-600;
+    background-color: var(--scrollbar-thumb-hover);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    @apply rounded-xl p-5 shadow-lg;
   }
 
   .card-header {
-    @apply text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3;
+    color: var(--text-tertiary);
+    @apply text-sm font-semibold uppercase tracking-wider mb-3;
   }
 
   .stat-value {
-    @apply text-3xl font-bold text-white;
+    color: var(--text-heading);
+    @apply text-3xl font-bold;
   }
 
   .badge {
@@ -49,30 +101,86 @@
   .badge-active {
     @apply bg-green-900/50 text-green-400 border border-green-800;
   }
+  .light .badge-active {
+    @apply bg-green-100 text-green-700 border-green-300;
+  }
 
   .badge-dormant {
     @apply bg-yellow-900/50 text-yellow-400 border border-yellow-800;
+  }
+  .light .badge-dormant {
+    @apply bg-yellow-100 text-yellow-700 border-yellow-300;
   }
 
   .badge-dead {
     @apply bg-red-900/50 text-red-400 border border-red-800;
   }
+  .light .badge-dead {
+    @apply bg-red-100 text-red-700 border-red-300;
+  }
 
   .badge-bullish {
     @apply bg-green-900/50 text-green-400;
+  }
+  .light .badge-bullish {
+    @apply bg-green-100 text-green-700;
   }
 
   .badge-bearish {
     @apply bg-red-900/50 text-red-400;
   }
+  .light .badge-bearish {
+    @apply bg-red-100 text-red-700;
+  }
 
   .nav-link {
+    color: var(--text-tertiary);
     @apply flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
-           text-gray-400 hover:text-white hover:bg-gray-800/60
            transition-colors duration-150;
+  }
+  .nav-link:hover {
+    color: var(--text-heading);
+    background-color: var(--bg-hover);
   }
 
   .nav-link-active {
     @apply text-bee-400 bg-bee-400/10 hover:text-bee-300;
+  }
+
+  /* ── 通用主题辅助类 ── */
+  .theme-bg-primary {
+    background-color: var(--bg-primary);
+  }
+  .theme-bg-secondary {
+    background-color: var(--bg-secondary);
+  }
+  .theme-bg-tertiary {
+    background-color: var(--bg-tertiary);
+  }
+  .theme-border {
+    border-color: var(--border-primary);
+  }
+  .theme-border-secondary {
+    border-color: var(--border-secondary);
+  }
+  .theme-text-primary {
+    color: var(--text-primary);
+  }
+  .theme-text-secondary {
+    color: var(--text-secondary);
+  }
+  .theme-text-muted {
+    color: var(--text-muted);
+  }
+  .theme-text-heading {
+    color: var(--text-heading);
+  }
+  .theme-input {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text-primary);
+  }
+  .theme-skeleton {
+    background-color: var(--skeleton-bg);
   }
 }

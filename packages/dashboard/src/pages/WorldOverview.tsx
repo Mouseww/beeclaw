@@ -18,8 +18,8 @@ export function WorldOverview() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h2 className="text-2xl font-bold text-white">世界总览</h2>
-        <p className="text-sm text-gray-500 mt-1">BeeClaw 仿真世界实时状态</p>
+        <h2 className="text-2xl font-bold theme-text-heading" style={{ color: 'var(--text-heading)' }}>世界总览</h2>
+        <p className="text-sm theme-text-muted mt-1" style={{ color: 'var(--text-muted)' }}>BeeClaw 仿真世界实时状态</p>
       </div>
 
       {/* 统计卡片 */}
@@ -74,24 +74,24 @@ export function WorldOverview() {
                   <p className="text-2xl font-bold text-green-400">
                     {(status.sentiment['bullish'] ?? 0).toFixed(1)}%
                   </p>
-                  <p className="text-xs text-gray-500">看多</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>看多</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-400">
+                  <p className="text-2xl font-bold" style={{ color: 'var(--text-tertiary)' }}>
                     {(status.sentiment['neutral'] ?? 0).toFixed(1)}%
                   </p>
-                  <p className="text-xs text-gray-500">中立</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>中立</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-red-400">
                     {(status.sentiment['bearish'] ?? 0).toFixed(1)}%
                   </p>
-                  <p className="text-xs text-gray-500">看空</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>看空</p>
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-gray-500 text-sm">暂无情绪数据</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>暂无情绪数据</p>
           )}
         </Card>
 
@@ -100,7 +100,7 @@ export function WorldOverview() {
           {status?.lastTick ? (
             <TickResultView tick={status.lastTick} />
           ) : (
-            <p className="text-gray-500 text-sm">等待第一个 Tick...</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>等待第一个 Tick...</p>
           )}
         </Card>
       </div>
@@ -111,7 +111,7 @@ export function WorldOverview() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-gray-500 text-xs uppercase border-b border-gray-800">
+                <tr className="text-xs uppercase border-b theme-border" style={{ color: 'var(--text-muted)' }}>
                   <th className="text-left py-2 pr-4">Tick</th>
                   <th className="text-left py-2 pr-4">时间</th>
                   <th className="text-right py-2 pr-4">事件</th>
@@ -122,22 +122,22 @@ export function WorldOverview() {
               </thead>
               <tbody>
                 {historyData.history.slice(-10).reverse().map((t) => (
-                  <tr key={t.tick} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                  <tr key={t.tick} className="border-b theme-border hover:opacity-80" style={{ borderColor: 'var(--border-primary)' }}>
                     <td className="py-2 pr-4 font-mono text-bee-400">#{t.tick}</td>
-                    <td className="py-2 pr-4 text-gray-400">
+                    <td className="py-2 pr-4" style={{ color: 'var(--text-tertiary)' }}>
                       {new Date(t.timestamp).toLocaleTimeString('zh-CN')}
                     </td>
                     <td className="py-2 pr-4 text-right">{t.eventsProcessed}</td>
                     <td className="py-2 pr-4 text-right">{t.responsesCollected}</td>
                     <td className="py-2 pr-4 text-right">{t.agentsActivated}</td>
-                    <td className="py-2 text-right text-gray-400">{t.durationMs}ms</td>
+                    <td className="py-2 text-right" style={{ color: 'var(--text-tertiary)' }}>{t.durationMs}ms</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">暂无历史记录</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>暂无历史记录</p>
         )}
       </Card>
     </div>
@@ -150,32 +150,32 @@ function TickResultView({ tick }: { tick: TickResult }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-xs text-gray-500">回合</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>回合</p>
           <p className="text-lg font-mono text-bee-400">#{tick.tick}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500">耗时</p>
-          <p className="text-lg font-mono text-gray-200">{tick.durationMs}ms</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>耗时</p>
+          <p className="text-lg font-mono" style={{ color: 'var(--text-secondary)' }}>{tick.durationMs}ms</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500">处理事件</p>
-          <p className="text-lg font-bold text-white">{tick.eventsProcessed}</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>处理事件</p>
+          <p className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>{tick.eventsProcessed}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500">Agent 响应</p>
-          <p className="text-lg font-bold text-white">{tick.responsesCollected}</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Agent 响应</p>
+          <p className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>{tick.responsesCollected}</p>
         </div>
       </div>
       {tick.events && tick.events.length > 0 && (
-        <div className="border-t border-gray-800 pt-3">
-          <p className="text-xs text-gray-500 mb-2">事件列表</p>
+        <div className="border-t pt-3" style={{ borderColor: 'var(--border-primary)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>事件列表</p>
           <div className="space-y-1">
             {tick.events.slice(0, 5).map((evt) => (
               <div key={evt.id} className="flex items-center gap-2 text-sm">
-                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-800 text-gray-400">
+                <span className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
                   {evt.category}
                 </span>
-                <span className="text-gray-200 truncate">{evt.title}</span>
+                <span style={{ color: 'var(--text-secondary)' }} className="truncate">{evt.title}</span>
               </div>
             ))}
           </div>

@@ -42,27 +42,30 @@ export function EventInjectForm({ onInjected }: { onInjected?: () => void }) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="事件标题..."
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-bee-500 transition-colors"
+        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-bee-500 transition-colors theme-input"
+        style={{ backgroundColor: 'var(--input-bg)', borderWidth: '1px', borderColor: 'var(--input-border)', color: 'var(--text-primary)' }}
       />
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="事件详情..."
         rows={3}
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-bee-500 transition-colors resize-none"
+        className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-bee-500 transition-colors resize-none theme-input"
+        style={{ backgroundColor: 'var(--input-bg)', borderWidth: '1px', borderColor: 'var(--input-border)', color: 'var(--text-primary)' }}
       />
       <div className="flex gap-3 items-center">
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-bee-500"
+          className="rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-bee-500"
+          style={{ backgroundColor: 'var(--input-bg)', borderWidth: '1px', borderColor: 'var(--input-border)', color: 'var(--text-primary)' }}
         >
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
         <div className="flex items-center gap-2 flex-1">
-          <span className="text-xs text-gray-500">重要性</span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>重要性</span>
           <input
             type="range"
             min="0"

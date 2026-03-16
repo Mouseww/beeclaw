@@ -17,8 +17,8 @@ export function EventFeed() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h2 className="text-2xl font-bold text-white">事件流</h2>
-        <p className="text-sm text-gray-500 mt-1">实时事件和 Agent 响应</p>
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>事件流</h2>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>实时事件和 Agent 响应</p>
       </div>
 
       {/* 事件注入 */}
@@ -60,7 +60,7 @@ function TickCard({ tick, isLatest }: { tick: TickResult; isLatest: boolean }) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
           <span>{tick.eventsProcessed} 事件</span>
           <span>{tick.agentsActivated} Agent 激活</span>
           <span>{tick.durationMs}ms</span>
@@ -71,15 +71,16 @@ function TickCard({ tick, isLatest }: { tick: TickResult; isLatest: boolean }) {
       {/* 事件列表 */}
       {tick.events && tick.events.length > 0 && (
         <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">事件</p>
+          <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>事件</p>
           <div className="space-y-1.5">
             {tick.events.map((evt) => (
               <div
                 key={evt.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/50"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ backgroundColor: 'var(--bg-tertiary)', opacity: 0.7 }}
               >
                 <CategoryIcon category={evt.category} />
-                <span className="text-sm text-gray-200 flex-1">{evt.title}</span>
+                <span className="text-sm flex-1" style={{ color: 'var(--text-secondary)' }}>{evt.title}</span>
                 <ImportanceIndicator importance={evt.importance} />
               </div>
             ))}
@@ -90,7 +91,7 @@ function TickCard({ tick, isLatest }: { tick: TickResult; isLatest: boolean }) {
       {/* Agent 响应 */}
       {tick.responses && tick.responses.length > 0 && (
         <div>
-          <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">
+          <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
             Agent 响应 ({tick.responses.length})
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -99,7 +100,7 @@ function TickCard({ tick, isLatest }: { tick: TickResult; isLatest: boolean }) {
             ))}
           </div>
           {tick.responses.length > 6 && (
-            <p className="text-xs text-gray-500 mt-2 text-center">
+            <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
               +{tick.responses.length - 6} 更多响应
             </p>
           )}
@@ -119,16 +120,16 @@ function ResponseCard({ response }: { response: TickResponse }) {
         : 'text-gray-400';
 
   return (
-    <div className="px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-800">
+    <div className="px-3 py-2 rounded-lg border" style={{ backgroundColor: 'var(--bg-tertiary)', opacity: 0.6, borderColor: 'var(--border-primary)' }}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-gray-200">{response.agentName}</span>
+        <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{response.agentName}</span>
         <span className={`text-xs ${emotionColor}`}>
           {response.emotionalState > 0 ? '+' : ''}
           {response.emotionalState.toFixed(2)}
         </span>
       </div>
-      <p className="text-xs text-gray-400 line-clamp-2">{response.opinion}</p>
-      <span className="text-xs text-gray-600 mt-1 inline-block">
+      <p className="text-xs line-clamp-2" style={{ color: 'var(--text-tertiary)' }}>{response.opinion}</p>
+      <span className="text-xs mt-1 inline-block" style={{ color: 'var(--text-faint)' }}>
         {response.action}
       </span>
     </div>
