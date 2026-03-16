@@ -1,6 +1,7 @@
 // ============================================================================
 // @beeclaw/server — /api/ingestion 路由测试
 // ============================================================================
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventIngestion } from './EventIngestion.js';
-import type { FeedSource, EventIngestionConfig } from './types.js';
+import type { FeedSource } from './types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
