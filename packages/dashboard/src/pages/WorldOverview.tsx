@@ -125,7 +125,7 @@ export function WorldOverview() {
                   <tr key={t.tick} className="border-b theme-border hover:opacity-80" style={{ borderColor: 'var(--border-primary)' }}>
                     <td className="py-2 pr-4 font-mono text-bee-400">#{t.tick}</td>
                     <td className="py-2 pr-4" style={{ color: 'var(--text-tertiary)' }}>
-                      {new Date(t.timestamp).toLocaleTimeString('zh-CN')}
+                      {t.timestamp ? new Date(t.timestamp).toLocaleTimeString('zh-CN') : `Tick ${t.tick}`}
                     </td>
                     <td className="py-2 pr-4 text-right">{t.eventsProcessed}</td>
                     <td className="py-2 pr-4 text-right">{t.responsesCollected}</td>

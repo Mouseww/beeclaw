@@ -22,7 +22,7 @@ export interface TickResult {
   responsesCollected: number;
   agentsActivated: number;
   durationMs: number;
-  timestamp: string;
+  timestamp?: string;
   events?: TickEvent[];
   responses?: TickResponse[];
 }

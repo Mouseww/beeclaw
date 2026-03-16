@@ -64,7 +64,7 @@ function TickCard({ tick, isLatest }: { tick: TickResult; isLatest: boolean }) {
           <span>{tick.eventsProcessed} 事件</span>
           <span>{tick.agentsActivated} Agent 激活</span>
           <span>{tick.durationMs}ms</span>
-          <span>{new Date(tick.timestamp).toLocaleTimeString('zh-CN')}</span>
+          <span>{tick.timestamp ? new Date(tick.timestamp).toLocaleTimeString('zh-CN') : `Tick ${tick.tick}`}</span>
         </div>
       </div>
 

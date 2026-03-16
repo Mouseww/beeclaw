@@ -119,7 +119,7 @@ function TickCard({ tick }: { tick: TickResult }) {
 
         {/* 时间戳 */}
         <p className="text-xs text-gray-600 mt-3">
-          {new Date(tick.timestamp).toLocaleString('zh-CN')}
+          {tick.timestamp ? new Date(tick.timestamp).toLocaleString('zh-CN') : `Tick ${tick.tick}`}
         </p>
       </div>
     </div>
