@@ -5,8 +5,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { initDatabase } from './database.js';
 import { Store } from './store.js';
-import type { ConsensusSignal, LLMConfig, ModelRouterConfig } from '@beeclaw/shared';
-import type { TickResult } from '@beeclaw/world-engine';
+import type { ApiKeyEntry } from './store.js';
+import type { ConsensusSignal, LLMConfig, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
+import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
+import type { FeedSource } from '@beeclaw/event-ingestion';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -439,6 +441,534 @@ describe('Store', () => {
       store.saveLLMConfig('cheap', makeLLMConfig('new-model'));
       const loaded = store.loadLLMConfig('cheap');
       expect(loaded!.model).toBe('new-model');
+    });
+  });
+
+  // ════════════════════════════════════════
+  // Webhook 订阅
+  // ════════════════════════════════════════
+
+  describe('Webhook 订阅', () => {
+    const makeWebhook = (id: string, overrides?: Partial<WebhookSubscription>): WebhookSubscription => ({
+      id,
+      url: overrides?.url ?? `https://example.com/webhook/${id}`,
+      events: overrides?.events ?? ['tick.completed', 'consensus.signal'] as WebhookEventType[],
+      secret: overrides?.secret ?? `secret-${id}`,
+      active: overrides?.active ?? true,
+      createdAt: overrides?.createdAt ?? Math.floor(Date.now() / 1000),
+    });
+
+    it('getWebhooks 初始应为空', () => {
+      expect(store.getWebhooks()).toEqual([]);
+    });
+
+    it('createWebhook 后应能通过 getWebhooks 读取', () => {
+      const wh = makeWebhook('wh1');
+      store.createWebhook(wh);
+      const webhooks = store.getWebhooks();
+      expect(webhooks.length).toBe(1);
+      expect(webhooks[0]!.id).toBe('wh1');
+      expect(webhooks[0]!.url).toBe('https://example.com/webhook/wh1');
+      expect(webhooks[0]!.events).toEqual(['tick.completed', 'consensus.signal']);
+      expect(webhooks[0]!.secret).toBe('secret-wh1');
+      expect(webhooks[0]!.active).toBe(true);
+    });
+
+    it('getWebhook 应按 ID 查找单个 webhook', () => {
+      store.createWebhook(makeWebhook('wh1'));
+      store.createWebhook(makeWebhook('wh2'));
+
+      const wh = store.getWebhook('wh1');
+      expect(wh).not.toBeNull();
+      expect(wh!.id).toBe('wh1');
+    });
+
+    it('getWebhook 不存在的 ID 应返回 null', () => {
+      expect(store.getWebhook('nonexistent')).toBeNull();
+    });
+
+    it('updateWebhook 应更新指定字段', () => {
+      store.createWebhook(makeWebhook('wh1'));
+
+      const updated = store.updateWebhook('wh1', {
+        url: 'https://new-url.com/hook',
+        active: false,
+      });
+      expect(updated).toBe(true);
+
+      const wh = store.getWebhook('wh1');
+      expect(wh!.url).toBe('https://new-url.com/hook');
+      expect(wh!.active).toBe(false);
+      // events 应保持不变
+      expect(wh!.events).toEqual(['tick.completed', 'consensus.signal']);
+    });
+
+    it('updateWebhook 应支持只更新 events', () => {
+      store.createWebhook(makeWebhook('wh1'));
+
+      store.updateWebhook('wh1', {
+        events: ['agent.spawned'] as WebhookEventType[],
+      });
+
+      const wh = store.getWebhook('wh1');
+      expect(wh!.events).toEqual(['agent.spawned']);
+      // url 应保持不变
+      expect(wh!.url).toBe('https://example.com/webhook/wh1');
+    });
+
+    it('updateWebhook 不存在的 ID 应返回 false', () => {
+      expect(store.updateWebhook('nonexistent', { url: 'x' })).toBe(false);
+    });
+
+    it('deleteWebhook 应删除指定 webhook', () => {
+      store.createWebhook(makeWebhook('wh1'));
+      store.createWebhook(makeWebhook('wh2'));
+
+      const deleted = store.deleteWebhook('wh1');
+      expect(deleted).toBe(true);
+
+      expect(store.getWebhook('wh1')).toBeNull();
+      expect(store.getWebhook('wh2')).not.toBeNull();
+    });
+
+    it('deleteWebhook 不存在的 ID 应返回 false', () => {
+      expect(store.deleteWebhook('nonexistent')).toBe(false);
+    });
+
+    it('getActiveWebhooksForEvent 应返回活跃且订阅了指定事件的 webhook', () => {
+      store.createWebhook(makeWebhook('wh1', { events: ['tick.completed'] as WebhookEventType[], active: true }));
+      store.createWebhook(makeWebhook('wh2', { events: ['consensus.signal'] as WebhookEventType[], active: true }));
+      store.createWebhook(makeWebhook('wh3', { events: ['tick.completed'] as WebhookEventType[], active: false }));
+
+      const active = store.getActiveWebhooksForEvent('tick.completed');
+      expect(active.length).toBe(1);
+      expect(active[0]!.id).toBe('wh1');
+    });
+
+    it('getActiveWebhooksForEvent 无匹配时应返回空数组', () => {
+      store.createWebhook(makeWebhook('wh1', { events: ['consensus.signal'] as WebhookEventType[] }));
+      const active = store.getActiveWebhooksForEvent('agent.spawned');
+      expect(active).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // 事件持久化（v2.0）
+  // ════════════════════════════════════════
+
+  describe('事件持久化', () => {
+    const makeEvent = (id: string, overrides?: Partial<TickEventSummary & { content?: string; tags?: string[]; sourceId?: string }>): TickEventSummary => ({
+      id,
+      title: overrides?.title ?? `Event ${id}`,
+      category: overrides?.category ?? 'general',
+      importance: overrides?.importance ?? 0.5,
+      ...overrides,
+    });
+
+    it('saveEvents 后应能通过 getEventsByTick 读取', () => {
+      const events = [
+        makeEvent('e1', { title: '比特币大涨', category: 'finance', importance: 0.9 }),
+        makeEvent('e2', { title: 'AI 政策发布', category: 'politics', importance: 0.7 }),
+      ];
+      store.saveEvents(events, 1);
+
+      const loaded = store.getEventsByTick(1);
+      expect(loaded.length).toBe(2);
+      // 按 importance 降序
+      expect(loaded[0]!.title).toBe('比特币大涨');
+      expect(loaded[0]!.importance).toBe(0.9);
+      expect(loaded[1]!.title).toBe('AI 政策发布');
+    });
+
+    it('saveEvents 应正确保存含 content/tags/sourceId 的事件', () => {
+      const events = [
+        makeEvent('e1', {
+          title: '测试事件',
+          content: '详细内容',
+          tags: ['tag1', 'tag2'],
+          sourceId: 'src-1',
+        }),
+      ];
+      store.saveEvents(events, 1);
+
+      const loaded = store.getEventsByTick(1);
+      expect(loaded.length).toBe(1);
+      expect(loaded[0]!.id).toBe('e1');
+      expect(loaded[0]!.title).toBe('测试事件');
+    });
+
+    it('saveEvents 使用 INSERT OR IGNORE 应不覆盖已有事件', () => {
+      store.saveEvents([makeEvent('e1', { title: '原始' })], 1);
+      store.saveEvents([makeEvent('e1', { title: '重复' })], 1);
+
+      const loaded = store.getEventsByTick(1);
+      expect(loaded.length).toBe(1);
+      expect(loaded[0]!.title).toBe('原始');
+    });
+
+    it('getEventsByTick 查询不存在的 tick 应返回空数组', () => {
+      expect(store.getEventsByTick(999)).toEqual([]);
+    });
+
+    it('saveEvents 空数组应不报错', () => {
+      store.saveEvents([], 1);
+      expect(store.getEventsByTick(1)).toEqual([]);
+    });
+
+    it('getEventsByTick 应能区分不同 tick 的事件', () => {
+      store.saveEvents([makeEvent('e1')], 1);
+      store.saveEvents([makeEvent('e2')], 2);
+      store.saveEvents([makeEvent('e3')], 2);
+
+      expect(store.getEventsByTick(1).length).toBe(1);
+      expect(store.getEventsByTick(2).length).toBe(2);
+    });
+
+    it('searchEvents 应按标题模糊匹配', () => {
+      store.saveEvents([
+        makeEvent('e1', { title: '比特币价格暴涨' }),
+        makeEvent('e2', { title: '以太坊升级完成' }),
+        makeEvent('e3', { title: '比特币挖矿难度上升' }),
+      ], 1);
+
+      const results = store.searchEvents('比特币');
+      expect(results.length).toBe(2);
+    });
+
+    it('searchEvents 应遵守 limit', () => {
+      for (let i = 0; i < 10; i++) {
+        store.saveEvents([makeEvent(`e${i}`, { title: `相同关键词-${i}` })], i);
+      }
+      const results = store.searchEvents('相同关键词', 3);
+      expect(results.length).toBe(3);
+    });
+
+    it('searchEvents 无匹配时应返回空数组', () => {
+      store.saveEvents([makeEvent('e1', { title: '没有关键词' })], 1);
+      expect(store.searchEvents('不存在')).toEqual([]);
+    });
+
+    it('searchEvents 默认 limit 为 20', () => {
+      for (let i = 0; i < 30; i++) {
+        store.saveEvents([makeEvent(`e${i}`, { title: `关键词-${i}` })], i);
+      }
+      const results = store.searchEvents('关键词');
+      expect(results.length).toBe(20);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // Agent 响应持久化（v2.0）
+  // ════════════════════════════════════════
+
+  describe('Agent 响应持久化', () => {
+    const makeResponse = (agentId: string, overrides?: Partial<TickResponseSummary & { eventId?: string; reasoning?: string }>): TickResponseSummary => ({
+      agentId,
+      agentName: overrides?.agentName ?? `Agent-${agentId}`,
+      opinion: overrides?.opinion ?? '看涨',
+      action: overrides?.action ?? 'buy',
+      emotionalState: overrides?.emotionalState ?? 0.5,
+      ...overrides,
+    });
+
+    it('saveResponses 后应能通过 getResponsesByTick 读取', () => {
+      const responses = [
+        makeResponse('a1', { opinion: '看涨比特币', emotionalState: 0.8 }),
+        makeResponse('a2', { opinion: '看跌市场', emotionalState: -0.5 }),
+      ];
+      store.saveResponses(responses, 1);
+
+      const loaded = store.getResponsesByTick(1);
+      expect(loaded.length).toBe(2);
+      expect(loaded[0]!.agentId).toBe('a1');
+      expect(loaded[0]!.opinion).toBe('看涨比特币');
+      expect(loaded[1]!.agentId).toBe('a2');
+      expect(loaded[1]!.opinion).toBe('看跌市场');
+    });
+
+    it('saveResponses 应正确计算 sentiment', () => {
+      const responses = [
+        makeResponse('a1', { emotionalState: 0.5 }),  // bullish (>0.2)
+        makeResponse('a2', { emotionalState: -0.5 }), // bearish (<-0.2)
+        makeResponse('a3', { emotionalState: 0.0 }),   // neutral
+        makeResponse('a4', { emotionalState: 0.2 }),   // neutral (=0.2, not >0.2)
+        makeResponse('a5', { emotionalState: -0.2 }),  // neutral (=-0.2, not <-0.2)
+      ];
+      store.saveResponses(responses, 1);
+
+      const loaded = store.getResponsesByTick(1);
+      expect(loaded.length).toBe(5);
+    });
+
+    it('saveResponses 应保存 eventId 和 reasoning', () => {
+      const responses = [
+        makeResponse('a1', { eventId: 'e1', reasoning: '技术分析看涨' }),
+      ];
+      store.saveResponses(responses, 1);
+
+      // 使用 getResponsesByEvent 验证 eventId 关联
+      const byEvent = store.getResponsesByEvent('e1');
+      expect(byEvent.length).toBe(1);
+      expect(byEvent[0]!.agentId).toBe('a1');
+    });
+
+    it('getResponsesByTick 查询不存在的 tick 应返回空数组', () => {
+      expect(store.getResponsesByTick(999)).toEqual([]);
+    });
+
+    it('getResponsesByEvent 查询不存在的 eventId 应返回空数组', () => {
+      expect(store.getResponsesByEvent('nonexistent')).toEqual([]);
+    });
+
+    it('saveResponses 空数组应不报错', () => {
+      store.saveResponses([], 1);
+      expect(store.getResponsesByTick(1)).toEqual([]);
+    });
+
+    it('getResponsesByTick 应能区分不同 tick 的响应', () => {
+      store.saveResponses([makeResponse('a1')], 1);
+      store.saveResponses([makeResponse('a2'), makeResponse('a3')], 2);
+
+      expect(store.getResponsesByTick(1).length).toBe(1);
+      expect(store.getResponsesByTick(2).length).toBe(2);
+    });
+
+    it('getResponsesByEvent 应按 eventId 过滤', () => {
+      store.saveResponses([
+        makeResponse('a1', { eventId: 'e1' }),
+        makeResponse('a2', { eventId: 'e2' }),
+        makeResponse('a3', { eventId: 'e1' }),
+      ], 1);
+
+      const e1Responses = store.getResponsesByEvent('e1');
+      expect(e1Responses.length).toBe(2);
+
+      const e2Responses = store.getResponsesByEvent('e2');
+      expect(e2Responses.length).toBe(1);
+    });
+
+    it('saveResponses 应正确映射 camelCase 字段', () => {
+      store.saveResponses([
+        makeResponse('a1', {
+          agentName: 'TestAgent',
+          opinion: '中性观点',
+          action: 'hold',
+          emotionalState: 0.1,
+        }),
+      ], 1);
+
+      const loaded = store.getResponsesByTick(1);
+      expect(loaded[0]!.agentName).toBe('TestAgent');
+      expect(loaded[0]!.opinion).toBe('中性观点');
+      expect(loaded[0]!.action).toBe('hold');
+      expect(loaded[0]!.emotionalState).toBe(0.1);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // RSS 数据源持久化（v2.0）
+  // ════════════════════════════════════════
+
+  describe('RSS 数据源持久化', () => {
+    const makeFeedSource = (id: string, overrides?: Partial<FeedSource>): FeedSource => ({
+      id,
+      name: overrides?.name ?? `Feed ${id}`,
+      url: overrides?.url ?? `https://example.com/rss/${id}`,
+      category: overrides?.category ?? 'general',
+      tags: overrides?.tags ?? ['tag1'],
+      pollIntervalMs: overrides?.pollIntervalMs ?? 300_000,
+      enabled: overrides?.enabled ?? true,
+    });
+
+    it('loadRssSources 初始应为空', () => {
+      expect(store.loadRssSources()).toEqual([]);
+    });
+
+    it('saveRssSource 后应能通过 loadRssSources 读取', () => {
+      store.saveRssSource(makeFeedSource('rss1', {
+        name: 'CoinDesk',
+        url: 'https://feeds.coindesk.com/rss',
+        category: 'finance',
+        tags: ['crypto', 'bitcoin'],
+      }));
+
+      const sources = store.loadRssSources();
+      expect(sources.length).toBe(1);
+      expect(sources[0]!.id).toBe('rss1');
+      expect(sources[0]!.name).toBe('CoinDesk');
+      expect(sources[0]!.url).toBe('https://feeds.coindesk.com/rss');
+      expect(sources[0]!.category).toBe('finance');
+      expect(sources[0]!.tags).toEqual(['crypto', 'bitcoin']);
+      expect(sources[0]!.pollIntervalMs).toBe(300_000);
+      expect(sources[0]!.enabled).toBe(true);
+    });
+
+    it('getRssSource 应按 ID 查找单个数据源', () => {
+      store.saveRssSource(makeFeedSource('rss1'));
+      store.saveRssSource(makeFeedSource('rss2'));
+
+      const source = store.getRssSource('rss1');
+      expect(source).not.toBeNull();
+      expect(source!.id).toBe('rss1');
+    });
+
+    it('getRssSource 不存在的 ID 应返回 null', () => {
+      expect(store.getRssSource('nonexistent')).toBeNull();
+    });
+
+    it('saveRssSource 相同 ID 应覆盖（INSERT OR REPLACE）', () => {
+      store.saveRssSource(makeFeedSource('rss1', { name: '旧名称' }));
+      store.saveRssSource(makeFeedSource('rss1', { name: '新名称' }));
+
+      const sources = store.loadRssSources();
+      expect(sources.length).toBe(1);
+      expect(sources[0]!.name).toBe('新名称');
+    });
+
+    it('saveRssSources 应批量保存', () => {
+      const sources = [
+        makeFeedSource('rss1'),
+        makeFeedSource('rss2'),
+        makeFeedSource('rss3'),
+      ];
+      store.saveRssSources(sources);
+
+      const loaded = store.loadRssSources();
+      expect(loaded.length).toBe(3);
+    });
+
+    it('deleteRssSource 应删除指定数据源', () => {
+      store.saveRssSource(makeFeedSource('rss1'));
+      store.saveRssSource(makeFeedSource('rss2'));
+
+      const deleted = store.deleteRssSource('rss1');
+      expect(deleted).toBe(true);
+
+      expect(store.getRssSource('rss1')).toBeNull();
+      expect(store.getRssSource('rss2')).not.toBeNull();
+    });
+
+    it('deleteRssSource 不存在的 ID 应返回 false', () => {
+      expect(store.deleteRssSource('nonexistent')).toBe(false);
+    });
+
+    it('saveRssSource 应支持 tags 为 undefined', () => {
+      store.saveRssSource({
+        id: 'rss1',
+        name: 'Test',
+        url: 'https://example.com',
+        category: 'general',
+      } as FeedSource);
+
+      const source = store.getRssSource('rss1');
+      expect(source).not.toBeNull();
+      expect(source!.tags).toEqual([]);
+    });
+
+    it('saveRssSource 应支持 enabled 为 false', () => {
+      store.saveRssSource(makeFeedSource('rss1', { enabled: false }));
+
+      const source = store.getRssSource('rss1');
+      expect(source!.enabled).toBe(false);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // API Key 管理（v2.0）
+  // ════════════════════════════════════════
+
+  describe('API Key 管理', () => {
+    const makeApiKeyEntry = (id: string, overrides?: Partial<ApiKeyEntry>): ApiKeyEntry => ({
+      id,
+      name: overrides?.name ?? `Key ${id}`,
+      keyHash: overrides?.keyHash ?? `hash-${id}`,
+      permissions: overrides?.permissions ?? ['read', 'write'],
+      rateLimit: overrides?.rateLimit ?? 100,
+    });
+
+    it('getApiKeys 初始应为空', () => {
+      expect(store.getApiKeys()).toEqual([]);
+    });
+
+    it('createApiKey 后应能通过 getApiKeys 读取', () => {
+      store.createApiKey(makeApiKeyEntry('k1', {
+        name: 'Admin Key',
+        permissions: ['read', 'write', 'admin'],
+        rateLimit: 200,
+      }));
+
+      const keys = store.getApiKeys();
+      expect(keys.length).toBe(1);
+      expect(keys[0]!.id).toBe('k1');
+      expect(keys[0]!.name).toBe('Admin Key');
+      expect(keys[0]!.keyHash).toBe('hash-k1');
+      expect(keys[0]!.permissions).toEqual(['read', 'write', 'admin']);
+      expect(keys[0]!.rateLimit).toBe(200);
+      expect(keys[0]!.active).toBe(true);
+      expect(keys[0]!.lastUsedAt).toBeNull();
+      expect(keys[0]!.createdAt).toBeGreaterThan(0);
+    });
+
+    it('getApiKeyByHash 应通过 hash 查找活跃的 key', () => {
+      store.createApiKey(makeApiKeyEntry('k1'));
+
+      const key = store.getApiKeyByHash('hash-k1');
+      expect(key).not.toBeNull();
+      expect(key!.id).toBe('k1');
+    });
+
+    it('getApiKeyByHash 不存在的 hash 应返回 null', () => {
+      expect(store.getApiKeyByHash('nonexistent')).toBeNull();
+    });
+
+    it('touchApiKey 应更新 last_used_at 时间戳', () => {
+      store.createApiKey(makeApiKeyEntry('k1'));
+
+      // 初始 lastUsedAt 应为 null
+      let key = store.getApiKeyByHash('hash-k1');
+      expect(key!.lastUsedAt).toBeNull();
+
+      // touch 后应有值
+      store.touchApiKey('k1');
+      key = store.getApiKeyByHash('hash-k1');
+      expect(key!.lastUsedAt).not.toBeNull();
+      expect(key!.lastUsedAt).toBeGreaterThan(0);
+    });
+
+    it('deleteApiKey 应删除指定 key', () => {
+      store.createApiKey(makeApiKeyEntry('k1'));
+      store.createApiKey(makeApiKeyEntry('k2'));
+
+      const deleted = store.deleteApiKey('k1');
+      expect(deleted).toBe(true);
+
+      const keys = store.getApiKeys();
+      expect(keys.length).toBe(1);
+      expect(keys[0]!.id).toBe('k2');
+    });
+
+    it('deleteApiKey 不存在的 ID 应返回 false', () => {
+      expect(store.deleteApiKey('nonexistent')).toBe(false);
+    });
+
+    it('多个 API Key 应互不影响', () => {
+      store.createApiKey(makeApiKeyEntry('k1', { name: 'Key1', keyHash: 'hash1' }));
+      store.createApiKey(makeApiKeyEntry('k2', { name: 'Key2', keyHash: 'hash2' }));
+      store.createApiKey(makeApiKeyEntry('k3', { name: 'Key3', keyHash: 'hash3' }));
+
+      const keys = store.getApiKeys();
+      expect(keys.length).toBe(3);
+
+      expect(store.getApiKeyByHash('hash1')!.name).toBe('Key1');
+      expect(store.getApiKeyByHash('hash2')!.name).toBe('Key2');
+      expect(store.getApiKeyByHash('hash3')!.name).toBe('Key3');
+    });
+
+    it('deleteApiKey 后 getApiKeyByHash 应返回 null', () => {
+      store.createApiKey(makeApiKeyEntry('k1'));
+      store.deleteApiKey('k1');
+
+      expect(store.getApiKeyByHash('hash-k1')).toBeNull();
     });
   });
 });
