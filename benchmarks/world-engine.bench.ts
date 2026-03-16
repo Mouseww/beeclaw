@@ -1,9 +1,16 @@
 // ============================================================================
 // BeeClaw Benchmark — WorldEngine Tick 性能
-// 测试 100 / 500 / 1000 Agent 场景下的 tick 执行性能
+// 测试 10 / 50 / 100 / 500 / 1000 Agent 场景下的 tick 执行性能
+//
+// 预期基线（参考值，实际因硬件而异）:
+//   - 10 agents:   < 5ms/tick
+//   - 50 agents:   < 20ms/tick
+//   - 100 agents:  < 50ms/tick
+//   - 500 agents:  < 200ms/tick
+//   - 1000 agents: < 500ms/tick
 // ============================================================================
 
-import { bench, describe } from 'vitest';
+import { bench, describe, beforeAll, afterAll } from 'vitest';
 import { WorldEngine } from '@beeclaw/world-engine';
 import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig, ModelTier } from '@beeclaw/shared';
@@ -101,6 +108,24 @@ describe('WorldEngine.step() — tick 性能', () => {
   });
 
   bench(
+    '10 Agents — single tick',
+    async () => {
+      const engine = setupEngine(10);
+      await engine.step();
+    },
+    { iterations: 50, warmupIterations: 5 },
+  );
+
+  bench(
+    '50 Agents — single tick',
+    async () => {
+      const engine = setupEngine(50);
+      await engine.step();
+    },
+    { iterations: 30, warmupIterations: 3 },
+  );
+
+  bench(
     '100 Agents — single tick',
     async () => {
       const engine = setupEngine(100);
@@ -117,12 +142,36 @@ describe('WorldEngine.step() — tick 性能', () => {
     },
     { iterations: 10, warmupIterations: 1 },
   );
+});
+
+describe('WorldEngine — 多 Tick 连续处理', () => {
+  const origLog = console.log;
+  const origDebug = console.debug;
+  beforeAll(() => {
+    console.log = () => {};
+    console.debug = () => {};
+  });
+  afterAll(() => {
+    console.log = origLog;
+    console.debug = origDebug;
+  });
 
   bench(
-    '1000 Agents — single tick',
+    '100 Agents — 10 ticks 连续执行',
     async () => {
-      const engine = setupEngine(1000);
-      await engine.step();
+      const engine = setupEngine(100);
+      for (let t = 0; t < 10; t++) {
+        // 每个 tick 注入新事件
+        engine.injectEvent({
+          title: `Tick ${t} 事件`,
+          content: `第 ${t} 轮测试事件`,
+          category: 'finance',
+          importance: 0.5,
+          propagationRadius: 0.3,
+          tags: ['benchmark'],
+        });
+        await engine.step();
+      }
     },
     { iterations: 5, warmupIterations: 1 },
   );
