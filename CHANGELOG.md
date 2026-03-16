@@ -2,9 +2,16 @@
 
 ## [1.0.13] - 2026-03-16
 
+### ✨ Features
+
+- **API Key Management:** 完整的 API 密钥管理功能（创建、列表、删除），支持密钥作用域和过期时间
+- **Enhanced Auth:** 增强认证中间件，支持 API Key + Bearer Token 双模式认证
+- **Tick Persistence:** Tick 事件和 Agent 响应持久化存储，重启后可恢复历史数据
+
 ### 🧪 Tests
 
 - **Server:** 补全 API Key 管理路由（`/api/keys`）单元测试，覆盖 POST 创建、GET 列表、DELETE 删除及参数校验
+- **Server:** 补全 config、events、health、metrics、prometheus、status 路由单元测试
 
 ## [1.0.12] - 2026-03-16
 
