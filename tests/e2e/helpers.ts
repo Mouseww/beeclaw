@@ -5,10 +5,7 @@
 
 import { vi } from 'vitest';
 import { WorldEngine, type WorldEngineOptions } from '@beeclaw/world-engine';
-import { Agent, ModelRouter, AgentSpawner } from '@beeclaw/agent-runtime';
-import { EventBus } from '@beeclaw/event-bus';
-import { SocialGraph } from '@beeclaw/social-graph';
-import { ConsensusEngine } from '@beeclaw/consensus';
+import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig, AgentPersona, SpawnRule } from '@beeclaw/shared';
 
 // ── LLM Mock 响应池 ──

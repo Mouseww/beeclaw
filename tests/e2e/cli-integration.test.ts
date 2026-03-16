@@ -6,8 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildTestWorld, silenceConsole, createMockModelRouter } from './helpers.js';
 import { WorldEngine } from '@beeclaw/world-engine';
-import { ModelRouter, AgentSpawner } from '@beeclaw/agent-runtime';
-import type { WorldConfig, SpawnRule } from '@beeclaw/shared';
+import type { WorldConfig } from '@beeclaw/shared';
 
 describe('CLI 功能集成测试', () => {
   beforeEach(() => {
@@ -151,7 +150,7 @@ describe('CLI 功能集成测试', () => {
 
   describe('WorldState 格式化', () => {
     it('formatStatus 应返回可读的状态字符串', () => {
-      const { engine, agents } = buildTestWorld({ agentCount: 5 });
+      const { engine } = buildTestWorld({ agentCount: 5 });
 
       const formatted = engine.getWorldState().formatStatus();
       expect(typeof formatted).toBe('string');

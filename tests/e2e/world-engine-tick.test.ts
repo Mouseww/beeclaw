@@ -6,19 +6,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildTestWorld, silenceConsole } from './helpers.js';
 import type { WorldEngine } from '@beeclaw/world-engine';
-import type { ModelRouter } from '@beeclaw/agent-runtime';
 import type { Agent } from '@beeclaw/agent-runtime';
 
 describe('世界引擎完整 tick 循环', () => {
   let engine: WorldEngine;
-  let modelRouter: ModelRouter;
   let agents: Agent[];
 
   beforeEach(() => {
     silenceConsole();
     const world = buildTestWorld({ agentCount: 8 });
     engine = world.engine;
-    modelRouter = world.modelRouter;
     agents = world.agents;
   });
 
@@ -106,7 +103,8 @@ describe('世界引擎完整 tick 循环', () => {
 
     const consensusEngine = engine.getConsensusEngine();
     const topics = consensusEngine.getAllTopics();
-    const latestSignals = consensusEngine.getLatestSignals();
+    // getLatestSignals called to verify no errors; result not needed for assertion
+    consensusEngine.getLatestSignals();
 
     // 如果有 Agent 响应，则应有共识信号
     const history = engine.getTickHistory();

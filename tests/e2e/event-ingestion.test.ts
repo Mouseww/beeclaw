@@ -7,8 +7,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventBus } from '@beeclaw/event-bus';
 import { EventIngestion, parseFeed, ImportanceEvaluator } from '@beeclaw/event-ingestion';
 import { buildTestWorld, silenceConsole, MOCK_RSS_XML } from './helpers.js';
-import type { WorldEngine } from '@beeclaw/world-engine';
-import type { Agent } from '@beeclaw/agent-runtime';
 import type { FeedSource } from '@beeclaw/event-ingestion';
 
 describe('Event Ingestion Pipeline', () => {

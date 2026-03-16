@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
 import { WorldEngine } from '@beeclaw/world-engine';
-import { ModelRouter, Agent } from '@beeclaw/agent-runtime';
+import { ModelRouter } from '@beeclaw/agent-runtime';
 import { initDatabase } from '@beeclaw/server/src/persistence/database.js';
 import { Store } from '@beeclaw/server/src/persistence/store.js';
 import { registerWs } from '@beeclaw/server/src/ws/handler.js';
@@ -19,8 +19,8 @@ import { registerHistoryRoute } from '@beeclaw/server/src/api/history.js';
 import { registerHealthRoute } from '@beeclaw/server/src/api/health.js';
 import { registerScenarioRoute } from '@beeclaw/server/src/api/scenario.js';
 import type { ServerContext } from '@beeclaw/server/src/index.js';
-import type { WorldConfig, ModelRouterConfig } from '@beeclaw/shared';
-import { silenceConsole, MOCK_MODEL_CONFIG, createMockModelRouter } from './helpers.js';
+import type { WorldConfig } from '@beeclaw/shared';
+import { silenceConsole, createMockModelRouter } from './helpers.js';
 
 // ── 辅助函数 ──
 
