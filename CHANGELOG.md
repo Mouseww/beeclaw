@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.3] - 2026-03-16
+
+### 🚀 New Features
+
+- **Ingestion 状态 API** — `GET /api/ingestion` + `GET /api/ingestion/:sourceId`，返回 RSS/金融数据源实时运行指标 (`3fd2bc6`)
+- **Dashboard 事件接入页** — 新增 `/ingestion` 监控页面，展示所有数据源状态、抓取量、发射量及错误信息，每 10 秒自动刷新 (`9b969dc`)
+
+### 🧪 Tests
+
+- 19 个新测试覆盖 Ingestion 状态查询逻辑和 API 路由
+
 ## [1.0.2] - 2026-03-16
 
 ### 🚀 New Features
