@@ -76,3 +76,46 @@ export function fetchIngestionStatus(): Promise<IngestionStatus> {
 export function fetchIngestionSource(sourceId: string): Promise<IngestionSourceStatus> {
   return fetchJSON<IngestionSourceStatus>(`/ingestion/${sourceId}`);
 }
+
+/** 新增 RSS 数据源 */
+export async function addRssSource(source: {
+  id: string; name: string; url: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
+}): Promise<{ ok: boolean; id: string }> {
+  const res = await fetch(`${BASE_URL}/ingestion/sources`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(source),
+  });
+  if (!res.ok) throw new Error(`API Error: ${res.status}`);
+  return res.json();
+}
+
+/** 更新 RSS 数据源 */
+export async function updateRssSource(sourceId: string, updates: {
+  name?: string; url?: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
+}): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/ingestion/sources/${sourceId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error(`API Error: ${res.status}`);
+  return res.json();
+}
+
+/** 删除 RSS 数据源 */
+export async function deleteRssSource(sourceId: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/ingestion/sources/${sourceId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API Error: ${res.status}`);
+  return res.json();
+}
+
+/** 获取 Tick 的事件 */
+export function fetchTickEvents(tick: number): Promise<{ events: any[]; total: number }> {
+  return fetchJSON(`/ticks/${tick}/events`);
+}
+
+/** 获取 Tick 的响应 */
+export function fetchTickResponses(tick: number): Promise<{ responses: any[]; total: number }> {
+  return fetchJSON(`/ticks/${tick}/responses`);
+}

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.13] - 2026-03-16
+
+### 🧪 Tests
+
+- **Server:** 补全 API Key 管理路由（`/api/keys`）单元测试，覆盖 POST 创建、GET 列表、DELETE 删除及参数校验
+
 ## [1.0.12] - 2026-03-16
 
 ### 🧪 Tests
