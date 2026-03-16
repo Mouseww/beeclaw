@@ -1,6 +1,6 @@
 // ============================================================================
 // BeeClaw Server — API: /api/ingestion
-// RSS 事件接入状态查询 + CRUD 管理
+// RSS 事件接入状态查询 + CRUD 管理（v2.0: 数据库持久化）
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
@@ -44,7 +44,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
     if (!id || !name || !url) {
       return reply.status(400).send({ error: 'id, name, url are required' });
     }
-    ctx.ingestion.addSource({
+    const source = {
       id,
       name,
       url,
@@ -52,7 +52,10 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       tags: tags ?? [],
       pollIntervalMs: pollIntervalMs ?? 300_000,
       enabled: enabled ?? true,
-    });
+    };
+    ctx.ingestion.addSource(source);
+    // v2.0: 同步到数据库
+    ctx.store.saveRssSource(source);
     return { ok: true, id };
   });
 
@@ -70,7 +73,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
     }
     // 先删除旧的，再添加更新后的
     ctx.ingestion.removeSource(req.params.sourceId);
-    ctx.ingestion.addSource({
+    const source = {
       id: req.params.sourceId,
       name: req.body.name ?? existing.name,
       url: req.body.url ?? existing.url,
@@ -78,7 +81,10 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       tags: req.body.tags ?? [],
       pollIntervalMs: req.body.pollIntervalMs ?? 300_000,
       enabled: req.body.enabled ?? existing.enabled,
-    });
+    };
+    ctx.ingestion.addSource(source);
+    // v2.0: 同步到数据库
+    ctx.store.saveRssSource(source);
     return { ok: true, id: req.params.sourceId };
   });
 
@@ -94,6 +100,8 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
         return reply.status(404).send({ error: `Source "${req.params.sourceId}" not found` });
       }
       ctx.ingestion.removeSource(req.params.sourceId);
+      // v2.0: 同步到数据库
+      ctx.store.deleteRssSource(req.params.sourceId);
       return { ok: true, deleted: req.params.sourceId };
     },
   );
