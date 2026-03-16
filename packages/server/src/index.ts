@@ -14,6 +14,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { WorldEngine } from '@beeclaw/world-engine';
 import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
+import { DEFAULT_TEMPLATE } from '@beeclaw/agent-runtime';
 import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
@@ -142,6 +143,43 @@ async function main(): Promise<void> {
 
     engine.addAgents([...cheapAgents, ...localAgents, ...strongAgents]);
   }
+
+  // 5.1 配置自动扩展规则
+  const MAX_AGENTS = parseInt(process.env.BEECLAW_MAX_AGENTS ?? '100', 10);
+
+  // 规则1: 高影响力事件触发孵化（财经/政治危机词）
+  engine.spawner.addRule({
+    trigger: { type: 'event_keyword', keywords: ['危机', '暴跌', '暴涨', '战争', '制裁', 'crash', 'surge', 'crisis', 'recession', 'Fed', 'rate cut', 'rate hike'] },
+    template: DEFAULT_TEMPLATE,
+    count: 3,
+    modelTier: 'cheap',
+  });
+
+  // 规则2: 高新颖度事件（重要性 >= 0.6）触发孵化
+  engine.spawner.addRule({
+    trigger: { type: 'new_topic', minNovelty: 0.6 },
+    template: DEFAULT_TEMPLATE,
+    count: 2,
+    modelTier: 'cheap',
+  });
+
+  // 规则3: 每 10 个 tick 定期扩展（添加 1 个 local tier Agent）
+  engine.spawner.addRule({
+    trigger: { type: 'scheduled', intervalTicks: 10 },
+    template: DEFAULT_TEMPLATE,
+    count: 1,
+    modelTier: 'local',
+  });
+
+  // 规则4: Agent 数量低于初始值时补充（容错）
+  engine.spawner.addRule({
+    trigger: { type: 'population_drop', threshold: Math.floor(INITIAL_AGENTS * 0.8) },
+    template: DEFAULT_TEMPLATE,
+    count: 5,
+    modelTier: 'cheap',
+  });
+
+  console.log(`[Server] Agent 自动扩展已配置（上限 ${MAX_AGENTS}，规则 4 条）`);
 
   // 5. 注入种子事件（仅在有配置时）
   if (SEED_EVENT) {
