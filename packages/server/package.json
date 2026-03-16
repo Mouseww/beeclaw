@@ -11,6 +11,7 @@
     "@beeclaw/agent-runtime": "*",
     "@beeclaw/consensus": "*",
     "@beeclaw/event-bus": "*",
+    "@beeclaw/event-ingestion": "*",
     "@beeclaw/shared": "*",
     "@beeclaw/social-graph": "*",
     "@beeclaw/world-engine": "*",

@@ -30,6 +30,7 @@ import { registerPrometheusRoute } from './api/prometheus.js';
 import { registerConfigRoute } from './api/config.js';
 import { registerWebhooksRoute } from './api/webhooks.js';
 import { WebhookDispatcher } from './webhook/dispatcher.js';
+import { EventIngestion } from '@beeclaw/event-ingestion';
 import {
   registerAuthMiddleware,
   registerCorsMiddleware,
@@ -126,12 +127,21 @@ async function main(): Promise<void> {
     }
     engine.addAgents(agents);
   } else {
-    console.log(`[Server] 孵化 ${INITIAL_AGENTS} 个初始 Agent`);
-    const agents = engine.spawner.spawnBatch(INITIAL_AGENTS, 0);
-    engine.addAgents(agents);
+    // 混合 tier 创建 Agent：60% cheap, 25% local, 15% strong
+    const cheapCount = Math.round(INITIAL_AGENTS * 0.6);
+    const localCount = Math.round(INITIAL_AGENTS * 0.25);
+    const strongCount = INITIAL_AGENTS - cheapCount - localCount;
+
+    console.log(`[Server] 孵化 ${INITIAL_AGENTS} 个初始 Agent (cheap:${cheapCount} local:${localCount} strong:${strongCount})`);
+
+    const cheapAgents = engine.spawner.spawnBatch(cheapCount, 0, 'cheap');
+    const localAgents = engine.spawner.spawnBatch(localCount, 0, 'local');
+    const strongAgents = engine.spawner.spawnBatch(strongCount, 0, 'strong');
+
+    engine.addAgents([...cheapAgents, ...localAgents, ...strongAgents]);
   }
 
-  // 5. 注入种子事件
+  // 5. 注入种子事件（仅在有配置时）
   if (SEED_EVENT) {
     engine.injectEvent({
       title: SEED_EVENT,
@@ -143,6 +153,70 @@ async function main(): Promise<void> {
     });
     console.log(`[Server] 种子事件: "${SEED_EVENT}"`);
   }
+
+  // 5.5. 启动 RSS 事件接入
+  const ingestion = new EventIngestion(engine.eventBus, {
+    defaultPollIntervalMs: 300_000, // 5 分钟
+    maxItemsPerPoll: 10,
+    deduplicationCacheSize: 5000,
+    highImportanceKeywords: [
+      '央行', '降息', '加息', '通胀', 'CPI', 'GDP', '衰退', '危机',
+      '暴跌', '暴涨', '熔断', '战争', '制裁', '贸易战',
+      'AI', '人工智能', 'GPT', '大模型', '芯片', '半导体',
+      'Fed', 'Federal Reserve', 'rate cut', 'rate hike', 'recession',
+      'crash', 'surge', 'bitcoin', 'ethereum',
+    ],
+    mediumImportanceKeywords: [
+      '股市', '债券', 'IPO', '并购', '裁员', '财报',
+      '利率', '汇率', '原油', '黄金', '房地产',
+      'stock', 'bond', 'market', 'earnings', 'inflation',
+    ],
+    sources: [
+      {
+        id: 'reuters-world',
+        name: 'Reuters World News',
+        url: 'https://feeds.reuters.com/reuters/worldNews',
+        category: 'politics',
+        tags: ['reuters', 'world'],
+        pollIntervalMs: 300_000,
+      },
+      {
+        id: 'reuters-tech',
+        name: 'Reuters Technology',
+        url: 'https://feeds.reuters.com/reuters/technologyNews',
+        category: 'tech',
+        tags: ['reuters', 'tech'],
+        pollIntervalMs: 300_000,
+      },
+      {
+        id: 'reuters-business',
+        name: 'Reuters Business',
+        url: 'https://feeds.reuters.com/reuters/businessNews',
+        category: 'finance',
+        tags: ['reuters', 'business'],
+        pollIntervalMs: 300_000,
+      },
+      {
+        id: 'cnbc-top',
+        name: 'CNBC Top News',
+        url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114',
+        category: 'finance',
+        tags: ['cnbc', 'finance'],
+        pollIntervalMs: 600_000,
+      },
+      {
+        id: 'hackernews-best',
+        name: 'Hacker News Best',
+        url: 'https://hnrss.org/best',
+        category: 'tech',
+        tags: ['hackernews', 'tech'],
+        pollIntervalMs: 600_000,
+      },
+    ],
+  });
+
+  ingestion.start();
+  console.log(`[Server] RSS 事件接入已启动，${5} 个数据源`);
 
   // 6. 启动 Fastify
   const app = Fastify({
@@ -276,6 +350,7 @@ async function main(): Promise<void> {
     }
     tickRunning = true;
     try {
+      ingestion.setCurrentTick(engine.getCurrentTick());
       const result = await engine.step();
       tickCount++;
 
@@ -351,6 +426,7 @@ async function main(): Promise<void> {
     console.log(`\n[Server] 收到 ${signal} 信号，保存状态...`);
     clearInterval(tickLoop);
     engine.markRunning(false);
+    ingestion.stop();
 
     // 超时强制退出保护
     const forceExitTimer = setTimeout(() => {
