@@ -1,6 +1,6 @@
 {
   "name": "@beeclaw/cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,10 @@
     "beeclaw-status": "dist/status.js",
     "beeclaw-scenario": "dist/scenario.js"
   },
-  "scripts": { "build": "tsc", "test": "vitest run" },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@beeclaw/shared": "*",
     "@beeclaw/world-engine": "*",
@@ -18,5 +21,8 @@
     "@beeclaw/social-graph": "*",
     "@beeclaw/consensus": "*"
   },
-  "devDependencies": { "typescript": "^5.7.0", "vitest": "^4.1.0" }
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
 }

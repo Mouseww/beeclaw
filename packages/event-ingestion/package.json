@@ -1,13 +1,19 @@
 {
   "name": "@beeclaw/event-ingestion",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "test": "vitest run" },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@beeclaw/shared": "*",
     "@beeclaw/event-bus": "*"
   },
-  "devDependencies": { "typescript": "^5.7.0", "vitest": "^4.1.0" }
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
 }

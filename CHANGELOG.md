@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.2] - 2026-03-16
+
+### 🚀 New Features
+
+- **RSS Event Ingestion 集成** — Server 启动时自动接入 5 个 RSS 源：Reuters (World/Tech/Business)、CNBC Top News、Hacker News Best (`73b59ad`)
+- **智能重要性匹配** — 高/中优先级关键词自动识别，事件按重要性分级注入世界
+- **混合模型层级 Agent** — 默认 Agent 配比：60% cheap、25% local、15% strong，更贴近真实群体
+- **默认 Agent 数量提升** — 从 10 → 20，提供更丰富的群体动力学
+
+### ⚙️ Configuration
+
+- EventIngestion tick 与 WorldEngine 同步
+- 优雅关闭时清理 EventIngestion 资源
+
 ## [1.0.1] - 2026-03-16
 
 ### 🚀 New Features
