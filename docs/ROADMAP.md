@@ -5,7 +5,7 @@
 
 ---
 
-## 1. PostgreSQL 支持（数据库抽象层）
+## 1. PostgreSQL 支持（数据库抽象层） ✅
 
 **目标：** 当前持久化层直接绑定 SQLite (better-sqlite3)。Phase 2 引入 `DatabaseAdapter` 接口抽象，使引擎可切换为 PostgreSQL 驱动，支持生产级高并发场景。
 
@@ -24,7 +24,7 @@
 
 ---
 
-## 2. Agent 持久化与恢复
+## 2. Agent 持久化与恢复 ✅
 
 **目标：** 服务器重启后 Agent 状态完整恢复，包括记忆、社交关系、信誉积分等，实现零数据丢失。
 
@@ -70,7 +70,7 @@ Worker-1  Worker-2  Worker-N   ← 各自运行一批 Agent
 
 ---
 
-## 4. 实时事件采集增强
+## 4. 实时事件采集增强 ✅
 
 **目标：** 当前仅支持 RSS 数据源。Phase 2 扩展至 Twitter/X、Reddit、新闻 API 等多渠道实时数据。
 
@@ -92,7 +92,7 @@ Worker-1  Worker-2  Worker-N   ← 各自运行一批 Agent
 
 ---
 
-## 5. 预测信号 API 输出
+## 5. 预测信号 API 输出 ✅
 
 **目标：** 将 Consensus Engine 的趋势分析结果以结构化 API 形式输出，供外部系统（交易策略、BI 工具、告警系统）消费。
 
@@ -114,30 +114,30 @@ GET  /api/signals/accuracy         → 预测准确性统计
 
 ---
 
-## 6. Dashboard 增强
+## 6. Dashboard 增强 ✅
 
 **目标：** 当前 Dashboard 提供基础状态展示。Phase 2 增加实时图表、Agent 详情面板、事件回放等高级功能。
 
 **增强功能：**
 
-### 6.1 实时图表
+### 6.1 实时图表 ✅
 - 情绪趋势折线图（按 topic / 全局）
 - Agent 活跃度热力图
 - 事件传播动画（Social Graph 上的信息流）
 - 共识强度仪表盘
 
-### 6.2 Agent 详情面板
+### 6.2 Agent 详情面板 ✅
 - 单个 Agent 的完整 profile（人格、记忆、历史观点）
 - Agent 影响力排名（带趋势变化）
 - Agent 关系图谱（以当前 Agent 为中心的子图）
 - 历史预测准确性对比
 
-### 6.3 事件回放
+### 6.3 事件回放 ✅
 - 时间轴回放：按 tick 逐帧回放世界演化
 - 事件级联可视化：从一个事件出发，追踪传播路径
 - "假如…" 场景对比：同一初始条件下不同参数的结果对比
 
-### 6.4 运维视图
+### 6.4 运维视图 ✅
 - 系统资源监控（CPU、内存、LLM API 用量）
 - 成本追踪面板（按 tier 统计 API 调用费用）
 - 告警配置界面（异常 tick、Agent 异常死亡等）
@@ -147,18 +147,18 @@ GET  /api/signals/accuracy         → 预测准确性统计
 ## 优先级与依赖关系
 
 ```
-Phase 2.1 — 基础设施层（前置依赖）
-  ├── DatabaseAdapter 接口抽象 ← 当前冲刺
-  ├── PostgreSQL 驱动实现
-  └── Agent 持久化完善
+Phase 2.1 — 基础设施层（前置依赖） ✅
+  ├── DatabaseAdapter 接口抽象 ✅
+  ├── PostgreSQL 驱动实现 ✅
+  └── Agent 持久化完善 ✅
 
-Phase 2.2 — 数据增强
-  ├── 实时事件采集增强
-  └── 预测信号 API
+Phase 2.2 — 数据增强 ✅
+  ├── 实时事件采集增强 ✅
+  └── 预测信号 API ✅
 
 Phase 2.3 — 可视化与扩展
-  ├── Dashboard 增强
-  └── 水平扩展
+  ├── Dashboard 增强 ✅
+  └── 水平扩展 ⬜ (唯一未完成的 Phase 2 大项)
 ```
 
 ---

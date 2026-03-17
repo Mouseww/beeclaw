@@ -22,14 +22,14 @@ const { Pool } = pg;
 
 // ── CLI 参数解析 ──
 
-interface MigrateOptions {
+export interface MigrateOptions {
   sqlitePath: string;
   postgresUrl: string;
   batchSize: number;
   dryRun: boolean;
 }
 
-function parseArgs(): MigrateOptions {
+export function parseArgs(): MigrateOptions {
   const args = process.argv.slice(2);
   let sqlitePath = '';
   let postgresUrl = '';
@@ -64,7 +64,7 @@ function parseArgs(): MigrateOptions {
   return { sqlitePath, postgresUrl, batchSize, dryRun };
 }
 
-function printUsage(): void {
+export function printUsage(): void {
   console.log(`
 BeeClaw — SQLite → PostgreSQL 数据迁移脚本
 
@@ -85,7 +85,7 @@ BeeClaw — SQLite → PostgreSQL 数据迁移脚本
 // ── 表配置定义 ──
 
 /** 描述单张表的迁移元数据 */
-interface TableConfig {
+export interface TableConfig {
   name: string;
   /** PostgreSQL 建表 DDL */
   createDDL: string;
@@ -101,7 +101,7 @@ interface TableConfig {
   conflictClause: string;
 }
 
-function getTableConfigs(): TableConfig[] {
+export function getTableConfigs(): TableConfig[] {
   return [
     {
       name: 'world_state',
@@ -340,7 +340,7 @@ function getTableConfigs(): TableConfig[] {
 
 // ── 进度显示 ──
 
-function progressBar(current: number, total: number, width = 30): string {
+export function progressBar(current: number, total: number, width = 30): string {
   if (total === 0) return `[${'='.repeat(width)}] 0/0`;
   const ratio = Math.min(current / total, 1);
   const filled = Math.round(width * ratio);
@@ -356,7 +356,7 @@ function progressBar(current: number, total: number, width = 30): string {
  * - JSONB 列：确保传入合法 JSON 字符串
  * - BOOLEAN 列：0/1 → false/true
  */
-function adaptValue(
+export function adaptValue(
   value: unknown,
   column: string,
   config: TableConfig,
@@ -385,7 +385,7 @@ function adaptValue(
 
 // ── 核心迁移逻辑 ──
 
-interface MigrateResult {
+export interface MigrateResult {
   table: string;
   sourceRows: number;
   migratedRows: number;
@@ -397,7 +397,7 @@ interface MigrateResult {
 /**
  * 迁移单张表
  */
-async function migrateTable(
+export async function migrateTable(
   sqliteDb: Database.Database,
   pgPool: pg.Pool,
   config: TableConfig,

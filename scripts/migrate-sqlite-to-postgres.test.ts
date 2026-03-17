@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import pg from 'pg';
-import { migrate } from './migrate-sqlite-to-postgres.js';
+import { migrate, progressBar, adaptValue, parseArgs, printUsage, getTableConfigs } from './migrate-sqlite-to-postgres.js';
 import { mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -530,5 +530,627 @@ describe('migrate-sqlite-to-postgres', () => {
     // max_tokens（索引4）和 temperature（索引5）应为 null
     expect(llmInserts[0]!.values![4]).toBeNull();
     expect(llmInserts[0]!.values![5]).toBeNull();
+  });
+
+  // ════════════════════════════════════════
+  // 补充覆盖率：错误处理 & 边界分支
+  // ════════════════════════════════════════
+
+  it('行级插入错误应记录到 errors 并继续', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.prepare('INSERT INTO world_state (key, value) VALUES (?, ?)').run('k1', 'v1');
+    db.prepare('INSERT INTO world_state (key, value) VALUES (?, ?)').run('k2', 'v2');
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+    let insertCount = 0;
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        if (text.trim().startsWith('INSERT')) {
+          insertCount++;
+          // 第一个 INSERT 抛出错误
+          if (insertCount === 1) {
+            throw new Error('duplicate key violation');
+          }
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const wsResult = results.find((r) => r.table === 'world_state');
+    expect(wsResult).toBeDefined();
+    // 1 行成功 + 1 行跳过
+    expect(wsResult!.migratedRows).toBe(1);
+    expect(wsResult!.skippedRows).toBe(1);
+    expect(wsResult!.errors.length).toBeGreaterThan(0);
+    expect(wsResult!.errors[0]).toContain('duplicate key violation');
+  });
+
+  it('批级别 ROLLBACK 应记录错误', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.prepare('INSERT INTO world_state (key, value) VALUES (?, ?)').run('k1', 'v1');
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN') {
+          throw new Error('transaction start failed');
+        }
+        if (text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const wsResult = results.find((r) => r.table === 'world_state');
+    expect(wsResult).toBeDefined();
+    expect(wsResult!.errors.length).toBeGreaterThan(0);
+    expect(wsResult!.errors[0]).toContain('rollback');
+  });
+
+  it('建表失败应打印警告但不中断', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+    let ddlCount = 0;
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('CREATE TABLE')) {
+          ddlCount++;
+          // 第一个 DDL 抛错
+          if (ddlCount === 1) {
+            throw new Error('DDL syntax error');
+          }
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    // 不应抛出异常
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    // 应继续处理后续表
+    expect(results.length).toBe(12);
+    // DDL 调用数应 >= 2（一次失败 + 后续成功）
+    expect(ddlCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('INSERT rowCount 为 0 时应计入 skippedRows', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.prepare('INSERT INTO world_state (key, value) VALUES (?, ?)').run('k1', 'v1');
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        if (text.trim().startsWith('INSERT')) {
+          // rowCount = 0 表示冲突跳过
+          return { rows: [], rowCount: 0 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const wsResult = results.find((r) => r.table === 'world_state');
+    expect(wsResult!.skippedRows).toBe(1);
+    expect(wsResult!.migratedRows).toBe(0);
+  });
+
+  it('非法 JSON 的 JSONB 列应被 JSON.stringify 包裹', async () => {
+    const db = createTestSqlite(sqlitePath);
+    // 插入非法 JSON 字符串到 persona 列
+    db.prepare(
+      `INSERT INTO agents (id, name, persona, memory) VALUES (?, ?, ?, ?)`,
+    ).run('a1', 'Test', 'not-valid-json', '{}');
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const { pool, queries } = createMockPool();
+
+    await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const agentInserts = queries.filter(
+      (q) => q.text.includes('INSERT INTO agents') && q.values,
+    );
+    expect(agentInserts.length).toBeGreaterThan(0);
+    // persona 应被 JSON.stringify 包裹（非法 JSON → 合法 JSON 字符串）
+    const personaValue = agentInserts[0]!.values![2] as string;
+    expect(() => JSON.parse(personaValue)).not.toThrow();
+    expect(JSON.parse(personaValue)).toBe('not-valid-json');
+  });
+
+  it('迁移报告应显示错误状态', async () => {
+    const db = createTestSqlite(sqlitePath);
+    seedTestData(db);
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+    let insertIntoWorldState = 0;
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        if (text.includes('INSERT INTO world_state')) {
+          insertIntoWorldState++;
+          if (insertIntoWorldState === 1) {
+            throw new Error('test error');
+          }
+          return { rows: [], rowCount: 1 };
+        }
+        if (text.trim().startsWith('INSERT')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (text.includes('setval')) {
+          return { rows: [{ setval: 1 }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('setval')) {
+          return { rows: [{ setval: 1 }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const wsResult = results.find((r) => r.table === 'world_state');
+    expect(wsResult!.errors.length).toBeGreaterThan(0);
+    // 总结中应有错误计数
+    const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
+    expect(totalErrors).toBeGreaterThan(0);
+  });
+
+  it('行级错误超过 5 个时应只记录前 5 个', async () => {
+    const db = createTestSqlite(sqlitePath);
+    for (let i = 0; i < 10; i++) {
+      db.prepare('INSERT INTO world_state (key, value) VALUES (?, ?)').run(`key-${i}`, `val-${i}`);
+    }
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        if (text.includes('INSERT INTO world_state')) {
+          throw new Error('always fails');
+        }
+        if (text.trim().startsWith('INSERT')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (text.includes('setval')) {
+          return { rows: [{ setval: 1 }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('setval')) {
+          return { rows: [{ setval: 1 }], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const wsResult = results.find((r) => r.table === 'world_state');
+    expect(wsResult!.skippedRows).toBe(10);
+    // 只记录前 5 个错误
+    expect(wsResult!.errors.length).toBe(5);
+  });
+
+  it('序列重置失败应不阻断迁移', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.prepare('INSERT INTO consensus_signals (tick, topic, data) VALUES (?, ?, ?)').run(1, 't', '{}');
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const queries: QueryCall[] = [];
+
+    const mockClient = {
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        if (text.trim().startsWith('INSERT')) {
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn(async () => mockClient),
+      query: vi.fn(async (text: string, values?: unknown[]) => {
+        queries.push({ text, values });
+        if (text.includes('setval')) {
+          throw new Error('sequence not found');
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+      end: vi.fn(async () => {}),
+    } as unknown as pg.Pool;
+
+    // 不应抛出异常
+    const results = await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    const csResult = results.find((r) => r.table === 'consensus_signals');
+    expect(csResult).toBeDefined();
+    expect(csResult!.migratedRows).toBe(1);
+    // 序列重置失败不应记入 errors（被 catch 忽略）
+  });
+
+  it('PostgreSQL 密码应在日志中被掩码', async () => {
+    const db = createTestSqlite(sqlitePath);
+    db.close();
+
+    const sqliteDb = new Database(sqlitePath, { readonly: true });
+    const { pool } = createMockPool();
+
+    const consoleSpy = vi.spyOn(console, 'log');
+
+    await migrate(
+      { sqlitePath, postgresUrl: 'postgresql://user:secretpass@localhost/db', batchSize: 100, dryRun: true },
+      { sqliteDb, pgPool: pool },
+    );
+
+    sqliteDb.close();
+
+    // 检查日志中密码被掩码
+    const allLogs = consoleSpy.mock.calls.map((args) => String(args[0])).join('\n');
+    expect(allLogs).toContain(':***@');
+    expect(allLogs).not.toContain('secretpass');
+
+    consoleSpy.mockRestore();
+  });
+
+  // ════════════════════════════════════════
+  // progressBar 函数
+  // ════════════════════════════════════════
+
+  describe('progressBar', () => {
+    it('total 为 0 时应返回空进度条', () => {
+      const bar = progressBar(0, 0);
+      expect(bar).toContain('0/0');
+      expect(bar).toContain('='.repeat(30));
+    });
+
+    it('进度 50% 时应包含半满进度条', () => {
+      const bar = progressBar(50, 100);
+      expect(bar).toContain('50.0%');
+      expect(bar).toContain('50/100');
+    });
+
+    it('进度 100% 时应显示满进度条', () => {
+      const bar = progressBar(100, 100);
+      expect(bar).toContain('100.0%');
+    });
+
+    it('自定义 width 应正常工作', () => {
+      const bar = progressBar(5, 10, 10);
+      expect(bar).toContain('50.0%');
+    });
+
+    it('current 超过 total 时应 clamp 到 100%', () => {
+      const bar = progressBar(200, 100);
+      expect(bar).toContain('100.0%');
+    });
+  });
+
+  // ════════════════════════════════════════
+  // adaptValue 函数
+  // ════════════════════════════════════════
+
+  describe('adaptValue', () => {
+    const configs = getTableConfigs();
+    const agentConfig = configs.find((c) => c.name === 'agents')!;
+    const webhookConfig = configs.find((c) => c.name === 'webhook_subscriptions')!;
+    const worldConfig = configs.find((c) => c.name === 'world_state')!;
+
+    it('null 值应返回 null', () => {
+      expect(adaptValue(null, 'persona', agentConfig)).toBeNull();
+    });
+
+    it('undefined 值应返回 null', () => {
+      expect(adaptValue(undefined, 'persona', agentConfig)).toBeNull();
+    });
+
+    it('BOOLEAN 列 1 应返回 true', () => {
+      expect(adaptValue(1, 'active', webhookConfig)).toBe(true);
+    });
+
+    it('BOOLEAN 列 0 应返回 false', () => {
+      expect(adaptValue(0, 'active', webhookConfig)).toBe(false);
+    });
+
+    it('JSONB 列合法 JSON 字符串应直接返回', () => {
+      const result = adaptValue('{"key":"value"}', 'persona', agentConfig);
+      expect(result).toBe('{"key":"value"}');
+    });
+
+    it('JSONB 列非法 JSON 字符串应 JSON.stringify 包裹', () => {
+      const result = adaptValue('not-json', 'persona', agentConfig);
+      expect(result).toBe('"not-json"');
+    });
+
+    it('JSONB 列非字符串值应 JSON.stringify', () => {
+      const result = adaptValue({ key: 'value' }, 'persona', agentConfig);
+      expect(result).toBe('{"key":"value"}');
+    });
+
+    it('普通列应直接返回原值', () => {
+      expect(adaptValue('hello', 'key', worldConfig)).toBe('hello');
+      expect(adaptValue(42, 'key', worldConfig)).toBe(42);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // getTableConfigs
+  // ════════════════════════════════════════
+
+  describe('getTableConfigs', () => {
+    it('应返回 12 张表的配置', () => {
+      const configs = getTableConfigs();
+      expect(configs).toHaveLength(12);
+    });
+
+    it('consensus_signals 应有 serialColumn', () => {
+      const configs = getTableConfigs();
+      const cs = configs.find((c) => c.name === 'consensus_signals');
+      expect(cs).toBeDefined();
+      expect(cs!.serialColumn).toBe('id');
+    });
+
+    it('其他表不应有 serialColumn', () => {
+      const configs = getTableConfigs();
+      const nonSerial = configs.filter((c) => c.name !== 'consensus_signals');
+      for (const config of nonSerial) {
+        expect(config.serialColumn).toBeUndefined();
+      }
+    });
+  });
+
+  // ════════════════════════════════════════
+  // parseArgs
+  // ════════════════════════════════════════
+
+  describe('parseArgs', () => {
+    let originalArgv: string[];
+    let exitSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      originalArgv = process.argv;
+      exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+    });
+
+    afterEach(() => {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    });
+
+    it('应解析所有参数', () => {
+      process.argv = ['node', 'script', '--sqlite-path', '/tmp/test.db', '--postgres-url', 'postgresql://localhost/db', '--batch-size', '200', '--dry-run'];
+      const opts = parseArgs();
+      expect(opts.sqlitePath).toBe('/tmp/test.db');
+      expect(opts.postgresUrl).toBe('postgresql://localhost/db');
+      expect(opts.batchSize).toBe(200);
+      expect(opts.dryRun).toBe(true);
+    });
+
+    it('缺少必需参数时应调用 process.exit(1)', () => {
+      process.argv = ['node', 'script'];
+      expect(() => parseArgs()).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('--help 应调用 process.exit(0)', () => {
+      process.argv = ['node', 'script', '--help'];
+      expect(() => parseArgs()).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('默认 batchSize 应为 500', () => {
+      process.argv = ['node', 'script', '--sqlite-path', '/tmp/test.db', '--postgres-url', 'postgresql://localhost/db'];
+      const opts = parseArgs();
+      expect(opts.batchSize).toBe(500);
+      expect(opts.dryRun).toBe(false);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // printUsage
+  // ════════════════════════════════════════
+
+  describe('printUsage', () => {
+    it('应输出帮助信息', () => {
+      const spy = vi.spyOn(console, 'log');
+      printUsage();
+      expect(spy).toHaveBeenCalled();
+      const output = spy.mock.calls.map((c) => String(c[0])).join('');
+      expect(output).toContain('--sqlite-path');
+      expect(output).toContain('--postgres-url');
+      expect(output).toContain('--batch-size');
+      expect(output).toContain('--dry-run');
+      expect(output).toContain('--help');
+      spy.mockRestore();
+    });
+  });
+
+  // ════════════════════════════════════════
+  // 不注入依赖时的 SQLite 自动连接
+  // ════════════════════════════════════════
+
+  describe('不注入依赖时的自动连接', () => {
+    it('不注入 sqliteDb 时应自动打开 SQLite 并关闭', async () => {
+      // 创建一个真实的 SQLite 数据库
+      const db = createTestSqlite(sqlitePath);
+      seedTestData(db);
+      db.close();
+
+      const { pool } = createMockPool();
+
+      const results = await migrate(
+        { sqlitePath, postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+        { pgPool: pool }, // 只注入 pgPool，不注入 sqliteDb
+      );
+
+      // 应正常返回结果
+      expect(results.length).toBe(12);
+      const ws = results.find((r) => r.table === 'world_state');
+      expect(ws!.sourceRows).toBe(2);
+    });
+
+    it('不注入 sqliteDb 且文件不存在时应调用 process.exit(1)', async () => {
+      const { pool } = createMockPool();
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(
+        migrate(
+          { sqlitePath: '/nonexistent/path/test.db', postgresUrl: 'postgresql://mock:mock@localhost/mock', batchSize: 100, dryRun: false },
+          { pgPool: pool },
+        ),
+      ).rejects.toThrow('process.exit called');
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+    });
   });
 });

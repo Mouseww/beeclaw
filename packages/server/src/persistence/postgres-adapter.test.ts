@@ -820,6 +820,449 @@ describe('PostgresAdapter', () => {
   });
 
   // ════════════════════════════════════════
+  // 预测信号查询 (Phase 2.2)
+  // ════════════════════════════════════════
+
+  describe('预测信号查询', () => {
+    it('getDistinctTopics 应返回去重后的 topic 列表', async () => {
+      mock.setResult('SELECT DISTINCT topic', [
+        { topic: '科技' },
+        { topic: '金融' },
+      ]);
+      const topics = await adapter.getDistinctTopics();
+      expect(topics).toEqual(['科技', '金融']);
+    });
+
+    it('getDistinctTopics 无数据时应返回空数组', async () => {
+      const topics = await adapter.getDistinctTopics();
+      expect(topics).toEqual([]);
+    });
+
+    it('getSignalCountByTopic 应返回数量', async () => {
+      mock.setResult('SELECT COUNT', [{ cnt: '15' }]);
+      const count = await adapter.getSignalCountByTopic('科技');
+      expect(count).toBe(15);
+      expect(mock.pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('WHERE topic = $1'),
+        ['科技']
+      );
+    });
+
+    it('getSignalCountByTopic 无匹配时应返回 0', async () => {
+      const count = await adapter.getSignalCountByTopic('nonexistent');
+      expect(count).toBe(0);
+    });
+
+    it('getSignalsByTickRange 应使用 tick 范围过滤', async () => {
+      const signal = {
+        tick: 5,
+        topic: '科技',
+        sentimentDistribution: { bullish: 0.5, bearish: 0.3, neutral: 0.2 },
+        averageConfidence: 0.7,
+        dominantStance: 'bullish',
+        consensusDegree: 0.6,
+        participantCount: 5,
+        trend: 'forming',
+        alerts: [],
+      };
+      mock.setResult('SELECT data FROM consensus_signals WHERE topic', [
+        { data: signal },
+      ]);
+
+      const signals = await adapter.getSignalsByTickRange('科技', 1, 10);
+      expect(signals).toHaveLength(1);
+      expect(signals[0]!.topic).toBe('科技');
+      expect(mock.pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('tick >= $2 AND tick <= $3'),
+        ['科技', 1, 10]
+      );
+    });
+
+    it('getSignalsByTickRange 应处理字符串格式 data', async () => {
+      const signal = {
+        tick: 5,
+        topic: '科技',
+        sentimentDistribution: { bullish: 0.5, bearish: 0.3, neutral: 0.2 },
+        averageConfidence: 0.7,
+        dominantStance: 'bullish',
+        consensusDegree: 0.6,
+        participantCount: 5,
+        trend: 'forming',
+        alerts: [],
+      };
+      mock.setResult('SELECT data FROM consensus_signals WHERE topic', [
+        { data: JSON.stringify(signal) },
+      ]);
+
+      const signals = await adapter.getSignalsByTickRange('科技', 1, 10);
+      expect(signals).toHaveLength(1);
+      expect(signals[0]!.topic).toBe('科技');
+    });
+
+    it('getLatestSignalPerTopic 应返回每个 topic 最新信号', async () => {
+      const signal1 = {
+        tick: 10,
+        topic: '科技',
+        sentimentDistribution: { bullish: 0.5, bearish: 0.3, neutral: 0.2 },
+        averageConfidence: 0.7,
+        dominantStance: 'bullish',
+        consensusDegree: 0.6,
+        participantCount: 5,
+        trend: 'forming',
+        alerts: [],
+      };
+      const signal2 = {
+        tick: 8,
+        topic: '金融',
+        sentimentDistribution: { bullish: 0.3, bearish: 0.5, neutral: 0.2 },
+        averageConfidence: 0.6,
+        dominantStance: 'bearish',
+        consensusDegree: 0.5,
+        participantCount: 3,
+        trend: 'stable',
+        alerts: [],
+      };
+      mock.setResult('SELECT data FROM consensus_signals', [
+        { data: signal1 },
+        { data: JSON.stringify(signal2) },
+      ]);
+
+      const signals = await adapter.getLatestSignalPerTopic();
+      expect(signals).toHaveLength(2);
+      expect(signals[0]!.topic).toBe('科技');
+      expect(signals[1]!.topic).toBe('金融');
+    });
+
+    it('getLatestSignals 默认 limit 为 20', async () => {
+      await adapter.getLatestSignals();
+      const call = mock.pool.query.mock.calls[0];
+      expect(call[1]).toEqual([20]);
+    });
+
+    it('getSignalsByTopic 默认 limit 为 20', async () => {
+      await adapter.getSignalsByTopic('test');
+      const call = mock.pool.query.mock.calls[0];
+      expect(call[1]).toEqual(['test', 20]);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // Social Graph 持久化
+  // ════════════════════════════════════════
+
+  describe('Social Graph 持久化', () => {
+    it('saveSocialEdges 应使用事务，先 TRUNCATE 再插入', async () => {
+      const edges = [
+        { from: 'a1', to: 'a2', type: 'follow' as const, strength: 0.8, formedAtTick: 1 },
+        { from: 'a2', to: 'a1', type: 'trust' as const, strength: 0.6, formedAtTick: 2 },
+      ];
+      await adapter.saveSocialEdges(edges);
+
+      // BEGIN + TRUNCATE + 2 inserts + COMMIT = 5 calls
+      expect(mock.mockClient.query).toHaveBeenCalledTimes(5);
+      expect(mock.mockClient.query.mock.calls[0][0]).toBe('BEGIN');
+      expect(mock.mockClient.query.mock.calls[1][0]).toBe('TRUNCATE TABLE social_edges');
+      expect(mock.mockClient.query.mock.calls[2][0]).toContain('INSERT INTO social_edges');
+      expect(mock.mockClient.query.mock.calls[2][1]).toEqual(['a1', 'a2', 'follow', 0.8, 1]);
+      expect(mock.mockClient.query.mock.calls[4][0]).toBe('COMMIT');
+      expect(mock.mockClient.release).toHaveBeenCalled();
+    });
+
+    it('saveSocialNodes 应使用事务，先 TRUNCATE 再插入', async () => {
+      const nodes = [
+        { agentId: 'a1', influence: 20, community: 'crypto', role: 'influencer' as const },
+        { agentId: 'a2', influence: 10, community: 'tech', role: 'follower' as const },
+      ];
+      await adapter.saveSocialNodes(nodes);
+
+      // BEGIN + TRUNCATE + 2 inserts + COMMIT = 5 calls
+      expect(mock.mockClient.query).toHaveBeenCalledTimes(5);
+      expect(mock.mockClient.query.mock.calls[1][0]).toBe('TRUNCATE TABLE social_nodes');
+      expect(mock.mockClient.query.mock.calls[2][0]).toContain('INSERT INTO social_nodes');
+      expect(mock.mockClient.query.mock.calls[2][1]).toEqual(['a1', 20, 'crypto', 'influencer']);
+    });
+
+    it('loadSocialEdges 应返回映射后的边关系', async () => {
+      mock.setResult('SELECT * FROM social_edges', [
+        {
+          from_agent: 'a1',
+          to_agent: 'a2',
+          type: 'follow',
+          strength: 0.9,
+          formed_at_tick: 5,
+        },
+      ]);
+
+      const edges = await adapter.loadSocialEdges();
+      expect(edges).toHaveLength(1);
+      expect(edges[0]!.from).toBe('a1');
+      expect(edges[0]!.to).toBe('a2');
+      expect(edges[0]!.type).toBe('follow');
+      expect(edges[0]!.strength).toBe(0.9);
+      expect(edges[0]!.formedAtTick).toBe(5);
+    });
+
+    it('loadSocialNodes 应返回映射后的节点', async () => {
+      mock.setResult('SELECT * FROM social_nodes', [
+        {
+          agent_id: 'a1',
+          influence: 15,
+          community: 'crypto',
+          role: 'influencer',
+        },
+      ]);
+
+      const nodes = await adapter.loadSocialNodes();
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0]!.agentId).toBe('a1');
+      expect(nodes[0]!.influence).toBe(15);
+      expect(nodes[0]!.community).toBe('crypto');
+      expect(nodes[0]!.role).toBe('influencer');
+    });
+
+    it('saveDirtyAgents 空数组应不执行操作', async () => {
+      await adapter.saveDirtyAgents([]);
+      expect(mock.pool.connect).not.toHaveBeenCalled();
+    });
+
+    it('saveDirtyAgents 应委托给 saveAgents', async () => {
+      const agent = {
+        toData: () => ({
+          id: 'a1', name: 'A1', persona: {}, memory: {},
+          followers: [], following: [], influence: 10, credibility: 0.5,
+          status: 'active', modelTier: 'cheap', spawnedAtTick: 0,
+          lastActiveTick: 0, modelId: 'cheap-default',
+        }),
+      } as any;
+      await adapter.saveDirtyAgents([agent]);
+      // 应使用事务: BEGIN + 1 insert + COMMIT
+      expect(mock.mockClient.query).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // 补充分支覆盖
+  // ════════════════════════════════════════
+
+  describe('补充分支覆盖', () => {
+    it('getAgentRow 存在时应返回映射后的 AgentRow', async () => {
+      mock.setResult('SELECT * FROM agents WHERE', [
+        {
+          id: 'a1', name: 'Agent1',
+          persona: '{"background":"test"}', // 字符串格式
+          memory: '{"shortTerm":[]}',
+          followers: '["f1"]',
+          following: '[]',
+          influence: 50, credibility: 0.8,
+          status: 'active', model_tier: 'cheap',
+          spawned_at_tick: 0, last_active_tick: 5, updated_at: 1700000000,
+        },
+      ]);
+
+      const row = await adapter.getAgentRow('a1');
+      expect(row).toBeDefined();
+      expect(row!.id).toBe('a1');
+      // 字符串格式的 persona 应保持字符串
+      expect(typeof row!.persona).toBe('string');
+    });
+
+    it('getWebhook 存在时应返回映射后的 Webhook', async () => {
+      mock.setResult('SELECT * FROM webhook_subscriptions WHERE', [
+        {
+          id: 'wh1', url: 'https://a.com',
+          events: JSON.stringify(['tick.completed']), // 字符串格式
+          secret: 'sec', active: true, created_at: 1700000000,
+        },
+      ]);
+
+      const wh = await adapter.getWebhook('wh1');
+      expect(wh).not.toBeNull();
+      expect(wh!.id).toBe('wh1');
+      expect(wh!.events).toEqual(['tick.completed']);
+    });
+
+    it('updateWebhook 存在时应更新并返回 true', async () => {
+      // getWebhook 查询匹配
+      mock.setResult('SELECT * FROM webhook_subscriptions WHERE', [
+        {
+          id: 'wh1', url: 'https://a.com',
+          events: ['tick.completed'],
+          secret: 'sec', active: true, created_at: 1700000000,
+        },
+      ]);
+      // UPDATE 查询匹配
+      mock.setResult('UPDATE webhook_subscriptions', [], 1);
+
+      const result = await adapter.updateWebhook('wh1', {
+        url: 'https://new.com',
+        events: ['consensus.signal'] as WebhookEventType[],
+        active: false,
+      });
+      expect(result).toBe(true);
+    });
+
+    it('updateWebhook 仅更新部分字段时应保留已有值', async () => {
+      mock.setResult('SELECT * FROM webhook_subscriptions WHERE', [
+        {
+          id: 'wh1', url: 'https://a.com',
+          events: ['tick.completed'],
+          secret: 'sec', active: true, created_at: 1700000000,
+        },
+      ]);
+      mock.setResult('UPDATE webhook_subscriptions', [], 1);
+
+      const result = await adapter.updateWebhook('wh1', { url: 'https://b.com' });
+      expect(result).toBe(true);
+      // 验证 UPDATE 调用中保留了原有 events 和 active
+      const updateCall = mock.pool.query.mock.calls.find(
+        (c: any) => (c[0] as string).startsWith('UPDATE')
+      );
+      expect(updateCall).toBeDefined();
+      // url 更新为新值
+      expect(updateCall![1]![0]).toBe('https://b.com');
+    });
+
+    it('getApiKeyByHash 存在时应返回记录', async () => {
+      mock.setResult('SELECT * FROM api_keys WHERE key_hash', [
+        {
+          id: 'k1', name: 'Key1', key_hash: 'hash1',
+          permissions: '["read"]', // 字符串格式
+          rate_limit: 100, created_at: 1700000000,
+          last_used_at: 1700001000, active: true,
+        },
+      ]);
+
+      const key = await adapter.getApiKeyByHash('hash1');
+      expect(key).not.toBeNull();
+      expect(key!.id).toBe('k1');
+      expect(key!.permissions).toEqual(['read']);
+      expect(key!.lastUsedAt).toBe(1700001000);
+    });
+
+    it('getRssSource 存在时应返回映射后的数据源', async () => {
+      mock.setResult('SELECT * FROM rss_sources WHERE', [
+        {
+          id: 'rss1', name: 'Test',
+          url: 'http://test', category: 'finance',
+          tags: JSON.stringify(['tag1']), // 字符串格式
+          poll_interval_ms: 300000, enabled: true,
+        },
+      ]);
+
+      const source = await adapter.getRssSource('rss1');
+      expect(source).not.toBeNull();
+      expect(source!.id).toBe('rss1');
+      expect(source!.tags).toEqual(['tag1']);
+    });
+
+    it('deleteRssSource 不存在时应返回 false', async () => {
+      expect(await adapter.deleteRssSource('nonexistent')).toBe(false);
+    });
+
+    it('searchEvents 默认 limit 为 20', async () => {
+      await adapter.searchEvents('测试');
+      const call = mock.pool.query.mock.calls[0];
+      expect(call[1]).toEqual(['%测试%', 20]);
+    });
+
+    it('saveRssSource 缺省 tags/pollIntervalMs/enabled 时应使用默认值', async () => {
+      const source = {
+        id: 'rss2',
+        name: 'Minimal',
+        url: 'http://min',
+        category: 'general',
+      } as any;
+      await adapter.saveRssSource(source);
+
+      const params = mock.pool.query.mock.calls[0][1];
+      // tags 默认 undefined → JSON.stringify(undefined ?? []) = '[]'
+      expect(params![4]).toBe(JSON.stringify([]));
+      // pollIntervalMs 默认 300000
+      expect(params![5]).toBe(300000);
+      // enabled 默认 true
+      expect(params![6]).toBe(true);
+    });
+
+    it('saveEvents 带 content/tags/sourceId 的详细事件', async () => {
+      const events = [
+        {
+          id: 'e2', title: '详细事件', category: 'tech', importance: 0.7,
+          content: '这是详细内容', tags: ['tag1', 'tag2'], sourceId: 'src-1',
+        },
+      ] as any[];
+      await adapter.saveEvents(events, 5);
+
+      const insertCall = mock.mockClient.query.mock.calls[1];
+      expect(insertCall[1][3]).toBe('这是详细内容');
+      expect(insertCall[1][6]).toBe(JSON.stringify(['tag1', 'tag2']));
+      expect(insertCall[1][7]).toBe('src-1');
+    });
+
+    it('saveResponses 带 eventId/reasoning 的详细响应', async () => {
+      const responses = [
+        {
+          agentId: 'a1', agentName: 'A1', opinion: '看涨',
+          action: 'buy', emotionalState: 0.5,
+          eventId: 'evt-1', reasoning: '技术面强势',
+        },
+      ] as any[];
+      await adapter.saveResponses(responses, 3);
+
+      const insertCall = mock.mockClient.query.mock.calls[1];
+      expect(insertCall[1][2]).toBe('evt-1');
+      expect(insertCall[1][9]).toBe('技术面强势');
+    });
+
+    it('pgRowToWebhook 应处理字符串和对象格式的 events', async () => {
+      // 对象格式
+      mock.setResult('SELECT * FROM webhook_subscriptions ORDER', [
+        {
+          id: 'wh1', url: 'https://a.com',
+          events: ['tick.completed'], // 对象格式（pg 自动解析 jsonb）
+          secret: 'sec', active: true, created_at: 1700000000,
+        },
+      ]);
+      const webhooks = await adapter.getWebhooks();
+      expect(webhooks[0]!.events).toEqual(['tick.completed']);
+    });
+
+    it('pgRowToFeedSource 应处理字符串格式的 tags', async () => {
+      mock.setResult('SELECT * FROM rss_sources', [
+        {
+          id: 'rss1', name: 'Test', url: 'http://test',
+          category: 'finance',
+          tags: '["tag1","tag2"]', // 字符串格式
+          poll_interval_ms: 300000, enabled: true,
+        },
+      ]);
+
+      const sources = await adapter.loadRssSources();
+      expect(sources[0]!.tags).toEqual(['tag1', 'tag2']);
+    });
+
+    it('pgRowToApiKeyRecord 应处理字符串格式的 permissions', async () => {
+      mock.setResult('SELECT * FROM api_keys ORDER', [
+        {
+          id: 'k1', name: 'Key1', key_hash: 'hash1',
+          permissions: '["read","write"]', // 字符串格式
+          rate_limit: 100, created_at: 1700000000,
+          last_used_at: null, active: true,
+        },
+      ]);
+
+      const keys = await adapter.getApiKeys();
+      expect(keys[0]!.permissions).toEqual(['read', 'write']);
+    });
+
+    it('ensureSchema DDL 应包含 social_nodes 和 social_edges 表', async () => {
+      await adapter.ensureSchema();
+      const sql = mock.pool.query.mock.calls[0][0] as string;
+      expect(sql).toContain('CREATE TABLE IF NOT EXISTS social_nodes');
+      expect(sql).toContain('CREATE TABLE IF NOT EXISTS social_edges');
+    });
+  });
+
+  // ════════════════════════════════════════
   // 事务回滚
   // ════════════════════════════════════════
 
