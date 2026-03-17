@@ -547,4 +547,206 @@ describe('RedisTransportLayer', () => {
         .rejects.toThrow('[RedisTransport] Not connected');
     });
   });
+
+  // ── 补充覆盖：错误处理路径、断后恢复、边界条件 ──
+
+  describe('registerWorker sadd 失败时的错误处理', () => {
+    it('sadd 返回 rejected promise 时应 console.error 但不抛出', async () => {
+      await transport.connect();
+      mockPublisher.sadd.mockRejectedValueOnce(new Error('Redis SADD failed'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // registerWorker 是同步调用，内部 sadd 是 fire-and-forget
+      transport.registerWorker('w-fail');
+
+      // 等待异步错误被处理
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to register worker w-fail'),
+          expect.any(Error),
+        );
+      });
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('unregisterWorker srem 失败时的错误处理', () => {
+    it('srem 返回 rejected promise 时应 console.error 但不抛出', async () => {
+      await transport.connect();
+      transport.onWorkerMessage('w-fail', () => {});
+      mockPublisher.srem.mockRejectedValueOnce(new Error('Redis SREM failed'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      transport.unregisterWorker('w-fail');
+
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to unregister worker w-fail'),
+          expect.any(Error),
+        );
+      });
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('unsubscribeChannel 失败时的错误处理', () => {
+    it('unsubscribe 返回 rejected promise 时应 console.error 但不抛出', async () => {
+      await transport.connect();
+      transport.onWorkerMessage('w1', () => {});
+
+      mockSubscriber.unsubscribe.mockRejectedValueOnce(new Error('Redis UNSUB failed'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      transport.unregisterWorker('w1');
+
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to unsubscribe from'),
+          expect.any(Error),
+        );
+      });
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('handleIncomingMessage 对不匹配任何路由的 channel', () => {
+    it('收到未知 channel 消息时应静默忽略', async () => {
+      await transport.connect();
+
+      // 发到一个完全不匹配任何路由的 channel
+      expect(() => {
+        mockSubscriber.__emit(
+          'message',
+          'some:unknown:channel',
+          JSON.stringify(createTestCoordinatorMessage()),
+        );
+      }).not.toThrow();
+    });
+  });
+
+  describe('多个 Worker handler 的独立消息分发', () => {
+    it('worker 专属 channel 消息只发给对应 handler，不发给其他 worker handler', async () => {
+      await transport.connect();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      transport.onWorkerMessage('w1', handler1);
+      transport.onWorkerMessage('w2', handler2);
+
+      const msg = createTestCoordinatorMessage();
+      mockSubscriber.__emit('message', 'beeclaw:worker:w1', JSON.stringify(msg));
+
+      expect(handler1).toHaveBeenCalledTimes(1);
+      expect(handler2).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disconnect 后 reconnect 应正常工作', () => {
+    it('disconnect 后再次 connect 应成功', async () => {
+      await transport.connect();
+      await transport.disconnect();
+
+      // 重置 mock 索引，让新的 connect 能创建新实例
+      mockPublisher = createMockRedis();
+      mockSubscriber = createMockRedis();
+      mockInstanceIndex = 0;
+
+      const newTransport = new RedisTransportLayer({ host: '127.0.0.1', port: 6379 });
+      await newTransport.connect();
+
+      expect(mockPublisher.connect).toHaveBeenCalledTimes(1);
+      expect(mockSubscriber.connect).toHaveBeenCalledTimes(1);
+
+      await newTransport.disconnect();
+    });
+  });
+
+  describe('默认配置', () => {
+    it('不传任何配置时应使用默认值', async () => {
+      mockInstanceIndex = 0;
+      const defaultTransport = new RedisTransportLayer();
+      await defaultTransport.connect();
+
+      const msg = createTestCoordinatorMessage();
+      await defaultTransport.sendToWorker('w1', msg);
+
+      // 使用默认前缀 'beeclaw'
+      expect(mockPublisher.publish).toHaveBeenCalledWith(
+        'beeclaw:worker:w1',
+        JSON.stringify(msg),
+      );
+
+      await defaultTransport.disconnect();
+    });
+  });
+
+  describe('getRegisteredWorkerIds 在无 handler 时', () => {
+    it('未注册任何 handler 时返回空数组', () => {
+      expect(transport.getRegisteredWorkerIds()).toEqual([]);
+    });
+  });
+
+  describe('disconnect 清理后状态一致性', () => {
+    it('disconnect 后 connected 标志应为 false', async () => {
+      await transport.connect();
+      await transport.disconnect();
+
+      // 尝试任何需要连接的操作都应抛错
+      await expect(transport.sendToWorker('w1', createTestCoordinatorMessage()))
+        .rejects.toThrow('[RedisTransport] Not connected');
+    });
+  });
+
+  describe('onWorkerMessage 替换已有 handler', () => {
+    it('对同一 workerId 重复注册 handler 应替换旧 handler', async () => {
+      await transport.connect();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+
+      transport.onWorkerMessage('w1', handler1);
+      transport.onWorkerMessage('w1', handler2);
+
+      const msg = createTestCoordinatorMessage();
+      mockSubscriber.__emit('message', 'beeclaw:worker:w1', JSON.stringify(msg));
+
+      // 只有新 handler 应被调用
+      expect(handler2).toHaveBeenCalledTimes(1);
+      // 旧 handler 不应被调用（已被替换）
+      expect(handler1).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onLeaderMessage 替换已有 handler', () => {
+    it('重复注册 leader handler 应替换旧 handler', async () => {
+      await transport.connect();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+
+      transport.onLeaderMessage(handler1);
+      transport.onLeaderMessage(handler2);
+
+      const msg = createTestWorkerMessage();
+      mockSubscriber.__emit('message', 'beeclaw:leader', JSON.stringify(msg));
+
+      expect(handler2).toHaveBeenCalledTimes(1);
+      expect(handler1).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('broadcast 消息在无 worker handler 时', () => {
+    it('无 worker handler 注册时 broadcast 消息应静默忽略', async () => {
+      await transport.connect();
+
+      // 没有注册任何 worker handler，发送 broadcast 不应抛错
+      expect(() => {
+        mockSubscriber.__emit(
+          'message',
+          'beeclaw:broadcast',
+          JSON.stringify(createTestCoordinatorMessage()),
+        );
+      }).not.toThrow();
+    });
+  });
 });
