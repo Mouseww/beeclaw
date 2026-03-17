@@ -6,6 +6,8 @@ import { usePolling } from '../hooks/usePolling';
 import { fetchStatus, fetchHistory } from '../api/client';
 import { StatCard, Card, CardSkeleton, ErrorState } from '../components';
 import { SentimentBar } from '../components/SentimentBar';
+import { SentimentTrendChart } from '../components/charts/SentimentTrendChart';
+import { AgentActivityChart } from '../components/charts/AgentActivityChart';
 import type { TickResult } from '../types';
 
 export function WorldOverview() {
@@ -187,6 +189,27 @@ export function WorldOverview() {
             })}
           </div>
         </Card>
+      )}
+
+      {/* 实时图表 */}
+      {historyData?.history && historyData.history.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* 情绪趋势折线图 */}
+          <Card title="Agent 活跃趋势（折线图）">
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+              各 Tick 激活 Agent 数、响应数及事件处理量
+            </p>
+            <SentimentTrendChart history={historyData.history} />
+          </Card>
+
+          {/* Agent 活跃度面积图 */}
+          <Card title="Agent 状态分布（面积图）">
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+              每 Tick 活跃 / 休眠 / 淘汰 Agent 比例
+            </p>
+            <AgentActivityChart history={historyData.history} />
+          </Card>
+        </div>
       )}
 
       {/* Tick 历史 */}
