@@ -214,8 +214,14 @@ describe('NewsApiAdapter', () => {
     });
 
     it('429 限流响应应等待后重试', async () => {
+      // 使用单查询适配器以精确计数
+      const singleAdapter = new NewsApiAdapter(createConfig({
+        queries: [{ q: 'AI', category: 'tech' }],
+      }));
+      singleAdapter.delayFn = noDelay;
+
       let attempts = 0;
-      adapter.fetchFn = async () => {
+      singleAdapter.fetchFn = async () => {
         attempts++;
         if (attempts === 1) {
           return {
@@ -230,9 +236,10 @@ describe('NewsApiAdapter', () => {
         } as Response;
       };
 
-      const events = await adapter.poll();
+      const events = await singleAdapter.poll();
       expect(attempts).toBe(2);
       expect(events.length).toBeGreaterThan(0);
+      singleAdapter.stop();
     });
   });
 

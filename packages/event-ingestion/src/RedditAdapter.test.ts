@@ -279,10 +279,18 @@ describe('RedditAdapter', () => {
     });
 
     it('429 限流响应应等待后重试', async () => {
-      let attempts = 0;
+      // 使用单 subreddit 适配器以精确计数
+      const singleAdapter = new RedditAdapter(createConfig({
+        subreddits: [{ name: 'technology', sort: 'hot', category: 'tech' }],
+      }));
+      singleAdapter.delayFn = noDelay;
 
-      adapter.fetchFn = async (url: string) => {
+      let tokenFetched = false;
+      let subredditAttempts = 0;
+
+      singleAdapter.fetchFn = async (url: string) => {
         if (url.includes('access_token')) {
+          tokenFetched = true;
           return {
             ok: true, status: 200, statusText: 'OK',
             json: async () => createOAuthResponse(),
@@ -290,8 +298,8 @@ describe('RedditAdapter', () => {
           } as Response;
         }
 
-        attempts++;
-        if (attempts === 1) {
+        subredditAttempts++;
+        if (subredditAttempts === 1) {
           return {
             ok: false, status: 429, statusText: 'Too Many Requests',
             headers: new Headers({ 'retry-after': '1' }),
@@ -304,9 +312,11 @@ describe('RedditAdapter', () => {
         } as Response;
       };
 
-      const events = await adapter.poll();
-      expect(attempts).toBe(2);
+      const events = await singleAdapter.poll();
+      expect(tokenFetched).toBe(true);
+      expect(subredditAttempts).toBe(2);
       expect(events.length).toBeGreaterThan(0);
+      singleAdapter.stop();
     });
 
     it('401 应刷新 token 后重试', async () => {

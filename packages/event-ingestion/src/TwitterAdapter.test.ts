@@ -211,8 +211,14 @@ describe('TwitterAdapter', () => {
 
   describe('重试机制', () => {
     it('HTTP 失败应重试最多 3 次', async () => {
+      // 使用单查询适配器以精确计数
+      const singleAdapter = new TwitterAdapter(createConfig({
+        queries: [{ query: 'test', category: 'tech' }],
+      }));
+      singleAdapter.delayFn = noDelay;
+
       let attempts = 0;
-      adapter.fetchFn = async () => {
+      singleAdapter.fetchFn = async () => {
         attempts++;
         if (attempts < 3) {
           return { ok: false, status: 500, statusText: 'Server Error', headers: new Headers() } as Response;
@@ -224,14 +230,20 @@ describe('TwitterAdapter', () => {
         } as Response;
       };
 
-      const events = await adapter.poll();
+      const events = await singleAdapter.poll();
       expect(attempts).toBe(3);
-      expect(events.length).toBe(2); // 成功获取
+      expect(events.length).toBe(1); // 1 个查询 × 1 条推文
+      singleAdapter.stop();
     });
 
     it('429 限流响应应等待后重试', async () => {
+      const singleAdapter = new TwitterAdapter(createConfig({
+        queries: [{ query: 'test', category: 'tech' }],
+      }));
+      singleAdapter.delayFn = noDelay;
+
       let attempts = 0;
-      adapter.fetchFn = async () => {
+      singleAdapter.fetchFn = async () => {
         attempts++;
         if (attempts === 1) {
           return {
@@ -246,9 +258,10 @@ describe('TwitterAdapter', () => {
         } as Response;
       };
 
-      const events = await adapter.poll();
+      const events = await singleAdapter.poll();
       expect(attempts).toBe(2);
       expect(events.length).toBeGreaterThan(0);
+      singleAdapter.stop();
     });
   });
 
