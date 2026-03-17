@@ -41,9 +41,19 @@
 
 ---
 
-## 3. 水平扩展（分布式 Tick）
+## 3. 水平扩展（分布式 Tick） 🔶
 
 **目标：** 单节点 Agent 容量有限（受 LLM 并发限制），需要支持多节点分布式 tick 执行。
+
+**已完成：**
+- TickCoordinator / Worker / AgentPartitioner / EventRelay 核心协调逻辑 ✅
+- InProcessTransport 进程内通信实现 ✅
+- RedisTransportLayer 跨进程通信实现（基于 Redis Pub/Sub） ✅
+
+**待完成：**
+- NATSTransport 高性能传输层（可选）
+- Social Graph 跨节点同步方案
+- 生产级部署与监控
 
 **关键步骤：**
 1. Tick 协调器：基于 Redis 的分布式锁 + tick 编号分发
@@ -158,7 +168,7 @@ Phase 2.2 — 数据增强 ✅
 
 Phase 2.3 — 可视化与扩展
   ├── Dashboard 增强 ✅
-  └── 水平扩展 ⬜ (唯一未完成的 Phase 2 大项)
+  └── 水平扩展 🔶 (Redis TransportLayer 已实现，NATSTransport 待定)
 ```
 
 ---

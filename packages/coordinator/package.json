@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@beeclaw/shared": "*",
-    "@beeclaw/consensus": "*"
+    "@beeclaw/consensus": "*",
+    "ioredis": "^5.6.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

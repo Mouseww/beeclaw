@@ -29,3 +29,5 @@ export type { AgentExecutor } from './Worker.js';
 // 通信层
 export type { TransportLayer } from './TransportLayer.js';
 export { InProcessTransport } from './TransportLayer.js';
+export { RedisTransportLayer } from './RedisTransportLayer.js';
+export type { RedisTransportConfig } from './RedisTransportLayer.js';

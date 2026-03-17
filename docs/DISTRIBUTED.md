@@ -216,11 +216,128 @@ interface TransportLayer {
 
 | 阶段 | 实现 | 适用场景 |
 |------|------|---------|
-| v1 (当前) | InProcessTransport | 测试、单机多 Worker 模拟 |
-| v2 (后续) | RedisTransport | 多节点部署，基于 Redis Pub/Sub |
+| v1 | InProcessTransport | 测试、单机多 Worker 模拟 |
+| v2 (当前) | RedisTransportLayer | 多节点部署，基于 Redis Pub/Sub |
 | v3 (可选) | NATSTransport | 高性能场景，基于 NATS JetStream |
 
-`InProcessTransport` 使用 EventEmitter 在同一进程内模拟消息传递，接口与远程实现完全一致。
+`InProcessTransport` 使用同步回调在同一进程内模拟消息传递，接口与远程实现完全一致。
+
+### 7.3 RedisTransportLayer 使用指南
+
+#### 安装依赖
+
+`ioredis` 已包含在 `@beeclaw/coordinator` 包的依赖中，无需单独安装。
+
+#### 连接配置
+
+```typescript
+import { RedisTransportLayer } from '@beeclaw/coordinator';
+import type { RedisTransportConfig } from '@beeclaw/coordinator';
+
+const config: RedisTransportConfig = {
+  host: '127.0.0.1',   // Redis 主机，默认 127.0.0.1
+  port: 6379,           // Redis 端口，默认 6379
+  password: 'secret',   // Redis 密码（可选）
+  db: 0,                // 数据库编号，默认 0
+  prefix: 'beeclaw',    // Channel 前缀，默认 'beeclaw'
+};
+
+const transport = new RedisTransportLayer(config);
+await transport.connect();
+```
+
+#### Channel 设计
+
+| Channel | 格式 | 用途 |
+|---------|------|------|
+| Worker 专属 | `{prefix}:worker:{workerId}` | Coordinator → 指定 Worker |
+| Leader | `{prefix}:leader` | Worker → Leader |
+| 广播 | `{prefix}:broadcast` | Coordinator → 所有 Worker |
+| Worker 注册表 | `{prefix}:workers` (Redis Set) | 跨进程 Worker 发现 |
+
+#### 多进程启动示例
+
+**Leader 进程 (coordinator.ts):**
+
+```typescript
+import { TickCoordinator, RedisTransportLayer } from '@beeclaw/coordinator';
+
+const transport = new RedisTransportLayer({
+  host: process.env.REDIS_HOST ?? '127.0.0.1',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+  password: process.env.REDIS_PASSWORD,
+});
+
+await transport.connect();
+
+const coordinator = new TickCoordinator(transport, {
+  workerTimeoutMs: 30000,
+  unhealthyThreshold: 3,
+});
+
+// Leader 监听 Worker 消息
+transport.onLeaderMessage((message) => {
+  coordinator.handleWorkerMessage(message);
+});
+
+// 等待 Worker 注册后开始 tick 循环
+console.log('[Leader] Waiting for workers...');
+```
+
+**Worker 进程 (worker.ts):**
+
+```typescript
+import { Worker, RedisTransportLayer } from '@beeclaw/coordinator';
+
+const transport = new RedisTransportLayer({
+  host: process.env.REDIS_HOST ?? '127.0.0.1',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+  password: process.env.REDIS_PASSWORD,
+});
+
+await transport.connect();
+
+const worker = new Worker(
+  { id: `worker-${process.pid}` },
+  transport,
+  myAgentExecutor,
+);
+
+await worker.sendReady();
+console.log(`[Worker ${process.pid}] Ready`);
+```
+
+**启动命令:**
+
+```bash
+# 终端 1 — Leader
+REDIS_HOST=localhost node dist/coordinator.js
+
+# 终端 2 — Worker 1
+REDIS_HOST=localhost node dist/worker.js
+
+# 终端 3 — Worker 2
+REDIS_HOST=localhost node dist/worker.js
+```
+
+#### 多集群隔离
+
+通过 `prefix` 配置可在同一 Redis 实例上运行多个独立集群：
+
+```typescript
+// 集群 A
+const transportA = new RedisTransportLayer({ prefix: 'beeclaw-prod' });
+
+// 集群 B
+const transportB = new RedisTransportLayer({ prefix: 'beeclaw-staging' });
+```
+
+#### 注意事项
+
+- **两个连接**：ioredis 要求订阅模式下的连接不能执行其它命令，因此 RedisTransportLayer 内部维护独立的 publisher 和 subscriber 连接。
+- **连接生命周期**：必须先调用 `connect()` 再使用任何消息方法；退出前调用 `disconnect()` 清理资源。
+- **Worker 发现**：`getRegisteredWorkerIds()` 返回本地 handler 集合；`getRegisteredWorkerIdsAsync()` 查询 Redis Set 获取全局列表。
+- **序列化**：消息以 JSON 格式序列化，确保所有消息字段可 JSON 序列化。
 
 ---
 
