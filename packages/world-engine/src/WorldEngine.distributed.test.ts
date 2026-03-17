@@ -2,7 +2,7 @@
 // WorldEngine 分布式模式集成测试
 // ============================================================================
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorldEngine } from './WorldEngine.js';
 import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig } from '@beeclaw/shared';
@@ -118,6 +118,126 @@ describe('WorldEngine - Distributed Mode', () => {
       // 每个 Worker 应该分配到 10 个 Agent
       expect(assignments[0]!.agentIds.length).toBe(10);
       expect(assignments[1]!.agentIds.length).toBe(10);
+    });
+  });
+
+  describe('分布式 Tick 执行', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('分布式模式下注入事件并 step 应通过 coordinator 执行', async () => {
+      const config: WorldConfig = {
+        tickIntervalMs: 1000,
+        maxAgents: 100,
+        eventRetentionTicks: 10,
+        enableNaturalSelection: false,
+        distributed: true,
+        workerCount: 2,
+      };
+
+      engine = new WorldEngine({ config, modelRouter });
+
+      const agents = engine.spawner.spawnBatch(6, 0);
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '分布式测试事件',
+        content: '内容',
+        category: 'general',
+        importance: 0.8,
+        propagationRadius: 0.8,
+        tags: ['dist-test'],
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(1);
+      // 分布式模式下 responsesCollected 来自 worker 结果
+      expect(result.responsesCollected).toBeGreaterThanOrEqual(0);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('分布式模式下无事件时应正常完成 tick', async () => {
+      const config: WorldConfig = {
+        tickIntervalMs: 1000,
+        maxAgents: 100,
+        eventRetentionTicks: 10,
+        enableNaturalSelection: false,
+        distributed: true,
+        workerCount: 2,
+      };
+
+      engine = new WorldEngine({ config, modelRouter });
+
+      const agents = engine.spawner.spawnBatch(4, 0);
+      engine.addAgents(agents);
+
+      // 不注入事件
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(0);
+    });
+
+    it('分布式模式下多个事件应都被处理', async () => {
+      const config: WorldConfig = {
+        tickIntervalMs: 1000,
+        maxAgents: 100,
+        eventRetentionTicks: 10,
+        enableNaturalSelection: false,
+        distributed: true,
+        workerCount: 2,
+      };
+
+      engine = new WorldEngine({ config, modelRouter });
+
+      const agents = engine.spawner.spawnBatch(8, 0);
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '事件A',
+        content: '内容A',
+        category: 'general',
+        importance: 0.7,
+        propagationRadius: 0.6,
+      });
+      engine.injectEvent({
+        title: '事件B',
+        content: '内容B',
+        category: 'finance',
+        importance: 0.9,
+        propagationRadius: 0.9,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(2);
+    });
+
+    it('分布式模式下 addAgent 时运行中不应重新分配', () => {
+      const config: WorldConfig = {
+        tickIntervalMs: 1000,
+        maxAgents: 100,
+        eventRetentionTicks: 10,
+        enableNaturalSelection: false,
+        distributed: true,
+        workerCount: 2,
+      };
+
+      engine = new WorldEngine({ config, modelRouter });
+      engine.markRunning(true);
+
+      const agents = engine.spawner.spawnBatch(4, 0);
+      for (const agent of agents) {
+        engine.addAgent(agent);
+      }
+
+      // 因为 running=true，addAgent 不应调用 assignAgents
+      // 验证 agent 已添加但 assignments 可能未更新
+      expect(engine.getAgents()).toHaveLength(4);
+      engine.markRunning(false);
     });
   });
 

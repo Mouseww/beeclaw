@@ -11,7 +11,7 @@ import { ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldConfig, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
 import { initDatabase } from './persistence/database.js';
 import { Store } from './persistence/store.js';
-import { WebhookDispatcher, computeSignature } from './webhook/dispatcher.js';
+import { WebhookDispatcher, computeSignature, calculateBackoff } from './webhook/dispatcher.js';
 import { registerWebhooksRoute } from './api/webhooks.js';
 import type { ServerContext } from './index.js';
 
@@ -372,6 +372,148 @@ describe('WebhookDispatcher', () => {
       expect(log[0]!.status).toBe('success');
       expect(log[0]!.attempt).toBe(1);
       expect(log[0]!.timestamp).toBeGreaterThan(0);
+    });
+
+    it('投递日志应保留最近 500 条并裁剪旧记录', async () => {
+      const mockFetch = createMockFetch(500); // 失败以触发重试
+
+      // 创建足够多的订阅者来产生 500+ 条日志
+      for (let i = 0; i < 200; i++) {
+        store.createWebhook(createTestSubscription({ id: `wh_log_${i}`, events: ['consensus.signal'] }));
+      }
+
+      // maxRetries = 3 → 每个订阅 3 条记录 → 200 * 3 = 600 条
+      const noopSleep = async (_ms: number) => {};
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 3 }, mockFetch, noopSleep);
+      await dispatcher.dispatchAsync('consensus.signal', {});
+
+      const log = dispatcher.getDeliveryLog();
+      expect(log.length).toBeLessThanOrEqual(500);
+    });
+  });
+
+  // ── dispatch (fire-and-forget) ──
+
+  describe('dispatch (fire-and-forget)', () => {
+    it('dispatch 应异步启动发送而不阻塞', async () => {
+      const mockFetch = createMockFetch(200);
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      // dispatch 是 fire-and-forget，不返回 Promise
+      dispatcher.dispatch('consensus.signal', { test: true });
+
+      // 等待异步操作完成
+      await vi.waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  // ── getConfig ──
+
+  describe('getConfig', () => {
+    it('应返回配置的只读副本', () => {
+      const mockFetch = createMockFetch(200);
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 5, timeoutMs: 5000 }, mockFetch);
+      const config = dispatcher.getConfig();
+      expect(config.maxRetries).toBe(5);
+      expect(config.timeoutMs).toBe(5000);
+      expect(config.maxConcurrency).toBe(10); // 默认值
+    });
+  });
+
+  // ── calculateBackoff 边界 ──
+
+  describe('calculateBackoff', () => {
+    it('jitter=false 时应返回精确的指数退避', () => {
+      // attempt=2: base * 2^0 = base
+      expect(calculateBackoff(2, 1000, false)).toBe(1000);
+      // attempt=3: base * 2^1 = 2 * base
+      expect(calculateBackoff(3, 1000, false)).toBe(2000);
+      // attempt=4: base * 2^2 = 4 * base
+      expect(calculateBackoff(4, 1000, false)).toBe(4000);
+    });
+
+    it('jitter=true 时应返回带随机偏移的退避', () => {
+      // 多次调用，验证结果在合理范围内
+      const results = Array.from({ length: 20 }, () => calculateBackoff(2, 1000, true));
+      for (const r of results) {
+        // 基础 1000 + jitter [0, 500)
+        expect(r).toBeGreaterThanOrEqual(1000);
+        expect(r).toBeLessThan(1500);
+      }
+    });
+  });
+
+  // ── 重试中间状态标记 ──
+
+  describe('重试中间状态标记', () => {
+    it('重试中间尝试应标记为 retrying', async () => {
+      const mockFetch = createMockFetch(500); // 始终失败
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const noopSleep = async (_ms: number) => {};
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 3, retryBaseMs: 10 }, mockFetch, noopSleep);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      // 最终应该有 1 条 failed 记录返回
+      expect(records).toHaveLength(1);
+      expect(records[0]!.status).toBe('failed');
+
+      // 投递日志应包含 3 条记录（attempt 1, 2, 3）
+      const log = dispatcher.getDeliveryLog();
+      expect(log).toHaveLength(3);
+      // 前两条应标记为 retrying
+      expect(log[0]!.status).toBe('retrying');
+      expect(log[1]!.status).toBe('retrying');
+      // 最后一条应是 failed
+      expect(log[2]!.status).toBe('failed');
+    });
+
+    it('重试时应正确计算退避延迟', async () => {
+      const mockFetch = createMockFetch(500);
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const sleepCalls: number[] = [];
+      const trackingSleep = async (ms: number) => { sleepCalls.push(ms); };
+      const dispatcher = new WebhookDispatcher(
+        store,
+        { maxRetries: 3, retryBaseMs: 100, retryJitter: false },
+        mockFetch,
+        trackingSleep,
+      );
+      await dispatcher.dispatchAsync('consensus.signal', {});
+
+      // 应该有 2 次 sleep（attempt 2 和 attempt 3）
+      expect(sleepCalls).toHaveLength(2);
+      // attempt=2: 100 * 2^0 = 100
+      expect(sleepCalls[0]).toBe(100);
+      // attempt=3: 100 * 2^1 = 200
+      expect(sleepCalls[1]).toBe(200);
+    });
+  });
+
+  // ── 网络异常的错误消息 ──
+
+  describe('网络异常的错误消息', () => {
+    it('非 Error 类型的异常应被转为字符串', async () => {
+      const mockFetch = vi.fn(async () => {
+        throw 'string error'; // eslint-disable-line no-throw-literal
+      }) as unknown as typeof fetch;
+
+      const sub = createTestSubscription();
+      store.createWebhook(sub);
+
+      const dispatcher = new WebhookDispatcher(store, { maxRetries: 1 }, mockFetch);
+      const records = await dispatcher.dispatchAsync('consensus.signal', {});
+
+      expect(records).toHaveLength(1);
+      expect(records[0]!.status).toBe('failed');
+      expect(records[0]!.error).toBe('string error');
     });
   });
 

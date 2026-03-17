@@ -473,6 +473,212 @@ describe('WorldEngine', () => {
     });
   });
 
+  // ── markRunning ──
+
+  describe('markRunning', () => {
+    it('应允许外部设置运行状态', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
+      expect(engine.isRunning()).toBe(false);
+      engine.markRunning(true);
+      expect(engine.isRunning()).toBe(true);
+      engine.markRunning(false);
+      expect(engine.isRunning()).toBe(false);
+    });
+  });
+
+  // ── Agent 推理失败 ──
+
+  describe('Agent 推理失败', () => {
+    it('单个 Agent 推理失败不应中断整体流程', async () => {
+      const router = new ModelRouter(MOCK_MODEL_CONFIG);
+      let callCount = 0;
+      for (const tier of ['local', 'cheap', 'strong'] as const) {
+        vi.spyOn(router.getClient(tier), 'chatCompletion').mockImplementation(async () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error('模拟推理超时');
+          }
+          return '{"opinion":"观点","action":"speak","emotionalState":0.3,"reasoning":"理由"}';
+        });
+      }
+
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const agents = Array.from({ length: 5 }, (_, i) => new Agent({ id: `fail-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '推理失败事件',
+        content: '内容',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      // tick 应正常完成，即使有 Agent 推理失败
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(1);
+    });
+  });
+
+  // ── maxAgents 限制 ──
+
+  describe('maxAgents 限制', () => {
+    it('Agent 数量达到 maxAgents 时不应再孵化', async () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 3,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      // 先加满 Agent
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `max-${i}` }));
+      engine.addAgents(agents);
+
+      // 添加孵化规则
+      engine.spawner.addRule({
+        id: 'max-test-rule',
+        trigger: { type: 'event', keyword: '触发孵化' },
+        count: 5,
+      });
+
+      engine.injectEvent({
+        title: '触发孵化',
+        content: '内容',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      const result = await engine.step();
+      // 不应产生新 Agent（因为已满）
+      expect(result.newAgentsSpawned).toBe(0);
+      expect(engine.getAgents().length).toBe(3);
+    });
+
+    it('接近 maxAgents 时应只孵化到上限', async () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 5,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      // 先加 3 个 Agent
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `near-${i}` }));
+      engine.addAgents(agents);
+
+      // 添加孵化规则（想孵化 10 个）
+      engine.spawner.addRule({
+        id: 'near-max-rule',
+        trigger: { type: 'event', keyword: '大量孵化' },
+        count: 10,
+      });
+
+      engine.injectEvent({
+        title: '大量孵化',
+        content: '内容',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      const result = await engine.step();
+      // 应最多只能多加 2 个（5 - 3 = 2）
+      expect(engine.getAgents().length).toBeLessThanOrEqual(5);
+      expect(result.newAgentsSpawned).toBeLessThanOrEqual(2);
+    });
+  });
+
+  // ── TickResult 摘要字段 ──
+
+  describe('TickResult 摘要字段', () => {
+    it('有事件时应包含 events 和 timestamp', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const agents = Array.from({ length: 5 }, (_, i) => new Agent({ id: `sum-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '摘要测试事件',
+        content: '内容',
+        importance: 0.9,
+        propagationRadius: 0.8,
+        category: 'general',
+      });
+
+      const result = await engine.step();
+      expect(result.events).toBeDefined();
+      expect(result.events!.length).toBe(1);
+      expect(result.events![0]!.title).toBe('摘要测试事件');
+      expect(result.events![0]!.category).toBe('general');
+      expect(result.timestamp).toBeDefined();
+    });
+
+    it('有 Agent 响应时应包含 responses 摘要', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const agents = Array.from({ length: 5 }, (_, i) => new Agent({ id: `resp-sum-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '响应摘要测试',
+        content: '内容',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      if (result.responsesCollected > 0) {
+        expect(result.responses).toBeDefined();
+        expect(result.responses!.length).toBe(result.responsesCollected);
+        for (const resp of result.responses!) {
+          expect(resp.agentId).toBeDefined();
+          expect(resp.opinion).toBeDefined();
+          expect(resp.action).toBeDefined();
+          expect(typeof resp.emotionalState).toBe('number');
+        }
+      }
+    });
+
+    it('无事件时不应包含 events 和 responses 摘要', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      engine.addAgent(new Agent({ id: 'no-event-1' }));
+
+      const result = await engine.step();
+      expect(result.events).toBeUndefined();
+      expect(result.responses).toBeUndefined();
+    });
+  });
+
+  // ── 定时孵化 maxAgents 限制 ──
+
+  describe('定时孵化 maxAgents 限制', () => {
+    it('定时孵化也应受 maxAgents 限制', async () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 4,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      // 先加 3 个 Agent
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `sched-${i}` }));
+      engine.addAgents(agents);
+
+      // 添加定时孵化规则（想孵化 5 个）
+      engine.spawner.addRule({
+        id: 'scheduled-max-rule',
+        trigger: { type: 'scheduled', intervalTicks: 1 },
+        count: 5,
+      });
+
+      const result = await engine.step();
+      // 应最多加 1 个（4 - 3 = 1）
+      expect(engine.getAgents().length).toBeLessThanOrEqual(4);
+      expect(result.newAgentsSpawned).toBeLessThanOrEqual(1);
+    });
+  });
+
   // ── tickHistory 裁剪 ──
 
   describe('tickHistory 裁剪', () => {

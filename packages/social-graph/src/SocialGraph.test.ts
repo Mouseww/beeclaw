@@ -322,4 +322,147 @@ describe('SocialGraph', () => {
       expect(data.edges).toHaveLength(0);
     });
   });
+
+  // ── 边界 case ──
+
+  describe('边界 case', () => {
+    it('addEdge 对未通过 addNode 注册的 from 节点应自动创建 edges 列表', () => {
+      const graph = new SocialGraph();
+      // 不调用 addNode，直接 addEdge — 覆盖 edges.has(from) === false 分支
+      graph.addEdge('unknown-from', 'unknown-to', 'follow', 0.6, 1);
+      const edge = graph.getEdge('unknown-from', 'unknown-to');
+      expect(edge).toBeDefined();
+      expect(edge!.type).toBe('follow');
+      expect(edge!.strength).toBe(0.6);
+    });
+
+    it('removeEdge 对不存在的 from 节点不应报错', () => {
+      const graph = new SocialGraph();
+      expect(() => graph.removeEdge('nonexistent', 'also-nonexistent')).not.toThrow();
+    });
+
+    it('removeEdge 对存在的 from 但不存在的 to 不应报错', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addEdge('a1', 'a2');
+      expect(() => graph.removeEdge('a1', 'nonexistent')).not.toThrow();
+      // 原有的边不受影响
+      expect(graph.getEdge('a1', 'a2')).toBeDefined();
+    });
+
+    it('getOutEdges 对不存在的节点应返回空数组', () => {
+      const graph = new SocialGraph();
+      expect(graph.getOutEdges('nonexistent')).toEqual([]);
+    });
+
+    it('getInEdges 对不存在的节点应返回空数组', () => {
+      const graph = new SocialGraph();
+      expect(graph.getInEdges('nonexistent')).toEqual([]);
+    });
+
+    it('getFollowers 对无入边的节点应返回空数组', () => {
+      const graph = new SocialGraph();
+      graph.addNode('isolated');
+      expect(graph.getFollowers('isolated')).toEqual([]);
+    });
+
+    it('getFollowing 对无出边的节点应返回空数组', () => {
+      const graph = new SocialGraph();
+      graph.addNode('isolated');
+      expect(graph.getFollowing('isolated')).toEqual([]);
+    });
+
+    it('getNeighbors 对孤立节点应返回空数组', () => {
+      const graph = new SocialGraph();
+      graph.addNode('isolated');
+      expect(graph.getNeighbors('isolated')).toEqual([]);
+    });
+
+    it('getEdge 对存在 from 但 edges 为空的情况应返回 undefined', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      expect(graph.getEdge('a1', 'nonexistent')).toBeUndefined();
+    });
+
+    it('getStats 空图时 avgDegree 应为 0', () => {
+      const graph = new SocialGraph();
+      const stats = graph.getStats();
+      expect(stats.nodeCount).toBe(0);
+      expect(stats.edgeCount).toBe(0);
+      expect(stats.avgDegree).toBe(0);
+      expect(stats.communities).toEqual([]);
+    });
+
+    it('getStats 应正确汇总社区信息', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1', 10, 'c1');
+      graph.addNode('a2', 20, 'c1');
+      graph.addNode('a3', 30, 'c2');
+      graph.addEdge('a1', 'a2');
+      graph.addEdge('a2', 'a3');
+
+      const stats = graph.getStats();
+      expect(stats.nodeCount).toBe(3);
+      expect(stats.edgeCount).toBe(2);
+      expect(stats.avgDegree).toBeCloseTo(2 / 3);
+      expect(stats.communities).toContain('c1');
+      expect(stats.communities).toContain('c2');
+    });
+
+    it('removeNode 当目标节点没有入边时不应出错', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addEdge('a1', 'a2');
+
+      graph.removeNode('a2');
+      expect(graph.hasNode('a2')).toBe(false);
+      // a1 -> a2 的出边仍在 a1 的 edges 中（removeNode 只删 a2 的 edges 和指向 a2 的边）
+      expect(graph.getOutEdges('a1')).toHaveLength(0);
+    });
+
+    it('initializeRandomRelations 使用默认 tick 参数', () => {
+      const graph = new SocialGraph();
+      const ids = ['a1', 'a2'];
+      for (const id of ids) graph.addNode(id);
+      graph.initializeRandomRelations(ids);
+
+      const edges = graph.getAllEdges();
+      for (const edge of edges) {
+        expect(edge.formedAtTick).toBe(0);
+      }
+    });
+
+    it('initializeRandomRelations maxFollowCount 大于其他节点数时应限制', () => {
+      const graph = new SocialGraph();
+      const ids = ['a1', 'a2'];
+      for (const id of ids) graph.addNode(id);
+      graph.initializeRandomRelations(ids, 100); // maxFollowCount > others.length
+
+      // 每个节点最多关注 1 个（因为只有 1 个其他节点）
+      for (const id of ids) {
+        expect(graph.getOutEdges(id).length).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('getFollowing 应包含 trust 类型', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addEdge('a1', 'a2', 'trust');
+
+      const following = graph.getFollowing('a1');
+      expect(following).toContain('a2');
+    });
+
+    it('getFollowers 应包含 trust 类型入边', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addEdge('a2', 'a1', 'trust');
+
+      const followers = graph.getFollowers('a1');
+      expect(followers).toContain('a2');
+    });
+  });
 });
