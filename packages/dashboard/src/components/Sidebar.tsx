@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/', label: '世界总览', icon: '🌍' },
   { path: '/agents', label: 'Agent 列表', icon: '🤖' },
   { path: '/events', label: '事件流', icon: '⚡' },
+  { path: '/timeline', label: '事件回放', icon: '⏮️' },
   { path: '/consensus', label: '共识引擎', icon: '📊' },
   { path: '/social-graph', label: '社交网络', icon: '🔗' },
   { path: '/ingestion', label: '事件接入', icon: '📡' },

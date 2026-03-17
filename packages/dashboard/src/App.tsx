@@ -14,6 +14,7 @@ import { EventFeed } from './pages/EventFeed';
 import { ConsensusView } from './pages/ConsensusView';
 import { SocialGraphView } from './pages/SocialGraphView';
 import { IngestionView } from './pages/IngestionView';
+import { TimelineReplay } from './pages/TimelineReplay';
 import { Settings } from './pages/Settings';
 
 export function App() {
@@ -39,6 +40,7 @@ export function App() {
             <Route path="/consensus" element={<ConsensusView />} />
             <Route path="/social-graph" element={<SocialGraphView />} />
             <Route path="/ingestion" element={<IngestionView />} />
+            <Route path="/timeline" element={<TimelineReplay />} />
             <Route path="/settings" element={<Settings />} />
             {/* 未匹配路由重定向到首页 */}
             <Route path="*" element={<Navigate to="/" replace />} />

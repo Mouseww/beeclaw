@@ -10,6 +10,8 @@ import type {
   HistoryResponse,
   IngestionStatus,
   IngestionSourceStatus,
+  TickEventsResponse,
+  TickResponsesResponse,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -111,11 +113,11 @@ export async function deleteRssSource(sourceId: string): Promise<{ ok: boolean }
 }
 
 /** 获取 Tick 的事件 */
-export function fetchTickEvents(tick: number): Promise<{ events: unknown[]; total: number }> {
-  return fetchJSON(`/ticks/${tick}/events`);
+export function fetchTickEvents(tick: number): Promise<TickEventsResponse> {
+  return fetchJSON<TickEventsResponse>(`/ticks/${tick}/events`);
 }
 
 /** 获取 Tick 的响应 */
-export function fetchTickResponses(tick: number): Promise<{ responses: unknown[]; total: number }> {
-  return fetchJSON(`/ticks/${tick}/responses`);
+export function fetchTickResponses(tick: number): Promise<TickResponsesResponse> {
+  return fetchJSON<TickResponsesResponse>(`/ticks/${tick}/responses`);
 }

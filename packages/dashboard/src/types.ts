@@ -237,6 +237,18 @@ export interface IngestionFinanceSourceStatus {
   eventsEmitted: number;
 }
 
+/** Tick 事件详情（/api/ticks/:tick/events 响应） */
+export interface TickEventsResponse {
+  events: TickEvent[];
+  total: number;
+}
+
+/** Tick 响应详情（/api/ticks/:tick/responses 响应） */
+export interface TickResponsesResponse {
+  responses: TickResponse[];
+  total: number;
+}
+
 /** Ingestion 整体状态 */
 export interface IngestionStatus {
   running: boolean;
