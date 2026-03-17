@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.20] - 2026-03-17
+
+### 🧪 Tests
+
+- **PostgreSQL Adapter 测试** — 92 个测试覆盖所有 CRUD 操作、事务、连接池管理
+- **迁移脚本测试** — 41 个测试覆盖 SQLite → PostgreSQL 迁移全流程
+- 导出迁移脚本内部函数以支持依赖注入测试
+
+### 🐛 Bug Fixes
+
+- 跳过空 tick 的广播/持久化（无事件时不做无用功）
+- 清理 benchmark 中未使用的 ChatMessage import
+
 ## [1.0.19] - 2026-03-17
 
 ### ✨ Features
