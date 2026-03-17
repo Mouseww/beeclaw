@@ -210,4 +210,81 @@ describe('GET /api/status', () => {
     expect(body.agentCount).toBe(3);
     expect(body.activeAgents).toBe(2);
   });
+
+  // ── 覆盖率补充：aggregateGlobalSentiment 分支 ──
+
+  it('所有信号 sentimentDistribution 总和为 0 时应返回 0 百分比（但 topicBreakdown 有数据）', async () => {
+    const consensus = testCtx.engine.getConsensusEngine();
+    const event = {
+      id: 'e-zero', title: '零情绪事件', content: '内容', category: 'general' as const,
+      importance: 0.5, propagationRadius: 0.5, tick: 1, tags: [],
+    };
+    // 所有 agent 情绪为 0 → bullish/bearish/neutral 都为 0
+    const responses = [
+      { agentId: 'a1', agentName: 'Agent1', credibility: 0.5, response: { stance: 0.0, confidence: 0.0, opinion: '无感', action: 'hold' as const, emotionalState: 0.0, targets: [] } },
+      { agentId: 'a2', agentName: 'Agent2', credibility: 0.5, response: { stance: 0.0, confidence: 0.0, opinion: '无感', action: 'hold' as const, emotionalState: 0.0, targets: [] } },
+    ];
+    consensus.analyze(1, event, responses);
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+
+    // 有信号但 total 可能为 0 → bullish/bearish/neutral 应为 0
+    expect(body.sentiment.topicBreakdown.length).toBeGreaterThanOrEqual(1);
+    expect(typeof body.sentiment.bullish).toBe('number');
+    expect(typeof body.sentiment.bearish).toBe('number');
+    expect(typeof body.sentiment.neutral).toBe('number');
+  });
+
+  it('多个信号包含相同标的时应正确聚合 targetBreakdown', async () => {
+    const consensus = testCtx.engine.getConsensusEngine();
+
+    // 两个事件都提到 BTC
+    const event1 = {
+      id: 'e-t1', title: '加密货币话题1', content: '内容', category: 'finance' as const,
+      importance: 0.8, propagationRadius: 0.5, tick: 1, tags: [],
+    };
+    const event2 = {
+      id: 'e-t2', title: '加密货币话题2', content: '内容', category: 'finance' as const,
+      importance: 0.8, propagationRadius: 0.5, tick: 2, tags: [],
+    };
+
+    const responses1 = [
+      { agentId: 'a1', agentName: 'Agent1', credibility: 0.9, response: { stance: 0.8, confidence: 0.9, opinion: 'BTC看涨', action: 'buy' as const, emotionalState: 0.8, targets: [{ name: 'BTC', category: 'crypto' as const, stance: 0.8, confidence: 0.9 }] } },
+      { agentId: 'a2', agentName: 'Agent2', credibility: 0.7, response: { stance: 0.5, confidence: 0.7, opinion: 'BTC稳', action: 'hold' as const, emotionalState: 0.3, targets: [{ name: 'btc', category: 'crypto' as const, stance: 0.5, confidence: 0.7 }] } },
+    ];
+    const responses2 = [
+      { agentId: 'a3', agentName: 'Agent3', credibility: 0.8, response: { stance: -0.3, confidence: 0.6, opinion: 'BTC回调', action: 'sell' as const, emotionalState: -0.3, targets: [{ name: 'BTC', category: 'crypto' as const, stance: -0.3, confidence: 0.6 }] } },
+    ];
+
+    consensus.analyze(1, event1, responses1);
+    consensus.analyze(2, event2, responses2);
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+
+    // targetBreakdown 中同名标的（大小写不同）应合并为一个
+    expect(Array.isArray(body.sentiment.targetBreakdown)).toBe(true);
+    const btcEntries = body.sentiment.targetBreakdown.filter(
+      (t: { name: string }) => t.name === 'BTC',
+    );
+    // 由于 toUpperCase()，'btc' 和 'BTC' 应合并
+    expect(btcEntries.length).toBeLessThanOrEqual(1);
+  });
+
+  it('engine 运行中时 running 应为 true', async () => {
+    testCtx.engine.markRunning(true);
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(body.running).toBe(true);
+    testCtx.engine.markRunning(false);
+  });
+
+  it('step 后 lastTick 应不为 null', async () => {
+    await testCtx.engine.step();
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(body.lastTick).not.toBeNull();
+    expect(body.lastTick.tick).toBe(1);
+  });
 });

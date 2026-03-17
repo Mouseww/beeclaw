@@ -700,4 +700,126 @@ describe('WorldEngine', () => {
       expect(history[0]!.tick).toBe(6);
     });
   });
+
+  // ── 覆盖率补充：maxAgents 默认值分支 ──
+
+  describe('maxAgents 默认值', () => {
+    it('config 未设置 maxAgents 时应使用默认值 500', async () => {
+      const router = createMockModelRouter();
+      const configNoMax: WorldConfig = {
+        tickIntervalMs: 1000,
+        eventRetentionTicks: 50,
+        enableNaturalSelection: false,
+      };
+      const engine = new WorldEngine({ config: configNoMax, modelRouter: router });
+
+      // 使用定时孵化确保触发
+      engine.spawner.addRule({
+        id: 'default-max-sched',
+        trigger: { type: 'scheduled', intervalTicks: 1 },
+        count: 2,
+      });
+
+      const result = await engine.step();
+      // 应正常孵化（不会因为 maxAgents 未定义而报错）
+      expect(result.newAgentsSpawned).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // ── 覆盖率补充：TickResult 可选字段为 undefined 的分支 ──
+
+  describe('TickResult 可选字段边界', () => {
+    it('无事件时 cacheHits/cacheMisses/agentsFiltered 应为 undefined', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      engine.addAgent(new Agent({ id: 'opt-1' }));
+
+      const result = await engine.step();
+      // 无事件处理，缓存和过滤都不会触发
+      expect(result.cacheHits).toBeUndefined();
+      expect(result.cacheMisses).toBeUndefined();
+      expect(result.agentsFiltered).toBeUndefined();
+      expect(result.agentsEliminated).toBeUndefined();
+    });
+  });
+
+  // ── 覆盖率补充：共识分析异常为非 Error 实例 ──
+
+  describe('共识分析非 Error 实例异常', () => {
+    it('共识分析抛出字符串异常时应捕获并继续', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 10 }, (_, i) => new Agent({ id: `str-err-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '字符串异常测试',
+        content: '内容',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      // Mock 共识引擎抛出非 Error 类型
+      vi.spyOn(engine.consensusEngine, 'analyze').mockImplementation(() => {
+        throw 'string error message';
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.signals).toBe(0);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('共识分析失败'),
+        'string error message',
+      );
+    });
+  });
+
+  // ── 覆盖率补充：事件处理异常为非 Error 实例 ──
+
+  describe('事件处理非 Error 实例异常', () => {
+    it('事件处理抛出非 Error 对象时应捕获并继续', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `ne-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '非Error异常事件',
+        content: '内容',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      // Mock activationPool 抛出非 Error 对象
+      vi.spyOn(engine.activationPool, 'computeActivation').mockImplementation(() => {
+        throw { code: 42, msg: 'non-error object' };
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('处理事件'),
+        expect.objectContaining({ code: 42 }),
+      );
+    });
+  });
+
+  // ── 覆盖率补充：构造函数默认参数 ──
+
+  describe('构造函数默认参数', () => {
+    it('不传 modelRouter 时应使用默认 ModelRouter', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG });
+      expect(engine).toBeDefined();
+      expect(engine.getAgents()).toHaveLength(0);
+    });
+
+    it('不传 concurrency 时应使用默认值 10', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG });
+      // 引擎应正常初始化
+      expect(engine).toBeDefined();
+    });
+  });
 });

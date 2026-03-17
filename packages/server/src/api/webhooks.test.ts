@@ -433,4 +433,111 @@ describe('POST /api/webhooks/:id/test', () => {
     expect(body.delivery).toBeDefined();
     expect(mockDispatcher.sendTest).toHaveBeenCalled();
   });
+
+  it('sendTest 返回失败状态时 ok 应为 false', async () => {
+    await testCtx.app.close();
+    testCtx = await buildTestContext(0);
+
+    const failedDelivery = {
+      id: 'del-2',
+      subscriptionId: 'wh_test',
+      event: 'tick.completed' as const,
+      status: 'failed' as const,
+      httpStatus: 500,
+      timestamp: Date.now(),
+      durationMs: 200,
+    };
+    const mockDispatcher = {
+      sendTest: vi.fn().mockResolvedValue(failedDelivery),
+    };
+    (testCtx.ctx as Record<string, unknown>)['webhookDispatcher'] = mockDispatcher;
+
+    registerWebhooksRoute(testCtx.app, testCtx.ctx);
+    await testCtx.app.ready();
+    app = testCtx.app;
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/webhooks',
+      payload: {
+        url: 'https://example.com/hook',
+        events: ['tick.completed'],
+      },
+    });
+    const id = createRes.json().webhook.id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/webhooks/${id}/test`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(false);
+    expect(body.delivery.status).toBe('failed');
+  });
+});
+
+// ════════════════════════════════════════
+// PUT /api/webhooks/:id — 覆盖率补充
+// ════════════════════════════════════════
+
+describe('PUT /api/webhooks/:id (覆盖率补充)', () => {
+  let app: FastifyInstance;
+  let webhookId: string;
+
+  beforeEach(async () => {
+    registerWebhooksRoute(testCtx.app, testCtx.ctx);
+    await testCtx.app.ready();
+    app = testCtx.app;
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/webhooks',
+      payload: {
+        url: 'https://example.com/original',
+        events: ['tick.completed'],
+      },
+    });
+    webhookId = createRes.json().webhook.id;
+  });
+
+  it('同时更新 url 和 active 应都生效', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/webhooks/${webhookId}`,
+      payload: { url: 'https://example.com/new-url', active: false },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(true);
+    expect(body.webhook.url).toBe('https://example.com/new-url');
+    expect(body.webhook.active).toBe(false);
+  });
+
+  it('同时更新 url、events 和 active 应都生效', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/webhooks/${webhookId}`,
+      payload: {
+        url: 'https://example.com/all-fields',
+        events: ['consensus.signal', 'trend.shift'],
+        active: false,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ok).toBe(true);
+    expect(body.webhook.url).toBe('https://example.com/all-fields');
+    expect(body.webhook.events).toEqual(['consensus.signal', 'trend.shift']);
+    expect(body.webhook.active).toBe(false);
+  });
+
+  it('更新包含混合有效和无效事件类型时应返回 400', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/webhooks/${webhookId}`,
+      payload: { events: ['tick.completed', 'invalid.event'] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
