@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.19] - 2026-03-17
+
+### ✨ Features
+
+- **PostgreSQL Docker Compose** — 新增 `--profile postgres` 支持一键启动 PostgreSQL 模式
+- **SQLite → PostgreSQL 数据迁移脚本** — `scripts/migrate-sqlite-to-postgres.ts` 支持自动数据迁移
+
+### 🧹 Code Quality
+
+- 清理 dashboard、event-ingestion、server 中的未使用导入和 lint 警告
+
+
 ## [1.0.18] - 2026-03-17
 
 ### ✨ Features
