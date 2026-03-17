@@ -16,9 +16,8 @@ import { WorldEngine } from '@beeclaw/world-engine';
 import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import { DEFAULT_TEMPLATE } from '@beeclaw/agent-runtime';
 import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
-import { initDatabase } from './persistence/database.js';
-import { Store } from './persistence/store.js';
 import type { DatabaseAdapter } from './persistence/adapter.js';
+import { createStore } from './persistence/factory.js';
 import { registerWs, broadcast, getConnectionCount, stopHeartbeat, closeAllConnections } from './ws/handler.js';
 import { registerStatusRoute } from './api/status.js';
 import { registerAgentsRoute } from './api/agents.js';
@@ -71,10 +70,11 @@ async function main(): Promise<void> {
   console.log('  🐝 BeeClaw Server — 群体智能仿真引擎');
   console.log('═══════════════════════════════════════════');
 
-  // 1. 初始化数据库
-  const db = initDatabase(DB_PATH);
-  const store = new Store(db);
-  console.log(`[Server] SQLite 已初始化`);
+  // 1. 初始化数据库（工厂模式，支持 SQLite / PostgreSQL）
+  const { store, driver: dbDriver, close: closeDb } = await createStore({
+    sqlitePath: DB_PATH,
+  });
+  console.log(`[Server] 数据库已初始化 (${dbDriver})`);
 
   // 2. 初始化 ModelRouter（先用环境变量，再用数据库覆盖）
   const modelRouter = new ModelRouter();
@@ -528,7 +528,7 @@ async function main(): Promise<void> {
       closeAllConnections();
 
       await app.close();
-      db.close();
+      await closeDb();
       console.log('[Server] 🐝 BeeClaw Server 已停止');
     } catch (err) {
       console.error('[Server] 退出过程中出错:', err);
