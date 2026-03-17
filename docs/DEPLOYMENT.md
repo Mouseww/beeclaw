@@ -46,6 +46,8 @@ docker compose up -d
 
 ### 使用 Docker Compose
 
+#### 默认模式（SQLite）
+
 1. **配置环境变量**
 
 ```bash
@@ -89,32 +91,111 @@ curl http://localhost:3000/health
 # 期望：{"status":"ok","uptime":...,"version":"0.1.0","tick":...}
 ```
 
+#### PostgreSQL 模式
+
+项目使用 Docker Compose [profiles](https://docs.docker.com/compose/profiles/) 支持一键切换到 PostgreSQL。
+
+1. **配置环境变量**
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，配置 PostgreSQL 相关变量：
+
+```env
+# PostgreSQL 配置
+POSTGRES_USER=beeclaw
+POSTGRES_PASSWORD=your-strong-password   # ⚠️ 生产环境请使用强密码
+POSTGRES_DB=beeclaw
+POSTGRES_PORT=5432
+
+# LLM 配置
+BEECLAW_LLM_BASE_URL=http://host.docker.internal:11434
+BEECLAW_LLM_API_KEY=no-key
+BEECLAW_LOCAL_MODEL=qwen2.5:7b
+```
+
+2. **启动 PostgreSQL 模式**
+
+```bash
+# 构建并启动（PostgreSQL + Server）
+docker compose --profile postgres up -d --build
+
+# 查看日志
+docker compose --profile postgres logs -f
+
+# 停止
+docker compose --profile postgres down
+```
+
+> `--profile postgres` 会启动 `postgres` 数据库服务和 `server-pg`（PostgreSQL 版 Server）。默认的 `server`（SQLite 版）不会启动，两者互不干扰。
+
+3. **验证**
+
+```bash
+# 检查健康状态
+curl http://localhost:3000/health
+
+# 检查 PostgreSQL 连接
+docker exec beeclaw-postgres pg_isready -U beeclaw
+```
+
+4. **数据持久化**
+
+PostgreSQL 数据存储在 `beeclaw-pgdata` Docker 卷中，容器删除后数据不会丢失。
+
+```bash
+# 查看卷
+docker volume ls | grep beeclaw
+
+# 备份数据库
+docker exec beeclaw-postgres pg_dump -U beeclaw beeclaw > beeclaw-backup.sql
+
+# 恢复数据库
+cat beeclaw-backup.sql | docker exec -i beeclaw-postgres psql -U beeclaw beeclaw
+```
+
 ### docker-compose.yml 说明
 
 ```yaml
 services:
+  # 默认 SQLite 模式
   server:
     build: .
     container_name: beeclaw-server
-    restart: unless-stopped
     ports:
       - "${BEECLAW_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
       - BEECLAW_DB_PATH=/app/data/beeclaw.db
       # ... 其他环境变量
     volumes:
       - beeclaw-data:/app/data       # SQLite 数据持久化
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)throw 1})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+
+  # PostgreSQL (--profile postgres)
+  postgres:
+    image: postgres:16-alpine
+    profiles: [postgres]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-beeclaw}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-beeclaw}
+      - POSTGRES_DB=${POSTGRES_DB:-beeclaw}
+    volumes:
+      - beeclaw-pgdata:/var/lib/postgresql/data
+
+  # Server PostgreSQL 版 (--profile postgres)
+  server-pg:
+    extends: { service: server }
+    profiles: [postgres]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      - BEECLAW_DB_DRIVER=postgres
+      - DATABASE_URL=postgresql://...@postgres:5432/beeclaw
 
 volumes:
-  beeclaw-data:
-    driver: local
+  beeclaw-data:       # SQLite 数据
+  beeclaw-pgdata:     # PostgreSQL 数据
 ```
 
 ### Dockerfile 多阶段构建
@@ -214,6 +295,17 @@ pm2 startup
 | `BEECLAW_DB_PATH` | _(空=内存)_ | SQLite 数据库文件路径 |
 | `BEECLAW_SEED_EVENT` | _(空)_ | 启动时注入的种子事件内容 |
 | `BEECLAW_SAVE_INTERVAL` | `5` | 每 N 个 tick 保存一次状态到数据库 |
+
+### 数据库配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `BEECLAW_DB_DRIVER` | `sqlite` | 数据库驱动：`sqlite` 或 `postgres` |
+| `DATABASE_URL` | _(空)_ | PostgreSQL 连接字符串（仅 postgres 驱动），Docker Compose 自动设置 |
+| `POSTGRES_USER` | `beeclaw` | PostgreSQL 用户名（Docker Compose 用） |
+| `POSTGRES_PASSWORD` | `beeclaw` | PostgreSQL 密码（Docker Compose 用，生产环境必须修改） |
+| `POSTGRES_DB` | `beeclaw` | PostgreSQL 数据库名（Docker Compose 用） |
+| `POSTGRES_PORT` | `5432` | PostgreSQL 宿主机映射端口（Docker Compose 用） |
 
 ### 安全与访问控制
 

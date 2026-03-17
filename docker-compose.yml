@@ -1,8 +1,13 @@
 # ============================================================================
 # BeeClaw — Docker Compose 配置
+#
+# 使用方式:
+#   默认 (SQLite):      docker compose up -d
+#   PostgreSQL 模式:    docker compose --profile postgres up -d
 # ============================================================================
 
 services:
+  # ── BeeClaw Server ────────────────────────────────────────────────────────
   server:
     build:
       context: .
@@ -26,6 +31,11 @@ services:
       - BEECLAW_LOCAL_MODEL=${BEECLAW_LOCAL_MODEL:-qwen2.5:7b}
       - BEECLAW_CHEAP_MODEL=${BEECLAW_CHEAP_MODEL:-qwen2.5:7b}
       - BEECLAW_STRONG_MODEL=${BEECLAW_STRONG_MODEL:-qwen2.5:72b}
+      # ── 安全配置 ──
+      - BEECLAW_API_KEY=${BEECLAW_API_KEY:-}
+      - BEECLAW_CORS_ORIGINS=${BEECLAW_CORS_ORIGINS:-}
+      - BEECLAW_RATE_LIMIT=${BEECLAW_RATE_LIMIT:-100}
+      - BEECLAW_LOG_LEVEL=${BEECLAW_LOG_LEVEL:-info}
     volumes:
       - beeclaw-data:/app/data
     healthcheck:
@@ -35,6 +45,65 @@ services:
       retries: 3
       start_period: 15s
 
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  # 仅在 --profile postgres 时启动
+  postgres:
+    image: postgres:16-alpine
+    container_name: beeclaw-postgres
+    profiles:
+      - postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-beeclaw}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-beeclaw}
+      - POSTGRES_DB=${POSTGRES_DB:-beeclaw}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - beeclaw-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-beeclaw} -d ${POSTGRES_DB:-beeclaw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Server (PostgreSQL 模式覆盖) ──────────────────────────────────────────
+  # 在 postgres profile 下，覆盖 server 的数据库配置
+  server-pg:
+    extends:
+      service: server
+    container_name: beeclaw-server-pg
+    profiles:
+      - postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - BEECLAW_PORT=3000
+      - BEECLAW_HOST=0.0.0.0
+      - BEECLAW_INITIAL_AGENTS=${BEECLAW_INITIAL_AGENTS:-10}
+      - BEECLAW_TICK_INTERVAL=${BEECLAW_TICK_INTERVAL:-60000}
+      - BEECLAW_SAVE_INTERVAL=${BEECLAW_SAVE_INTERVAL:-5}
+      - BEECLAW_SEED_EVENT=${BEECLAW_SEED_EVENT:-}
+      # ── 数据库：使用 PostgreSQL ──
+      - BEECLAW_DB_DRIVER=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-beeclaw}:${POSTGRES_PASSWORD:-beeclaw}@postgres:5432/${POSTGRES_DB:-beeclaw}
+      # ── LLM 配置 ──
+      - BEECLAW_LLM_BASE_URL=${BEECLAW_LLM_BASE_URL:-http://localhost:11434}
+      - BEECLAW_LLM_API_KEY=${BEECLAW_LLM_API_KEY:-no-key}
+      - BEECLAW_LOCAL_MODEL=${BEECLAW_LOCAL_MODEL:-qwen2.5:7b}
+      - BEECLAW_CHEAP_MODEL=${BEECLAW_CHEAP_MODEL:-qwen2.5:7b}
+      - BEECLAW_STRONG_MODEL=${BEECLAW_STRONG_MODEL:-qwen2.5:72b}
+      # ── 安全配置 ──
+      - BEECLAW_API_KEY=${BEECLAW_API_KEY:-}
+      - BEECLAW_CORS_ORIGINS=${BEECLAW_CORS_ORIGINS:-}
+      - BEECLAW_RATE_LIMIT=${BEECLAW_RATE_LIMIT:-100}
+      - BEECLAW_LOG_LEVEL=${BEECLAW_LOG_LEVEL:-info}
+
 volumes:
   beeclaw-data:
+    driver: local
+  beeclaw-pgdata:
     driver: local

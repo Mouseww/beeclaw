@@ -144,9 +144,36 @@ Server 提供：
 # 构建镜像
 docker build -t beeclaw .
 
-# 运行
+# 默认模式 (SQLite)
 docker compose up -d
+
+# PostgreSQL 模式
+docker compose --profile postgres up -d
 ```
+
+### PostgreSQL 部署
+
+使用 Docker Compose profiles 可一键切换到 PostgreSQL：
+
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env，设置 POSTGRES_PASSWORD 等
+
+# 2. 启动 (PostgreSQL + Server)
+docker compose --profile postgres up -d
+
+# 3. 验证
+curl http://localhost:3000/health
+
+# 4. 查看日志
+docker compose --profile postgres logs -f
+
+# 5. 停止
+docker compose --profile postgres down
+```
+
+> **注意**: `--profile postgres` 启动的是 `server-pg` 服务（自动连接 PostgreSQL），默认的 `server` 服务使用 SQLite。两者不会同时运行。
 
 ## 包结构
 
