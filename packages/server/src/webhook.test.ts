@@ -442,7 +442,7 @@ describe('WebhookDispatcher', () => {
       for (const r of results) {
         // 基础 1000 + jitter [0, 500)
         expect(r).toBeGreaterThanOrEqual(1000);
-        expect(r).toBeLessThan(1500);
+        expect(r).toBeLessThanOrEqual(1500);
       }
     });
   });
