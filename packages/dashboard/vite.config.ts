@@ -18,5 +18,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React 核心
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // 图表库
+          'vendor-recharts': ['recharts'],
+          // D3 可视化
+          'vendor-d3': ['d3'],
+        },
+      },
+    },
   },
 });
