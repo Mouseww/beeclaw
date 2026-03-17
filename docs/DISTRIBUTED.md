@@ -1,0 +1,247 @@
+# BeeClaw — 分布式 Tick 架构设计
+
+> Phase 2.3 水平扩展基础，支持多 Worker 节点并行执行 Agent Tick
+
+---
+
+## 1. 设计目标
+
+单节点 `WorldEngine` 受 LLM 并发限制，Agent 规模上限约 500-1000。分布式 Tick 架构将 Agent 分片到多个 Worker 节点并行执行，突破单节点瓶颈。
+
+**核心目标：**
+- 支持 N 个 Worker 节点并行处理 Agent，线性扩展 LLM 吞吐
+- 保证每个 Tick 的全局一致性（所有 Worker 执行同一个 tick 编号）
+- 跨节点事件同步，Agent 响应产生的内部事件能传播到其他 Worker
+- 共识聚合支持分布式收集（各节点上报局部信号 → Coordinator 汇总）
+
+**设计约束：**
+- 先实现 in-process 版本（所有 Worker 在同一进程内），验证协调逻辑正确性
+- 通信层通过接口抽象，后续可替换为 Redis/NATS 而不改变业务逻辑
+- Leader-Follower 模式，不引入复杂的分布式共识算法
+
+---
+
+## 2. 整体架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   TickCoordinator                    │
+│            (Leader — 协调 Tick 生命周期)               │
+│                                                     │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │   Tick 状态   │  │ AgentPartitioner│  │ 共识汇总  │  │
+│  │   管理        │  │ (分片策略)       │  │          │  │
+│  └─────────────┘  └──────────────┘  └────────────┘  │
+└────────┬──────────────────┬──────────────────┬───────┘
+         │                  │                  │
+    ┌────┴────┐       ┌─────┴────┐       ┌────┴─────┐
+    │ Worker 0│       │ Worker 1 │       │ Worker N │
+    │         │       │          │       │          │
+    │ Agent   │       │ Agent    │       │ Agent    │
+    │ [0..99] │       │ [100..199│       │ [200..N] │
+    │         │       │          │       │          │
+    │ EventBus│       │ EventBus │       │ EventBus │
+    │(本地队列)│       │(本地队列) │       │(本地队列) │
+    └────┬────┘       └────┬─────┘       └────┬─────┘
+         │                 │                  │
+         └────────┬────────┴──────────────────┘
+                  │
+           ┌──────┴───────┐
+           │  EventRelay   │
+           │ (跨节点事件中继)│
+           └──────────────┘
+```
+
+---
+
+## 3. Worker 节点的 Agent 分片策略
+
+### 3.1 分片算法
+
+采用 **ID 范围分片**（Range Partitioning），按 Agent ID 排序后均匀分配到各 Worker。
+
+```typescript
+interface PartitionAssignment {
+  workerId: string;
+  agentIds: string[];
+}
+
+// 分片计算
+function partition(agentIds: string[], workerCount: number): PartitionAssignment[]
+```
+
+**选择 Range Partitioning 的理由：**
+- Agent 数量在 tick 间变化不频繁，不需要一致性哈希的复杂度
+- 分片结果可预测，便于调试
+- 新 Agent 加入时只需追加到尾部 Worker，重分片代价小
+
+### 3.2 再分片时机
+
+- 初始化时：所有 Agent 一次性分配
+- 新 Agent 孵化后：由 Coordinator 重新分片并通知 Worker
+- Worker 上线/下线：触发全量重分片
+
+### 3.3 分片一致性
+
+在一个 Tick 执行期间，分片不会变更。分片变更只在 Tick 间隙（Tick 完成后、下一个 Tick 开始前）发生。
+
+---
+
+## 4. Tick 协调机制（Leader-Follower）
+
+### 4.1 角色定义
+
+| 角色 | 职责 |
+|------|------|
+| **Leader (TickCoordinator)** | 推进 tick 编号、分发事件、收集结果、汇总共识 |
+| **Follower (Worker)** | 执行分配的 Agent 处理逻辑，上报结果 |
+
+### 4.2 Tick 生命周期
+
+一个完整 Tick 的执行流程：
+
+```
+Phase 1: Prepare (Leader)
+  ├── 推进 tick 编号
+  ├── 收集待处理事件（外部注入 + 上一 tick 的级联事件）
+  └── 广播 TickBegin { tick, events } 到所有 Worker
+
+Phase 2: Execute (Worker 并行)
+  ├── 接收事件列表
+  ├── 计算本地 Agent 激活范围
+  ├── 并发调用 Agent.react()
+  ├── 收集响应和新产生的内部事件
+  └── 上报 WorkerTickResult { responses, newEvents, signals }
+
+Phase 3: Aggregate (Leader)
+  ├── 等待所有 Worker 上报完成（或超时）
+  ├── 汇总 Agent 响应 → 共识引擎分析
+  ├── 收集跨节点内部事件 → 放入下一 tick 的事件队列
+  ├── 执行孵化检查、自然选择
+  └── 广播 TickComplete { tick, result }
+```
+
+### 4.3 超时与容错
+
+- Worker 上报有超时限制（默认 30s），超时的 Worker 本轮结果丢弃
+- Leader 记录 Worker 健康状态，连续 3 次超时标记为不健康
+- 不健康 Worker 的 Agent 在下次重分片时迁移到其他 Worker
+
+---
+
+## 5. 跨节点事件同步方案
+
+### 5.1 事件分类
+
+| 类型 | 来源 | 同步策略 |
+|------|------|---------|
+| 外部事件 | EventBus 注入 | Leader 广播到全部 Worker |
+| Agent 内部事件 | Agent.react() 产生 | Worker 上报 → Leader 收集 → 下一 tick 广播 |
+
+### 5.2 EventRelay 职责
+
+- 收集各 Worker 产生的内部事件
+- 去重（同一事件不重复传播）
+- 放入下一 Tick 的事件队列
+- 不在当前 Tick 内做级联传播（简化设计，级联在后续 Tick 自然发生）
+
+### 5.3 事件传播简化
+
+单节点 `WorldEngine` 支持同 tick 内 3 层级联传播。分布式模式下简化为：
+
+**当前 Tick 内不做级联**，Agent 产生的内部事件进入下一 Tick 的事件队列。
+
+理由：
+- 同 tick 级联需要跨节点实时同步，复杂度高且延迟大
+- 回合制仿真中，延迟一个 tick 传播对结果影响极小
+- 大幅简化 Coordinator 实现
+
+---
+
+## 6. 共识聚合的分布式方案
+
+### 6.1 二阶段聚合
+
+```
+Worker 层 → 局部聚合（对本地 Agent 响应做初步统计）
+  ↓
+Leader 层 → 全局聚合（合并所有 Worker 局部结果，计算最终共识信号）
+```
+
+### 6.2 局部上报数据
+
+每个 Worker 上报：
+```typescript
+interface WorkerTickResult {
+  workerId: string;
+  tick: number;
+  // Agent 响应记录（含 agentId、观点、情绪等结构化数据）
+  responses: AgentResponseRecord[];
+  // 本地 Agent 产生的新事件
+  newEvents: WorldEvent[];
+  // 处理统计
+  agentsActivated: number;
+  durationMs: number;
+}
+```
+
+### 6.3 Leader 聚合流程
+
+1. 收集所有 Worker 的 `responses`
+2. 按事件分组，合并到一个 `AgentResponseRecord[]`
+3. 调用 `ConsensusEngine.analyze()` 生成全局共识信号
+4. 结果存入历史 + 推送到 API 层
+
+---
+
+## 7. 通信层抽象
+
+### 7.1 TransportLayer 接口
+
+```typescript
+interface TransportLayer {
+  // Leader → Worker
+  sendToWorker(workerId: string, message: CoordinatorMessage): Promise<void>;
+  broadcastToWorkers(message: CoordinatorMessage): Promise<void>;
+
+  // Worker → Leader
+  sendToLeader(message: WorkerMessage): Promise<void>;
+
+  // 消息订阅
+  onMessage(handler: (message: CoordinatorMessage | WorkerMessage) => void): void;
+}
+```
+
+### 7.2 实现策略
+
+| 阶段 | 实现 | 适用场景 |
+|------|------|---------|
+| v1 (当前) | InProcessTransport | 测试、单机多 Worker 模拟 |
+| v2 (后续) | RedisTransport | 多节点部署，基于 Redis Pub/Sub |
+| v3 (可选) | NATSTransport | 高性能场景，基于 NATS JetStream |
+
+`InProcessTransport` 使用 EventEmitter 在同一进程内模拟消息传递，接口与远程实现完全一致。
+
+---
+
+## 8. 扩展性考虑
+
+### 8.1 Social Graph 查询
+
+当 Agent 分片到不同 Worker 后，Social Graph 的跨节点查询需要处理：
+
+**当前方案（v1）：** 每个 Worker 持有完整 Social Graph 的只读副本。Leader 在 tick 开始时同步图结构变更。
+
+**后续方案：** 集中式 Social Graph 服务，Worker 通过 RPC 查询。
+
+### 8.2 Agent 状态迁移
+
+Worker 下线时，其负责的 Agent 需要迁移到其他 Worker：
+
+1. Agent 状态已持久化到数据库（Phase 2.1 已实现）
+2. 新 Worker 从数据库加载 Agent 状态
+3. 迁移过程中暂停 Tick 执行
+
+---
+
+*BeeClaw v1.0.21 — 分布式 Tick 架构设计*
