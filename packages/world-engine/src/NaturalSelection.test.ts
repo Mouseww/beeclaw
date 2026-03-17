@@ -3,7 +3,8 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NaturalSelection } from './NaturalSelection.js';
+import { NaturalSelection, DEFAULT_SELECTION_CONFIG } from './NaturalSelection.js';
+import type { SelectionReason } from './NaturalSelection.js';
 import { Agent, AgentSpawner } from '@beeclaw/agent-runtime';
 
 // ── 测试辅助函数 ──
@@ -657,6 +658,48 @@ describe('NaturalSelection', () => {
       expect(result.newDormant).toHaveLength(1);
       // 信誉检查在前，reason 应为 low_credibility
       expect(result.newDormant[0].reason).toBe('low_credibility');
+    });
+  });
+
+  // ── 补充覆盖：DEFAULT_SELECTION_CONFIG 导出 ──
+
+  describe('DEFAULT_SELECTION_CONFIG', () => {
+    it('应导出默认配置常量', () => {
+      expect(DEFAULT_SELECTION_CONFIG).toBeDefined();
+      expect(DEFAULT_SELECTION_CONFIG.checkIntervalTicks).toBe(100);
+      expect(DEFAULT_SELECTION_CONFIG.credibilityThreshold).toBe(0.2);
+      expect(DEFAULT_SELECTION_CONFIG.inactivityTicks).toBe(50);
+      expect(DEFAULT_SELECTION_CONFIG.dormantDeathTicks).toBe(200);
+      expect(DEFAULT_SELECTION_CONFIG.targetPopulation).toBe(0);
+    });
+  });
+
+  // ── 补充覆盖：SelectionReason 类型 ──
+
+  describe('SelectionReason 类型验证', () => {
+    it('evaluate 结果的 reason 应为有效的 SelectionReason', () => {
+      const ns = new NaturalSelection({
+        credibilityThreshold: 0.2,
+        inactivityTicks: 50,
+        dormantDeathTicks: 100,
+      });
+
+      const agents = [
+        createAgent({ id: 'low_cred', credibility: 0.1, lastActiveTick: 99 }),
+        createAgent({ id: 'inactive', credibility: 0.5, lastActiveTick: 10 }),
+        createAgent({ id: 'old_dormant', status: 'dormant', lastActiveTick: 50 }),
+      ];
+      const spawner = createSpawner();
+
+      const { result } = ns.evaluate(200, agents, spawner, noopAddAgents);
+
+      const validReasons: SelectionReason[] = ['low_credibility', 'inactivity', 'dormant_timeout'];
+      for (const record of result.newDormant) {
+        expect(validReasons).toContain(record.reason);
+      }
+      for (const record of result.newDead) {
+        expect(validReasons).toContain(record.reason);
+      }
     });
   });
 });

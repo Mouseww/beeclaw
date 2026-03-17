@@ -163,5 +163,75 @@ describe('WorldStateManager', () => {
       const status = mgr.formatStatus();
       expect(status).toContain('重大事件');
     });
+
+    it('负情绪值应显示 📉', () => {
+      const mgr = new WorldStateManager();
+      mgr.updateSentiment('悲观话题', -0.5);
+      const status = mgr.formatStatus();
+      expect(status).toContain('📉');
+      expect(status).toContain('悲观话题');
+      expect(status).toContain('-0.50');
+    });
+
+    it('正情绪值应显示 📈 和 + 前缀', () => {
+      const mgr = new WorldStateManager();
+      mgr.updateSentiment('乐观话题', 0.7);
+      const status = mgr.formatStatus();
+      expect(status).toContain('📈');
+      expect(status).toContain('+0.70');
+    });
+
+    it('零情绪值应显示 ➡️', () => {
+      const mgr = new WorldStateManager();
+      mgr.updateSentiment('中性话题', 0);
+      const status = mgr.formatStatus();
+      expect(status).toContain('➡️');
+    });
+
+    it('无情绪和无事件时不应显示对应区域', () => {
+      const mgr = new WorldStateManager();
+      const status = mgr.formatStatus();
+      expect(status).not.toContain('情绪地图');
+      expect(status).not.toContain('最近事件');
+    });
+
+    it('超过 10 个情绪条目时只显示前 10 个', () => {
+      const mgr = new WorldStateManager();
+      for (let i = 0; i < 15; i++) {
+        mgr.updateSentiment(`话题${i}`, i * 0.05);
+      }
+      const status = mgr.formatStatus();
+      expect(status).toContain('情绪地图');
+      const lines = status.split('\n');
+      const sentimentLines = lines.filter(l => l.includes('📈') || l.includes('📉') || l.includes('➡️'));
+      expect(sentimentLines.length).toBeLessThanOrEqual(10);
+    });
+
+    it('超过 5 个活跃事件时只显示最近 5 个', () => {
+      const mgr = new WorldStateManager();
+      const events = Array.from({ length: 8 }, (_, i) =>
+        createTestEvent({ id: `evt_${i}`, title: `事件${i}` })
+      );
+      mgr.setActiveEvents(events);
+      const status = mgr.formatStatus();
+      expect(status).toContain('最近事件');
+      expect(status).toContain('事件3');
+      expect(status).toContain('事件7');
+    });
+  });
+
+  // ── getCurrentTick ──
+
+  describe('getCurrentTick', () => {
+    it('应返回当前 tick', () => {
+      const mgr = new WorldStateManager({ tick: 42 });
+      expect(mgr.getCurrentTick()).toBe(42);
+    });
+
+    it('advanceTick 后应更新', () => {
+      const mgr = new WorldStateManager();
+      mgr.advanceTick(100);
+      expect(mgr.getCurrentTick()).toBe(100);
+    });
   });
 });
