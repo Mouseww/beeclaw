@@ -9,13 +9,13 @@ import { Card, StatCard } from '../components';
 // ── 类型定义 ──
 
 /** 关系类型 */
-type RelationType = 'follow' | 'trust' | 'rival' | 'neutral';
+export type RelationType = 'follow' | 'trust' | 'rival' | 'neutral';
 
 /** 社交角色 */
-type SocialRole = 'leader' | 'follower' | 'bridge' | 'contrarian';
+export type SocialRole = 'leader' | 'follower' | 'bridge' | 'contrarian';
 
 /** 社交图节点 */
-interface GraphNode extends d3.SimulationNodeDatum {
+export interface GraphNode extends d3.SimulationNodeDatum {
   id: string;
   name: string;
   profession: string;
@@ -29,7 +29,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
 }
 
 /** 社交图边 */
-interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
+export interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
   type: RelationType;
@@ -38,7 +38,7 @@ interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
 
 // ── 社区颜色映射（蜂蜜主题） ──
 
-const COMMUNITY_COLORS: Record<string, string> = {
+export const COMMUNITY_COLORS: Record<string, string> = {
   community_0: '#f59e0b', // 金黄
   community_1: '#3b82f6', // 蓝色
   community_2: '#10b981', // 绿色
@@ -49,14 +49,14 @@ const COMMUNITY_COLORS: Record<string, string> = {
   community_7: '#f97316', // 橙色
 };
 
-const ROLE_SHAPES: Record<SocialRole, string> = {
+export const ROLE_SHAPES: Record<SocialRole, string> = {
   leader: '★',
   bridge: '◆',
   contrarian: '▲',
   follower: '●',
 };
 
-const RELATION_COLORS: Record<RelationType, string> = {
+export const RELATION_COLORS: Record<RelationType, string> = {
   follow: '#6b7280',
   trust: '#22c55e',
   rival: '#ef4444',
@@ -65,7 +65,7 @@ const RELATION_COLORS: Record<RelationType, string> = {
 
 // ── Mock 数据生成 ──
 
-function generateMockData(): { nodes: GraphNode[]; edges: GraphEdge[] } {
+export function generateMockData(): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const professions = [
     '金融分析师', '区块链交易员', '经济学教授', '财经记者', '零售投资者',
     '基金经理', '科技博主', '政策研究员', '量化工程师', '风险顾问',
@@ -673,7 +673,8 @@ export function SocialGraphView() {
 
 // ── 子组件：节点详情面板 ──
 
-function NodeDetailPanel({
+/** @internal 导出供测试使用 */
+export function NodeDetailPanel({
   node,
   edges,
   nodes,
@@ -791,7 +792,8 @@ function NodeDetailPanel({
 
 // ── 子组件：指标条 ──
 
-function MetricBar({
+/** @internal 导出供测试使用 */
+export function MetricBar({
   label,
   value,
   max,
@@ -822,12 +824,12 @@ function MetricBar({
 // ── 工具函数 ──
 
 /** 根据影响力计算节点大小 */
-function getNodeRadius(influence: number): number {
+export function getNodeRadius(influence: number): number {
   return 6 + (influence / 100) * 14; // 6px ~ 20px
 }
 
 /** 构建 tooltip HTML */
-function buildTooltipHtml(node: GraphNode): string {
+export function buildTooltipHtml(node: GraphNode): string {
   const roleLabels: Record<SocialRole, string> = {
     leader: '领导者', bridge: '桥接者', contrarian: '反对者', follower: '追随者',
   };

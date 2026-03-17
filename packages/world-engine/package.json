@@ -9,11 +9,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@beeclaw/shared": "*",
-    "@beeclaw/event-bus": "*",
     "@beeclaw/agent-runtime": "*",
-    "@beeclaw/social-graph": "*",
-    "@beeclaw/consensus": "*"
+    "@beeclaw/consensus": "*",
+    "@beeclaw/coordinator": "*",
+    "@beeclaw/event-bus": "*",
+    "@beeclaw/shared": "*",
+    "@beeclaw/social-graph": "*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
