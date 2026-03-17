@@ -43,27 +43,27 @@ describe('Store', () => {
 
   // ── KV State ──
 
-  it('getState / setState 应正确读写', () => {
-    expect(store.getState('nonexist')).toBeUndefined();
-    store.setState('hello', 'world');
-    expect(store.getState('hello')).toBe('world');
+  it('getState / setState 应正确读写', async () => {
+    expect(await store.getState('nonexist')).toBeUndefined();
+    await store.setState('hello', 'world');
+    expect(await store.getState('hello')).toBe('world');
   });
 
-  it('setState 覆盖已有值', () => {
-    store.setState('key', 'v1');
-    store.setState('key', 'v2');
-    expect(store.getState('key')).toBe('v2');
+  it('setState 覆盖已有值', async () => {
+    await store.setState('key', 'v1');
+    await store.setState('key', 'v2');
+    expect(await store.getState('key')).toBe('v2');
   });
 
-  it('getTick / setTick 应正确读写', () => {
-    expect(store.getTick()).toBe(0);
-    store.setTick(42);
-    expect(store.getTick()).toBe(42);
+  it('getTick / setTick 应正确读写', async () => {
+    expect(await store.getTick()).toBe(0);
+    await store.setTick(42);
+    expect(await store.getTick()).toBe(42);
   });
 
   // ── Tick History ──
 
-  it('saveTickResult / getTickHistory 应正确读写', () => {
+  it('saveTickResult / getTickHistory 应正确读写', async () => {
     const result: TickResult = {
       tick: 1,
       eventsProcessed: 3,
@@ -74,9 +74,9 @@ describe('Store', () => {
       durationMs: 120,
     };
 
-    store.saveTickResult(result);
+    await store.saveTickResult(result);
 
-    const history = store.getTickHistory(10);
+    const history = await store.getTickHistory(10);
     expect(history.length).toBe(1);
     expect(history[0]!.tick).toBe(1);
     expect(history[0]!.eventsProcessed).toBe(3);
@@ -85,9 +85,9 @@ describe('Store', () => {
     expect(history[0]!.durationMs).toBe(120);
   });
 
-  it('getTickHistory 应按 tick 降序排列', () => {
+  it('getTickHistory 应按 tick 降序排列', async () => {
     for (let i = 1; i <= 5; i++) {
-      store.saveTickResult({
+      await store.saveTickResult({
         tick: i,
         eventsProcessed: i,
         agentsActivated: 0,
@@ -98,7 +98,7 @@ describe('Store', () => {
       });
     }
 
-    const history = store.getTickHistory(3);
+    const history = await store.getTickHistory(3);
     expect(history.length).toBe(3);
     expect(history[0]!.tick).toBe(5);
     expect(history[1]!.tick).toBe(4);
@@ -107,7 +107,7 @@ describe('Store', () => {
 
   // ── Consensus Signals ──
 
-  it('saveConsensusSignal / getLatestSignals 应正确读写', () => {
+  it('saveConsensusSignal / getLatestSignals 应正确读写', async () => {
     const signal = {
       tick: 1,
       topic: '股市',
@@ -120,15 +120,15 @@ describe('Store', () => {
       alerts: [],
     };
 
-    store.saveConsensusSignal(signal);
+    await store.saveConsensusSignal(signal);
 
-    const signals = store.getLatestSignals(10);
+    const signals = await store.getLatestSignals(10);
     expect(signals.length).toBe(1);
     expect(signals[0]!.topic).toBe('股市');
     expect(signals[0]!.tick).toBe(1);
   });
 
-  it('getSignalsByTopic 应按 topic 过滤', () => {
+  it('getSignalsByTopic 应按 topic 过滤', async () => {
     const signal1 = {
       tick: 1,
       topic: '股市',
@@ -152,22 +152,22 @@ describe('Store', () => {
       alerts: [],
     };
 
-    store.saveConsensusSignal(signal1);
-    store.saveConsensusSignal(signal2);
+    await store.saveConsensusSignal(signal1);
+    await store.saveConsensusSignal(signal2);
 
-    const stockSignals = store.getSignalsByTopic('股市');
+    const stockSignals = await store.getSignalsByTopic('股市');
     expect(stockSignals.length).toBe(1);
     expect(stockSignals[0]!.topic).toBe('股市');
 
-    const techSignals = store.getSignalsByTopic('科技');
+    const techSignals = await store.getSignalsByTopic('科技');
     expect(techSignals.length).toBe(1);
     expect(techSignals[0]!.topic).toBe('科技');
   });
 
   // ── Agents（基础 row 操作）──
 
-  it('loadAgentRows 初始应为空', () => {
-    const rows = store.loadAgentRows();
+  it('loadAgentRows 初始应为空', async () => {
+    const rows = await store.loadAgentRows();
     expect(rows).toEqual([]);
   });
 });
