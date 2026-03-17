@@ -216,11 +216,15 @@ export class ContentDeduplicator {
         grams.push(chars[i]!);
         i++;
       } else {
-        // 非 CJK 字符：使用 bigram
-        if (i + 1 < chars.length) {
+        // 非 CJK 字符：使用 bigram（若剩余不足两个非 CJK 字符，仍计入单字符）
+        if (i + 1 < chars.length && !this.isCJK(chars[i + 1]!)) {
           grams.push(chars[i]! + chars[i + 1]!);
+          i += 2;
+        } else {
+          // 非 CJK 单字符（后面跟着 CJK 或到末尾），作为 unigram 计入
+          grams.push(chars[i]!);
+          i++;
         }
-        i++;
       }
     }
     return grams;

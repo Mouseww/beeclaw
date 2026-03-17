@@ -80,6 +80,8 @@ describe('RssAdapter', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     adapter = new RssAdapter(makeConfig());
+    // 跳过重试延迟，避免 fake timer 下超时
+    adapter.delayFn = () => Promise.resolve();
   });
 
   afterEach(() => {
@@ -130,6 +132,7 @@ describe('RssAdapter', () => {
 
       const limitAdapter = new RssAdapter(makeConfig({ maxItemsPerPoll: 3 }));
       limitAdapter.fetchFn = mockFetch(rss);
+      limitAdapter.delayFn = () => Promise.resolve();
 
       const events = await limitAdapter.poll();
       expect(events).toHaveLength(3);
@@ -219,6 +222,7 @@ describe('RssAdapter', () => {
 <item><title>T</title><description>C</description><guid>g1</guid><category>财经</category></item>
 </channel></rss>`;
       dupTagAdapter.fetchFn = mockFetch(rss);
+      dupTagAdapter.delayFn = () => Promise.resolve();
 
       const events = await dupTagAdapter.poll();
       const dupes = events[0]!.tags.filter(t => t === '财经');
@@ -260,6 +264,7 @@ describe('RssAdapter', () => {
 <item><title>自定义关键消息</title><description>内容</description><guid>cust-1</guid></item>
 </channel></rss>`;
       customAdapter.fetchFn = mockFetch(rss);
+      customAdapter.delayFn = () => Promise.resolve();
 
       const events = await customAdapter.poll();
       expect(events[0]!.importance).toBeGreaterThanOrEqual(0.35);
@@ -391,6 +396,7 @@ describe('RssAdapter', () => {
         source: makeSource({ enabled: false }),
       }));
       disabled.fetchFn = mockFetch(SAMPLE_RSS);
+      disabled.delayFn = () => Promise.resolve();
       disabled.start();
       expect(disabled.fetchFn).not.toHaveBeenCalled();
     });
@@ -478,6 +484,7 @@ describe('RssAdapter', () => {
         source: makeSource({ tags: undefined }),
       }));
       noTagAdapter.fetchFn = mockFetch(SAMPLE_RSS);
+      noTagAdapter.delayFn = () => Promise.resolve();
 
       const events = await noTagAdapter.poll();
       expect(events.length).toBeGreaterThan(0);

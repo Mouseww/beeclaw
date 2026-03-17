@@ -136,10 +136,22 @@ export class FinanceAdapter implements DataSourceAdapter {
       const quotes = await this.fetchQuotes();
       const latency = Date.now() - startMs;
 
-      // 更新健康指标
+      // 更新延迟指标
       this.lastLatencyMs = latency;
       this.latencySum += latency;
       this.latencyCount++;
+
+      // 如果有标的但全部获取失败，视为轮询失败
+      if (this.config.symbols.length > 0 && quotes.length === 0) {
+        this.consecutiveErrors++;
+        this.totalErrors++;
+        this.lastErrorTime = new Date();
+        this.lastErrorMessage = this.lastErrorMessage ?? 'All quotes failed';
+        console.error(`[FinanceAdapter] "${this.name}" 所有标的获取失败`);
+        return [];
+      }
+
+      // 正常成功路径
       this.consecutiveErrors = 0;
       this.totalSuccesses++;
       this.lastSuccessTime = new Date();
@@ -218,6 +230,9 @@ export class FinanceAdapter implements DataSourceAdapter {
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value) {
           quotes.push(result.value);
+        } else if (result.status === 'rejected') {
+          // 记录拒绝的原因，便于调试
+          console.warn(`[FinanceAdapter] 单个标的获取被拒绝:`, result.reason);
         }
       }
     }
@@ -255,6 +270,8 @@ export class FinanceAdapter implements DataSourceAdapter {
     }
 
     console.warn(`[FinanceAdapter] 获取 ${symbol.symbol} 行情最终失败: ${lastError}`);
+    // 保存最后一个错误信息，供 poll() 使用
+    this.lastErrorMessage = lastError;
     return null;
   }
 
