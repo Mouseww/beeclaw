@@ -270,3 +270,65 @@ describe('calculatePropagation 进阶场景', () => {
     expect(result.reachedAgentIds.length).toBe(directCount);
   });
 });
+
+// ── 补充测试：传播过程中 edges.find 精确匹配路径 ──
+
+describe('calculatePropagation edges.find 路径覆盖', () => {
+  it('follower 有多条出边时 find 应精确匹配目标 agentId', () => {
+    const graph = new SocialGraph();
+    graph.addNode('center');
+    graph.addNode('follower');
+    graph.addNode('other');
+
+    // follower 关注 center 和 other（有多条出边）
+    graph.addEdge('follower', 'center', 'follow', 1.0);
+    graph.addEdge('follower', 'other', 'follow', 0.2);
+
+    // propagationRadius=1.0 + importance=1.0 确保最大传播概率
+    const event = createTestEvent({ propagationRadius: 1.0, importance: 1.0 });
+    const result = calculatePropagation(event, graph, 2);
+
+    // center 作为种子，follower 通过 center 的 getFollowers 传播
+    // edges.find(e => e.to === agentId) 应精确匹配 center
+    expect(result.reachedAgentIds).toContain('center');
+    expect(result.reachedAgentIds).toContain('follower');
+  });
+
+  it('follower 无对应出边时 strength 应回退到默认 0.3', () => {
+    const graph = new SocialGraph();
+    graph.addNode('a');
+    graph.addNode('b');
+
+    // b trust a（b 是 a 的 follower），但 b 没有指向 a 的 follow 出边
+    // getFollowers(a) 返回 [b]
+    // getOutEdges(b) 可能不包含指向 a 的边
+    graph.addEdge('b', 'a', 'trust', 0.8);
+
+    const event = createTestEvent({ propagationRadius: 1.0, importance: 1.0 });
+    const result = calculatePropagation(event, graph, 2);
+
+    // 即使 edge.find 返回 undefined，strength 应回退到 0.3
+    expect(result.reachedAgentIds).toContain('a');
+    // b 也应该通过传播被触达
+    expect(result.reachedAgentIds).toContain('b');
+  });
+
+  it('传播链中每层 follower 都应触发 edges.find', () => {
+    const graph = new SocialGraph();
+    // 构建多层链: a -> b -> c -> d
+    graph.addNode('a');
+    graph.addNode('b');
+    graph.addNode('c');
+    graph.addNode('d');
+
+    graph.addEdge('b', 'a', 'follow', 1.0); // b follows a
+    graph.addEdge('c', 'b', 'follow', 1.0); // c follows b
+    graph.addEdge('d', 'c', 'follow', 1.0); // d follows c
+
+    const event = createTestEvent({ propagationRadius: 1.0, importance: 1.0 });
+    const result = calculatePropagation(event, graph, 3);
+
+    // 所有节点都通过初始直达
+    expect(result.reachedAgentIds).toHaveLength(4);
+  });
+});

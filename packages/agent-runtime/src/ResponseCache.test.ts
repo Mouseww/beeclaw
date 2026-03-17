@@ -282,4 +282,119 @@ describe('ResponseCache', () => {
       vi.useRealTimers();
     });
   });
+
+  // ── 补充测试：覆盖 evictOldest 和边界场景 ──
+
+  describe('evictOldest 淘汰策略', () => {
+    it('缓存已满且无过期条目时应淘汰最旧条目', () => {
+      vi.useFakeTimers();
+      // TTL 很长，确保条目不会过期
+      const smallCache = new ResponseCache({ maxEntries: 2, ttlMs: 60_000 });
+      smallCache.set('hash-old', 'old-value');
+      vi.advanceTimersByTime(100);
+      smallCache.set('hash-new', 'new-value');
+      vi.advanceTimersByTime(100);
+
+      // 插入第三个条目，触发 evictOldest
+      smallCache.set('hash-newest', 'newest-value');
+
+      // 最旧的 hash-old 应被淘汰
+      expect(smallCache.get('hash-old')).toBeNull();
+      // 较新的应保留
+      expect(smallCache.get('hash-new')).toBe('new-value');
+      expect(smallCache.get('hash-newest')).toBe('newest-value');
+      expect(smallCache.size).toBe(2);
+      vi.useRealTimers();
+    });
+
+    it('淘汰最旧条目后统计的 evictions 应正确增加', () => {
+      vi.useFakeTimers();
+      const smallCache = new ResponseCache({ maxEntries: 1, ttlMs: 60_000 });
+      smallCache.set('h1', 'v1');
+      vi.advanceTimersByTime(50);
+      smallCache.set('h2', 'v2');
+
+      const stats = smallCache.getStats();
+      // h1 被 evictOldest 清除，应计入 evictions
+      expect(stats.evictions).toBeGreaterThanOrEqual(1);
+      vi.useRealTimers();
+    });
+  });
+
+  describe('set 时先尝试 evictExpired 再 evictOldest', () => {
+    it('缓存满时优先清理过期条目', () => {
+      vi.useFakeTimers();
+      const smallCache = new ResponseCache({ maxEntries: 2, ttlMs: 100 });
+      smallCache.set('h1', 'v1');
+      smallCache.set('h2', 'v2');
+
+      // 让所有条目过期
+      vi.advanceTimersByTime(200);
+
+      // 插入新条目，应触发 evictExpired 清理掉过期的 h1, h2
+      smallCache.set('h3', 'v3');
+      expect(smallCache.size).toBe(1);
+      expect(smallCache.get('h3')).toBe('v3');
+      vi.useRealTimers();
+    });
+
+    it('部分过期时应只清理过期的，保留未过期的', () => {
+      vi.useFakeTimers();
+      const smallCache = new ResponseCache({ maxEntries: 2, ttlMs: 200 });
+      smallCache.set('h1', 'v1');
+      vi.advanceTimersByTime(100);
+      smallCache.set('h2', 'v2');
+      vi.advanceTimersByTime(150); // h1 过期(250ms > 200ms), h2 未过期(150ms < 200ms)
+
+      // 插入新条目
+      smallCache.set('h3', 'v3');
+      expect(smallCache.get('h1')).toBeNull(); // 过期被清理
+      expect(smallCache.get('h2')).toBe('v2'); // 未过期保留
+      expect(smallCache.get('h3')).toBe('v3'); // 新插入
+      vi.useRealTimers();
+    });
+  });
+
+  describe('computeHash 边界条件', () => {
+    it('空消息数组应正常生成 hash', () => {
+      const hash = cache.computeHash([]);
+      expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('包含空字符串 content 的消息应正常处理', () => {
+      const hash = cache.computeHash([{ role: 'user', content: '' }]);
+      expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    });
+  });
+
+  describe('getOrFetch 边界条件', () => {
+    it('禁用缓存时 getOrFetch 应每次都调用 fetcher', async () => {
+      cache.setEnabled(false);
+      const fetcher = vi.fn().mockResolvedValue('result');
+      const messages = [{ role: 'user', content: '测试' }];
+
+      const r1 = await cache.getOrFetch(messages, fetcher);
+      const r2 = await cache.getOrFetch(messages, fetcher);
+
+      expect(r1).toBe('result');
+      expect(r2).toBe('result');
+      // 禁用缓存时 set 无效，每次都会调用 fetcher
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('过期条目 get 时自动清理', () => {
+    it('get 过期条目时应增加 evictions 计数', () => {
+      vi.useFakeTimers();
+      const shortCache = new ResponseCache({ ttlMs: 50 });
+      shortCache.set('h1', 'v1');
+      vi.advanceTimersByTime(100);
+
+      shortCache.get('h1'); // 触发过期清理
+      const stats = shortCache.getStats();
+      expect(stats.evictions).toBe(1);
+      expect(stats.misses).toBe(1);
+      vi.useRealTimers();
+    });
+  });
 });

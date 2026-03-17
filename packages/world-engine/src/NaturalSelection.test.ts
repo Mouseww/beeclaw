@@ -474,4 +474,189 @@ describe('NaturalSelection', () => {
       expect(result.activeCountAfter).toBe(2); // a1, a2
     });
   });
+
+  // ── 补充覆盖：buildSelectionEvent 各分支 ──
+
+  describe('buildSelectionEvent 内容生成', () => {
+    it('同时有 dormant、dead、spawned 时 event 内容应包含所有信息', () => {
+      const ns = new NaturalSelection({
+        credibilityThreshold: 0.2,
+        inactivityTicks: 50,
+        dormantDeathTicks: 100,
+        targetPopulation: 5,
+      });
+
+      const agents = [
+        createAgent({ id: 'low_cred', name: '低信誉者', credibility: 0.1, lastActiveTick: 490 }),
+        createAgent({ id: 'old_dormant', name: '老休眠者', status: 'dormant', lastActiveTick: 300 }),
+        createAgent({ id: 'healthy', name: '健康者', credibility: 0.8, lastActiveTick: 490 }),
+      ];
+      const spawner = createSpawner();
+      const addedAgents: Agent[] = [];
+
+      const { event } = ns.evaluate(500, agents, spawner, (newAgents) => {
+        addedAgents.push(...newAgents);
+      });
+
+      // 验证事件内容包含新休眠信息
+      expect(event.content).toContain('新休眠');
+      expect(event.content).toContain('低信誉者');
+      // 验证事件内容包含新死亡信息
+      expect(event.content).toContain('新死亡');
+      expect(event.content).toContain('老休眠者');
+      // 验证事件内容包含新孵化信息
+      expect(event.content).toContain('新孵化');
+      // 验证事件标题格式
+      expect(event.title).toContain('休眠 1');
+      expect(event.title).toContain('死亡 1');
+    });
+
+    it('仅有 dead 无 dormant 无 spawned 时的事件内容', () => {
+      const ns = new NaturalSelection({
+        dormantDeathTicks: 100,
+        targetPopulation: 0,
+      });
+
+      const agents = [
+        createAgent({ id: 'old_dormant', name: '超时者', status: 'dormant', lastActiveTick: 100 }),
+        createAgent({ id: 'healthy', name: '健康', credibility: 0.8, lastActiveTick: 290 }),
+      ];
+      const spawner = createSpawner();
+
+      const { event } = ns.evaluate(300, agents, spawner, noopAddAgents);
+
+      expect(event.content).toContain('新死亡');
+      expect(event.content).not.toContain('新休眠');
+      expect(event.content).not.toContain('新孵化');
+    });
+
+    it('仅有 spawned 无淘汰时的事件内容', () => {
+      const ns = new NaturalSelection({
+        targetPopulation: 5,
+      });
+
+      const agents = [
+        createAgent({ id: 'a1', credibility: 0.8, lastActiveTick: 99 }),
+      ];
+      const spawner = createSpawner();
+      const addedAgents: Agent[] = [];
+
+      const { event } = ns.evaluate(100, agents, spawner, (newAgents) => {
+        addedAgents.push(...newAgents);
+      });
+
+      expect(event.content).toContain('新孵化');
+      expect(event.content).not.toContain('新休眠');
+      expect(event.content).not.toContain('新死亡');
+    });
+  });
+
+  // ── 补充覆盖：shouldCheck 负数 tick ──
+
+  describe('shouldCheck 边界', () => {
+    it('负数 tick 不应触发检查', () => {
+      const ns = new NaturalSelection({ checkIntervalTicks: 100 });
+      expect(ns.shouldCheck(-1)).toBe(false);
+      expect(ns.shouldCheck(-100)).toBe(false);
+    });
+  });
+
+  // ── 补充覆盖：evaluate 空 agents 列表 ──
+
+  describe('evaluate 空 agents', () => {
+    it('空 agents 列表应正常工作', () => {
+      const ns = new NaturalSelection({ targetPopulation: 3 });
+      const spawner = createSpawner();
+      const addedAgents: Agent[] = [];
+
+      const { result, event } = ns.evaluate(100, [], spawner, (newAgents) => {
+        addedAgents.push(...newAgents);
+      });
+
+      expect(result.activeCountBefore).toBe(0);
+      expect(result.newDormant).toHaveLength(0);
+      expect(result.newDead).toHaveLength(0);
+      // 应补充 3 个 Agent
+      expect(result.newSpawned).toHaveLength(3);
+      expect(addedAgents).toHaveLength(3);
+      expect(event.id).toBe('ns_100');
+    });
+  });
+
+  // ── 补充覆盖：updateConfig 多字段 ──
+
+  describe('updateConfig 多字段同时更新', () => {
+    it('应同时更新多个配置项', () => {
+      const ns = new NaturalSelection();
+      ns.updateConfig({
+        checkIntervalTicks: 25,
+        credibilityThreshold: 0.5,
+        inactivityTicks: 30,
+        dormantDeathTicks: 100,
+        targetPopulation: 20,
+      });
+
+      const config = ns.getConfig();
+      expect(config.checkIntervalTicks).toBe(25);
+      expect(config.credibilityThreshold).toBe(0.5);
+      expect(config.inactivityTicks).toBe(30);
+      expect(config.dormantDeathTicks).toBe(100);
+      expect(config.targetPopulation).toBe(20);
+    });
+  });
+
+  // ── 补充覆盖：getHistory 返回副本 ──
+
+  describe('getHistory 返回副本', () => {
+    it('修改返回值不应影响内部历史', () => {
+      const ns = new NaturalSelection();
+      const spawner = createSpawner();
+
+      ns.evaluate(100, [], spawner, noopAddAgents);
+
+      const history = ns.getHistory();
+      history.pop(); // 修改副本
+
+      expect(ns.getHistory()).toHaveLength(1); // 内部不受影响
+    });
+  });
+
+  // ── 补充覆盖：importance 计算上限 ──
+
+  describe('event importance 上限', () => {
+    it('大量变更时 importance 应被限制在 0.8', () => {
+      const ns = new NaturalSelection({ credibilityThreshold: 0.2 });
+      const agents = Array.from({ length: 20 }, (_, i) =>
+        createAgent({ id: `a${i}`, credibility: 0.1, lastActiveTick: 99 })
+      );
+      const spawner = createSpawner();
+
+      const { event } = ns.evaluate(100, agents, spawner, noopAddAgents);
+
+      // importance = min(0.3 + 20*0.05, 0.8) = min(1.3, 0.8) = 0.8
+      expect(event.importance).toBe(0.8);
+    });
+  });
+
+  // ── 补充覆盖：信誉优先于不活跃检查 ──
+
+  describe('信誉检查优先于不活跃检查', () => {
+    it('同时满足低信誉和不活跃时应以低信誉为原因', () => {
+      const ns = new NaturalSelection({
+        credibilityThreshold: 0.2,
+        inactivityTicks: 50,
+      });
+
+      const agents = [
+        createAgent({ id: 'both', credibility: 0.1, lastActiveTick: 10 }), // 低信誉 + 不活跃
+      ];
+      const spawner = createSpawner();
+
+      const { result } = ns.evaluate(100, agents, spawner, noopAddAgents);
+
+      expect(result.newDormant).toHaveLength(1);
+      // 信誉检查在前，reason 应为 low_credibility
+      expect(result.newDormant[0].reason).toBe('low_credibility');
+    });
+  });
 });

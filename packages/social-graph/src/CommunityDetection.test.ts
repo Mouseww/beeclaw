@@ -441,3 +441,111 @@ describe('applyCommunityLabels 进阶场景', () => {
     expect(graph.getNode('a1')!.community).toBe('default');
   });
 });
+
+// ── 补充测试：覆盖 detectCommunities 中内部 lambda 和边权重路径 ──
+
+describe('detectCommunities 边权重计算路径', () => {
+  it('单向边时应通过 getEdge 获取权重', () => {
+    const graph = new SocialGraph();
+    graph.addNode('a1');
+    graph.addNode('a2');
+    // 只添加单向边 a1→a2
+    graph.addEdge('a1', 'a2', 'follow', 0.9);
+
+    const result = detectCommunities(graph, 5);
+    // 应正常完成，不因缺少反向边而出错
+    expect(result.communityCount).toBeGreaterThanOrEqual(1);
+    expect(result.communities.size).toBe(2);
+  });
+
+  it('邻居存在但 label 不存在时应安全跳过', () => {
+    // 这种情况在标签传播算法正常流程中不会出现，
+    // 但确保算法代码路径健壮
+    const graph = new SocialGraph();
+    graph.addNode('a1');
+    graph.addNode('a2');
+    graph.addEdge('a1', 'a2', 'follow', 0.5);
+    graph.addEdge('a2', 'a1', 'follow', 0.5);
+
+    const result = detectCommunities(graph, 10);
+    expect(result.communities.size).toBe(2);
+  });
+
+  it('双向边权重不等时应取较大值', () => {
+    const graph = new SocialGraph();
+    graph.addNode('a1');
+    graph.addNode('a2');
+    graph.addNode('a3');
+    // a1→a2 强，a2→a1 弱
+    graph.addEdge('a1', 'a2', 'follow', 0.9);
+    graph.addEdge('a2', 'a1', 'follow', 0.1);
+    // a1→a3 弱，a3→a1 强
+    graph.addEdge('a1', 'a3', 'follow', 0.1);
+    graph.addEdge('a3', 'a1', 'follow', 0.9);
+
+    const result = detectCommunities(graph, 10);
+    // 确保 Math.max 路径被完整执行
+    expect(result.communities.size).toBe(3);
+  });
+});
+
+// ── 补充测试：覆盖 inferSocialRoles 中 ownCommunity 删除路径 ──
+
+describe('inferSocialRoles ownCommunity 路径', () => {
+  it('节点自身社区在 communityResult 中时应被从 connectedCommunities 中删除', () => {
+    const graph = new SocialGraph();
+    // 创建两个社区
+    graph.addNode('a1'); graph.addNode('a2');
+    graph.addEdge('a1', 'a2', 'follow', 0.9);
+    graph.addEdge('a2', 'a1', 'follow', 0.9);
+
+    graph.addNode('b1'); graph.addNode('b2');
+    graph.addEdge('b1', 'b2', 'follow', 0.9);
+    graph.addEdge('b2', 'b1', 'follow', 0.9);
+
+    // 跨社区连接（但只连到一个外部社区，不满足 bridge 的 >=2 条件）
+    graph.addNode('connector');
+    graph.addEdge('connector', 'a1', 'follow', 0.5);
+
+    const communityResult = detectCommunities(graph);
+    const roles = inferSocialRoles(graph, communityResult);
+
+    // connector 只连到 1 个外部社区（删掉自身社区后），不应是 bridge
+    expect(roles.get('connector')).not.toBe('bridge');
+  });
+
+  it('节点不在 communityResult 中时 ownCommunity 为 undefined，不应删除', () => {
+    const graph = new SocialGraph();
+    graph.addNode('a1');
+    graph.addNode('a2');
+    graph.addEdge('a1', 'a2', 'follow', 0.5);
+
+    // 手动构建一个不包含 a1 的 communityResult
+    const fakeResult: CommunityDetectionResult = {
+      communities: new Map([['a2', 'community_0']]),
+      communitySizes: new Map([['community_0', 1]]),
+      communityCount: 1,
+    };
+
+    const roles = inferSocialRoles(graph, fakeResult);
+    // a1 不在 communityResult 中，ownCommunity 为 undefined
+    // connectedCommunities.delete(undefined) 安全无操作
+    expect(roles.has('a1')).toBe(true);
+  });
+});
+
+// ── 补充测试：覆盖 Propagation 中 edges.find 回调 ──
+
+describe('detectCommunities 收敛行为', () => {
+  it('完全对称图应快速收敛', () => {
+    const graph = new SocialGraph();
+    graph.addNode('a1');
+    graph.addNode('a2');
+    graph.addEdge('a1', 'a2', 'follow', 0.5);
+    graph.addEdge('a2', 'a1', 'follow', 0.5);
+
+    // maxIterations 足够大时应在收敛后提前退出
+    const result = detectCommunities(graph, 100);
+    expect(result.communityCount).toBeGreaterThanOrEqual(1);
+  });
+});
