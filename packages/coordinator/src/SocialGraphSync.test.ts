@@ -1194,6 +1194,7 @@ describe('SocialGraphSync', () => {
       await sync.start(transport, localGraph);
 
       // 手动清空 transport
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 访问 private 属性用于测试
       (sync as any).transport = null;
 
       await expect(sync.broadcastNodeAdded('a1', 10, 'default', 'follower'))
@@ -1215,8 +1216,10 @@ describe('SocialGraphSync', () => {
 
       // 模拟 self-node 发起 fullSync 并自己响应（sourceNodeId 为 self-node）
       // 先在 pending 中注册一个 full_sync query
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 访问 private 属性用于测试
       const resultPromise = new Promise<any>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 访问 private 属性用于测试
         (primarySync as any).pendingQueries.set('full_sync_self-node_12345', {
           resolve,
           reject,
@@ -1248,8 +1251,10 @@ describe('SocialGraphSync', () => {
       await nodeSync.start(nodeTransport, createMockLocalGraph());
 
       const queryId = 'neighbors_a1_12345_abc';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 访问 private 属性用于测试
       const resultPromise = new Promise<any>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 访问 private 属性用于测试
         (nodeSync as any).pendingQueries.set(queryId, {
           resolve,
           reject,

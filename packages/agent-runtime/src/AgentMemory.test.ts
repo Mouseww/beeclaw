@@ -2,7 +2,7 @@
 // @beeclaw/agent-runtime AgentMemory 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AgentMemory } from './AgentMemory.js';
 import type { LLMClient } from './LLMClient.js';
 

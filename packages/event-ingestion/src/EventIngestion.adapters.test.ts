@@ -5,8 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventIngestion } from './EventIngestion.js';
-import { RssAdapter } from './RssAdapter.js';
-import type { FeedSource, DataSourceAdapter, SourceHealthMetrics, IngestedEvent } from './types.js';
+import type { DataSourceAdapter, SourceHealthMetrics, IngestedEvent } from './types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

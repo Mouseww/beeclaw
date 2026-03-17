@@ -3,7 +3,7 @@
 // 覆盖 cycleTheme、localStorage 读写、系统偏好监听
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useTheme } from '../hooks/useTheme';
 
