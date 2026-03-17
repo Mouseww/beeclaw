@@ -27,6 +27,7 @@ export default defineConfig({
             'packages/event-ingestion/src/**/*.test.ts',
             'packages/cli/src/**/*.test.ts',
             'packages/server/src/**/*.test.ts',
+            'scripts/**/*.test.ts',
           ],
         },
       },

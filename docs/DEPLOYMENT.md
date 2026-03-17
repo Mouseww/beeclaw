@@ -293,6 +293,83 @@ curl -X PUT http://localhost:3000/api/config/llm/strong \
 
 ## 数据持久化
 
+### PostgreSQL（生产推荐）
+
+生产环境推荐使用 PostgreSQL 替代 SQLite，获得更好的并发性能和可靠性。
+
+**环境变量：**
+
+| 变量 | 说明 |
+|------|------|
+| `BEECLAW_POSTGRES_URL` | PostgreSQL 连接字符串，例如 `postgresql://user:pass@localhost:5432/beeclaw` |
+
+当设置了 `BEECLAW_POSTGRES_URL` 时，系统自动使用 PostgreSQL 适配器；否则使用 SQLite。
+
+### 从 SQLite 迁移到 PostgreSQL
+
+如果你已有 SQLite 数据库，可使用内置迁移脚本将数据一键迁移到 PostgreSQL：
+
+**前置条件：**
+
+- 已安装 PostgreSQL 并创建目标数据库
+- 已安装项目依赖 (`npm install`)
+
+**迁移步骤：**
+
+```bash
+# 1. 创建 PostgreSQL 数据库
+createdb beeclaw
+
+# 2. 先用 dry-run 模式检查数据量
+npx tsx scripts/migrate-sqlite-to-postgres.ts \
+  --sqlite-path ./data/beeclaw.db \
+  --postgres-url postgresql://user:pass@localhost:5432/beeclaw \
+  --dry-run
+
+# 3. 执行正式迁移
+npx tsx scripts/migrate-sqlite-to-postgres.ts \
+  --sqlite-path ./data/beeclaw.db \
+  --postgres-url postgresql://user:pass@localhost:5432/beeclaw
+
+# 或使用 npm 脚本
+npm run migrate:pg -- \
+  --sqlite-path ./data/beeclaw.db \
+  --postgres-url postgresql://user:pass@localhost:5432/beeclaw
+```
+
+**参数说明：**
+
+| 参数 | 必需 | 说明 |
+|------|------|------|
+| `--sqlite-path` | 是 | SQLite 源数据库文件路径 |
+| `--postgres-url` | 是 | PostgreSQL 连接字符串 |
+| `--batch-size` | 否 | 每批插入行数，默认 500 |
+| `--dry-run` | 否 | 仅统计数据，不执行写入 |
+
+**迁移特性：**
+
+- **事务安全** — 每批次使用独立事务，失败自动回滚
+- **冲突跳过** — 已存在的数据自动跳过（ON CONFLICT DO NOTHING）
+- **类型适配** — 自动处理 SQLite TEXT→PostgreSQL JSONB、INTEGER(0/1)→BOOLEAN 转换
+- **进度显示** — 实时显示迁移进度和统计报告
+- **序列重置** — 自增列（如 consensus_signals.id）迁移后自动重置序列值
+
+**迁移覆盖的表：**
+
+world_state, agents, tick_history, consensus_signals, llm_config,
+webhook_subscriptions, events, agent_responses, rss_sources, api_keys,
+social_nodes, social_edges
+
+**迁移后：**
+
+```bash
+# 4. 更新 .env 配置，切换到 PostgreSQL
+echo 'BEECLAW_POSTGRES_URL=postgresql://user:pass@localhost:5432/beeclaw' >> .env
+
+# 5. 重启服务
+npm run serve
+```
+
 ### SQLite 数据库
 
 设置 `BEECLAW_DB_PATH` 指定数据库文件路径。不设置时使用内存数据库（重启丢失数据）。

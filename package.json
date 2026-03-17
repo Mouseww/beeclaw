@@ -23,7 +23,8 @@
     "lint:fix": "eslint packages/*/src/ --fix",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
-    "benchmark": "vitest bench --config vitest.config.bench.ts"
+    "benchmark": "vitest bench --config vitest.config.bench.ts",
+    "migrate:pg": "npx tsx scripts/migrate-sqlite-to-postgres.ts"
   },
   "engines": {
     "node": ">=20"
