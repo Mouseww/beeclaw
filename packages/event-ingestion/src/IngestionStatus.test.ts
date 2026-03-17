@@ -83,6 +83,7 @@ describe('EventIngestion — getStatus / getSourceStatus', () => {
         running: false,
         sourceCount: 0,
         financeSourceCount: 0,
+        adapterCount: 0,
         deduplicationCacheSize: 0,
         sources: [],
         financeSources: [],
