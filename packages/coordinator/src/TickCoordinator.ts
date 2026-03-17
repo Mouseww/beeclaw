@@ -3,8 +3,7 @@
 // 管理 Worker 注册/注销、协调 Tick 生命周期、超时处理、事件同步
 // ============================================================================
 
-import type { WorldEvent, ConsensusSignal } from '@beeclaw/shared';
-import type { AgentResponseRecord } from '@beeclaw/consensus';
+import type { WorldEvent } from '@beeclaw/shared';
 import type {
   WorkerInfo,
   CoordinatorConfig,

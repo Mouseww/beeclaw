@@ -1056,7 +1056,7 @@ describe('migrate-sqlite-to-postgres', () => {
       originalArgv = process.argv;
       exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
         throw new Error('process.exit called');
-      }) as any);
+      }) as (code?: number) => never);
     });
 
     afterEach(() => {
@@ -1140,7 +1140,7 @@ describe('migrate-sqlite-to-postgres', () => {
       const { pool } = createMockPool();
       const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
         throw new Error('process.exit called');
-      }) as any);
+      }) as (code?: number) => never);
 
       await expect(
         migrate(

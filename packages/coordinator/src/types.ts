@@ -2,7 +2,7 @@
 // Coordinator Types — 分布式协调层类型定义
 // ============================================================================
 
-import type { WorldEvent, AgentResponse, ConsensusSignal, SocialRole, RelationType } from '@beeclaw/shared';
+import type { WorldEvent, ConsensusSignal, SocialRole, RelationType } from '@beeclaw/shared';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 
 // ── Worker 标识 ──

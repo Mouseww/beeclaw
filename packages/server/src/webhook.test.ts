@@ -502,7 +502,7 @@ describe('WebhookDispatcher', () => {
   describe('网络异常的错误消息', () => {
     it('非 Error 类型的异常应被转为字符串', async () => {
       const mockFetch = vi.fn(async () => {
-        throw 'string error'; // eslint-disable-line no-throw-literal
+        throw 'string error';
       }) as unknown as typeof fetch;
 
       const sub = createTestSubscription();

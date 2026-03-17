@@ -3,7 +3,7 @@
 // 接收 Coordinator 指令，在本地执行分配的 Agent 处理逻辑
 // ============================================================================
 
-import type { WorldEvent, AgentResponse } from '@beeclaw/shared';
+import type { WorldEvent } from '@beeclaw/shared';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 import type {
   CoordinatorMessage,

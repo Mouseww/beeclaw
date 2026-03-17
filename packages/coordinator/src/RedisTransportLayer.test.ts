@@ -10,7 +10,7 @@ import type { CoordinatorMessage, WorkerMessage } from './types.js';
 
 /** 模拟 Redis 实例，跟踪所有调用并模拟 Pub/Sub 行为 */
 function createMockRedis() {
-  const eventHandlers = new Map<string, ((...args: any[]) => void)[]>();
+  const eventHandlers = new Map<string, ((...args: unknown[]) => void)[]>();
 
   const instance = {
     connect: vi.fn().mockResolvedValue(undefined),
@@ -21,7 +21,7 @@ function createMockRedis() {
     sadd: vi.fn().mockResolvedValue(1),
     srem: vi.fn().mockResolvedValue(1),
     smembers: vi.fn().mockResolvedValue([]),
-    on: vi.fn().mockImplementation((event: string, handler: (...args: any[]) => void) => {
+    on: vi.fn().mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
       if (!eventHandlers.has(event)) {
         eventHandlers.set(event, []);
       }
@@ -29,7 +29,7 @@ function createMockRedis() {
       return instance;
     }),
     // 辅助方法：触发事件（测试用）
-    __emit: (event: string, ...args: any[]) => {
+    __emit: (event: string, ...args: unknown[]) => {
       const handlers = eventHandlers.get(event) || [];
       for (const handler of handlers) {
         handler(...args);

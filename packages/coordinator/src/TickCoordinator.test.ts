@@ -2,7 +2,7 @@
 // @beeclaw/coordinator TickCoordinator 单元测试
 // ============================================================================
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TickCoordinator } from './TickCoordinator.js';
 import { InProcessTransport } from './TransportLayer.js';
 import { AgentPartitioner } from './AgentPartitioner.js';
@@ -169,7 +169,7 @@ describe('TickCoordinator', () => {
 
   describe('Tick 生命周期', () => {
     it('应正确执行一个完整的 Tick', async () => {
-      const { coordinator, executors } = createTestSetup(2);
+      const { coordinator } = createTestSetup(2);
 
       coordinator.assignAgents(['a1', 'a2', 'a3', 'a4']);
       coordinator.injectEvents([createTestEvent()]);
@@ -312,7 +312,7 @@ describe('TickCoordinator', () => {
     });
 
     it('EventRelay 中的事件应在下一 Tick 被分发', async () => {
-      const { coordinator, executors, eventRelay } = createTestSetup(1);
+      const { coordinator, executors } = createTestSetup(1);
 
       const relayEvent = createTestEvent({ id: 'relay_evt_1', title: '中继事件' });
 

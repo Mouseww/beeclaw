@@ -8,6 +8,7 @@ import { InProcessTransport } from './TransportLayer.js';
 import type { AgentExecutor } from './Worker.js';
 import type { WorldEvent } from '@beeclaw/shared';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
+import type { WorkerMessage } from './types.js';
 
 // ── 测试辅助 ────────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ describe('Worker', () => {
       worker.setAssignedAgents(['a1']);
 
       // 设置 leader handler 来接收结果
-      const received: any[] = [];
+      const received: WorkerMessage[] = [];
       transport.onLeaderMessage((msg) => received.push(msg));
 
       await transport.sendToWorker('w1', {
@@ -240,7 +241,7 @@ describe('Worker', () => {
       expect(received.length).toBeGreaterThanOrEqual(1);
       const tickResult = received.find((m) => m.type === 'worker_tick_result');
       expect(tickResult).toBeDefined();
-      expect(tickResult.workerId).toBe('w1');
+      expect(tickResult!.workerId).toBe('w1');
     });
 
     it('执行错误时应上报 worker_error', async () => {
@@ -250,7 +251,7 @@ describe('Worker', () => {
       const worker = new Worker({ id: 'w1' }, transport, executor);
       worker.setAssignedAgents(['a1']);
 
-      const received: any[] = [];
+      const received: WorkerMessage[] = [];
       transport.onLeaderMessage((msg) => received.push(msg));
 
       await transport.sendToWorker('w1', {
@@ -264,7 +265,7 @@ describe('Worker', () => {
 
       const errorMsg = received.find((m) => m.type === 'worker_error');
       expect(errorMsg).toBeDefined();
-      expect(errorMsg.error).toContain('LLM 调用失败');
+      expect(errorMsg!.type === 'worker_error' && errorMsg!.error).toContain('LLM 调用失败');
     });
   });
 
@@ -272,7 +273,7 @@ describe('Worker', () => {
     it('应发送就绪信号到 Leader', async () => {
       const worker = new Worker({ id: 'w1' }, transport, createMockExecutor());
 
-      const received: any[] = [];
+      const received: WorkerMessage[] = [];
       transport.onLeaderMessage((msg) => received.push(msg));
 
       await worker.sendReady();
