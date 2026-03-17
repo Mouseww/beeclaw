@@ -235,6 +235,97 @@ npm test
 - [开发者指南](docs/DEVELOPMENT.md)
 - [更新日志](CHANGELOG.md)
 
+## Monitoring（Prometheus + Grafana）
+
+项目内置 Prometheus 指标端点 (`/metrics/prometheus`)，并提供预配置的监控栈：
+
+```bash
+# 启动监控栈（Prometheus + Grafana）
+docker compose -f docker-compose.yml -f deploy/monitoring/docker-compose.monitoring.yml up -d
+```
+
+启动后访问：
+- **Prometheus:** `http://localhost:9090`（指标查询 & 告警规则）
+- **Grafana:** `http://localhost:3001`（默认账号 `admin` / `beeclaw`）
+
+Grafana Dashboard 预置面板：
+
+| 面板 | 指标 |
+|------|------|
+| 世界运行状态 | `beeclaw_current_tick`, `beeclaw_agents_total`, `beeclaw_agents_active`, `beeclaw_agents_by_status` |
+| LLM 调用量与延迟 | `beeclaw_llm_calls_total`, `beeclaw_llm_calls_succeeded/failed`, `beeclaw_llm_avg_duration_ms` |
+| 事件处理量 | `beeclaw_events_processed_total`, `beeclaw_responses_collected_total`, `beeclaw_events_active` |
+| 内存使用 | `beeclaw_memory_rss_bytes`, `beeclaw_memory_heap_used_bytes`, `beeclaw_memory_heap_total_bytes` |
+| WebSocket 连接 | `beeclaw_ws_connections` |
+| 缓存性能 | `beeclaw_cache_hits_total`, `beeclaw_cache_misses_total`, `beeclaw_cache_hit_rate` |
+
+配置文件位于 `deploy/monitoring/`：
+- `prometheus.yml` — Prometheus 抓取配置
+- `grafana-dashboard.json` — Grafana Dashboard 模板
+- `docker-compose.monitoring.yml` — 监控服务编排
+- `provisioning/` — Grafana 自动配置（数据源 + Dashboard Provider）
+
+## Production Deployment
+
+### 推荐架构
+
+```
+                    ┌─────────────┐
+                    │  Nginx/LB   │  ← TLS 终止、反向代理
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+         beeclaw-1    beeclaw-2    beeclaw-N   ← 分布式 Worker
+              │            │            │
+              └────────────┼────────────┘
+                           ▼
+                    ┌─────────────┐
+                    │  PostgreSQL  │  ← 共享持久化
+                    └─────────────┘
+                    ┌─────────────┐
+                    │    Redis     │  ← 分布式协调
+                    └─────────────┘
+         ┌──────────────────────────────────┐
+         │  Prometheus → Grafana            │  ← 监控
+         └──────────────────────────────────┘
+```
+
+### 部署步骤
+
+```bash
+# 1. PostgreSQL + 分布式模式 + 监控
+docker compose \
+  --profile postgres \
+  --profile distributed \
+  -f docker-compose.yml \
+  -f deploy/monitoring/docker-compose.monitoring.yml \
+  up -d --scale worker=3
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env，设置：
+#   POSTGRES_PASSWORD — 数据库密码
+#   BEECLAW_API_KEY — API 认证密钥
+#   BEECLAW_LLM_API_KEY — LLM Provider API Key
+#   GRAFANA_ADMIN_PASSWORD — Grafana 管理密码
+
+# 3. 验证服务健康
+curl http://localhost:3000/health
+curl http://localhost:9090/-/healthy
+curl http://localhost:3001/api/health
+```
+
+### 生产检查清单
+
+- [ ] 配置 TLS（反向代理或 Let's Encrypt）
+- [ ] 设置强密码（PostgreSQL / Grafana / API Key）
+- [ ] 配置 Prometheus 告警规则（`alerting_rules.yml`）
+- [ ] 配置 Grafana 告警通知渠道（Slack / Email / Webhook）
+- [ ] 调整 Agent 数量和 Tick 间隔适配服务器资源
+- [ ] 配置日志归档和轮转
+- [ ] 设置数据库备份策略
+
 ## 许可证
 
 [MIT](LICENSE)
