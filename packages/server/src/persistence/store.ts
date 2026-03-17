@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type Database from 'better-sqlite3';
-import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, EventCategory } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, EventCategory, SocialEdge, SocialNode, RelationType, SocialRole } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
 import type { FeedSource } from '@beeclaw/event-ingestion';
@@ -528,6 +528,58 @@ export class SqliteAdapter implements DatabaseAdapter {
       .all() as { key_hash: string }[];
     return new Set(rows.map(r => r.key_hash));
   }
+
+  /** 批量保存 Social Graph 边关系（全量覆盖：先清空再插入） */
+  async saveSocialEdges(edges: SocialEdge[]): Promise<void> {
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM social_edges').run();
+      const stmt = this.db.prepare(
+        `INSERT OR REPLACE INTO social_edges (from_agent, to_agent, type, strength, formed_at_tick, updated_at)
+         VALUES (?, ?, ?, ?, ?, unixepoch())`
+      );
+      for (const edge of edges) {
+        stmt.run(edge.from, edge.to, edge.type, edge.strength, edge.formedAtTick);
+      }
+    });
+    tx();
+  }
+
+  /** 批量保存 Social Graph 节点（全量覆盖：先清空再插入） */
+  async saveSocialNodes(nodes: SocialNode[]): Promise<void> {
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM social_nodes').run();
+      const stmt = this.db.prepare(
+        `INSERT OR REPLACE INTO social_nodes (agent_id, influence, community, role, updated_at)
+         VALUES (?, ?, ?, ?, unixepoch())`
+      );
+      for (const node of nodes) {
+        stmt.run(node.agentId, node.influence, node.community, node.role);
+      }
+    });
+    tx();
+  }
+
+  /** 加载所有 Social Graph 边关系 */
+  async loadSocialEdges(): Promise<SocialEdge[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM social_edges')
+      .all() as SocialEdgeRow[];
+    return rows.map(rowToSocialEdge);
+  }
+
+  /** 加载所有 Social Graph 节点 */
+  async loadSocialNodes(): Promise<SocialNode[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM social_nodes')
+      .all() as SocialNodeRow[];
+    return rows.map(rowToSocialNode);
+  }
+
+  /** 仅保存指定 Agent（增量保存，用于 dirty tracking） */
+  async saveDirtyAgents(agents: Agent[]): Promise<void> {
+    if (agents.length === 0) return;
+    await this.saveAgents(agents);
+  }
 }
 
 // ── Row 类型 ──
@@ -713,6 +765,44 @@ function rowToApiKeyRecord(row: ApiKeyRow): ApiKeyRecord {
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     active: row.active === 1,
+  };
+}
+
+// ── v2.1 Social Graph Row 类型 ──
+
+export interface SocialEdgeRow {
+  from_agent: string;
+  to_agent: string;
+  type: string;
+  strength: number;
+  formed_at_tick: number;
+  updated_at: number;
+}
+
+export interface SocialNodeRow {
+  agent_id: string;
+  influence: number;
+  community: string;
+  role: string;
+  updated_at: number;
+}
+
+function rowToSocialEdge(row: SocialEdgeRow): SocialEdge {
+  return {
+    from: row.from_agent,
+    to: row.to_agent,
+    type: row.type as RelationType,
+    strength: row.strength,
+    formedAtTick: row.formed_at_tick,
+  };
+}
+
+function rowToSocialNode(row: SocialNodeRow): SocialNode {
+  return {
+    agentId: row.agent_id,
+    influence: row.influence,
+    community: row.community,
+    role: row.role as SocialRole,
   };
 }
 
