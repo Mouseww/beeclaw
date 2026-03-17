@@ -149,6 +149,195 @@ describe('Auth Middleware', () => {
       expect(res.statusCode).toBe(200);
     });
   });
+
+  describe('X-API-Key header 支持', () => {
+    beforeEach(async () => {
+      app = await buildApp(API_KEY);
+    });
+
+    it('有效 X-API-Key 应通过认证', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/status',
+        headers: { 'x-api-key': API_KEY },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+    });
+
+    it('无效 X-API-Key 应返回 401', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/status',
+        headers: { 'x-api-key': 'wrong-x-api-key' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('WebSocket 鉴权（query param ?token）', () => {
+    beforeEach(async () => {
+      // 需要一个自带 /ws 路由的 app，在 ready 之前注册
+      if (app) await app.close();
+      // 设置环境变量
+      process.env['BEECLAW_API_KEY'] = API_KEY;
+      const fastify = Fastify({ logger: false });
+      registerAuthMiddleware(fastify);
+      fastify.get('/api/status', async () => ({ ok: true }));
+      fastify.get('/ws', async () => ({ ok: true }));
+      await fastify.ready();
+      app = fastify;
+    });
+
+    it('有效 token query 参数应通过认证', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/ws?token=${API_KEY}`,
+      });
+      // 200 或者 WebSocket 升级（这里是 HTTP fallback 测试）
+      expect(res.statusCode).not.toBe(401);
+    });
+
+    it('无效 token query 参数应返回 401', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/ws?token=invalid-token',
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().error).toBe('Unauthorized');
+    });
+
+    it('缺少 token 的 WebSocket 请求应返回 401', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/ws',
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().message).toContain('token');
+    });
+  });
+
+  describe('公开路由判断', () => {
+    beforeEach(async () => {
+      app = await buildApp(API_KEY);
+    });
+
+    it('/health 路径带 query string 应跳过认证', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/health?foo=bar',
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('非 API 非 WS 路径应跳过认证（Dashboard 页面）', async () => {
+      // 需要在 ready 之前注册路由的新 app
+      process.env['BEECLAW_API_KEY'] = API_KEY;
+      const localApp = Fastify({ logger: false });
+      registerAuthMiddleware(localApp);
+      localApp.get('/dashboard', async () => ({ page: 'dashboard' }));
+      await localApp.ready();
+
+      const res = await localApp.inject({
+        method: 'GET',
+        url: '/dashboard',
+      });
+      expect(res.statusCode).toBe(200);
+      await localApp.close();
+    });
+  });
+
+  describe('DB Key 支持', () => {
+    it('有效 DB key hash 应通过认证', async () => {
+      const { hashApiKey } = await import('./auth.js');
+
+      if (app) await app.close();
+      delete process.env['BEECLAW_API_KEY'];
+
+      const dbKey = 'my-db-key-12345';
+      const dbKeyHash = hashApiKey(dbKey);
+
+      process.env['BEECLAW_API_KEY'] = 'master-key';
+      const fastify = Fastify({ logger: false });
+      registerAuthMiddleware(fastify, async () => new Set([dbKeyHash]));
+      fastify.get('/api/status', async () => ({ ok: true }));
+      await fastify.ready();
+      app = fastify;
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/status',
+        headers: { authorization: `Bearer ${dbKey}` },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('无效 DB key 应返回 401', async () => {
+      const { hashApiKey } = await import('./auth.js');
+
+      if (app) await app.close();
+      delete process.env['BEECLAW_API_KEY'];
+
+      const dbKeyHash = hashApiKey('valid-db-key');
+
+      process.env['BEECLAW_API_KEY'] = 'master-key';
+      const fastify = Fastify({ logger: false });
+      registerAuthMiddleware(fastify, async () => new Set([dbKeyHash]));
+      fastify.get('/api/status', async () => ({ ok: true }));
+      await fastify.ready();
+      app = fastify;
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/status',
+        headers: { authorization: 'Bearer wrong-key' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+  });
+});
+
+// ════════════════════════════════════════
+// Auth 工具函数
+// ════════════════════════════════════════
+
+describe('Auth 工具函数', () => {
+  it('hashApiKey 应返回 64 字符的 SHA-256 hex 字符串', async () => {
+    const { hashApiKey } = await import('./auth.js');
+    const hash = hashApiKey('test-key');
+    expect(hash).toHaveLength(64);
+    expect(hash).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it('相同 key 的 hashApiKey 应返回相同哈希', async () => {
+    const { hashApiKey } = await import('./auth.js');
+    expect(hashApiKey('same-key')).toBe(hashApiKey('same-key'));
+  });
+
+  it('不同 key 的 hashApiKey 应返回不同哈希', async () => {
+    const { hashApiKey } = await import('./auth.js');
+    expect(hashApiKey('key-a')).not.toBe(hashApiKey('key-b'));
+  });
+
+  it('generateApiKey 应以 bk_ 开头', async () => {
+    const { generateApiKey } = await import('./auth.js');
+    const key = generateApiKey();
+    expect(key).toMatch(/^bk_[0-9a-f]+$/);
+  });
+
+  it('generateApiKey 每次调用应返回不同的 key', async () => {
+    const { generateApiKey } = await import('./auth.js');
+    const key1 = generateApiKey();
+    const key2 = generateApiKey();
+    expect(key1).not.toBe(key2);
+  });
+
+  it('generateApiKey 应有足够的长度（bk_ + 48 hex chars）', async () => {
+    const { generateApiKey } = await import('./auth.js');
+    const key = generateApiKey();
+    // bk_ (3) + 24 随机字节 * 2 (48) = 51
+    expect(key.length).toBe(51);
+  });
 });
 
 // ════════════════════════════════════════

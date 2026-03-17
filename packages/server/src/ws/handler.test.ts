@@ -9,6 +9,7 @@ import {
   stopHeartbeat,
   closeAllConnections,
   broadcast,
+  broadcastSignal,
   getConnectionCount,
 } from './handler.js';
 
@@ -425,6 +426,242 @@ describe('ws/handler', () => {
 
       s1._emit('close');
       expect(getConnectionCount()).toBe(count - 1);
+    });
+  });
+
+  // ── message 消息处理 ──
+
+  describe('message 消息处理', () => {
+    it('subscribe 带 topic 应添加订阅并回复 subscribed', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      const msg = JSON.stringify({ action: 'subscribe', topic: '股市' });
+      socket._emit('message', Buffer.from(msg));
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      const reply = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(reply.type).toBe('subscribed');
+      expect(reply.topic).toBe('股市');
+      expect(reply.message).toContain('股市');
+    });
+
+    it('subscribe 不带 topic 应订阅全部（clear signalTopics）', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 先订阅一个 topic
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '科技' })));
+      socket.send.mockClear();
+
+      // 然后订阅全部（不带 topic）
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe' })));
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      const reply = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(reply.type).toBe('subscribed');
+      expect(reply.topic).toBe('*');
+    });
+
+    it('unsubscribe 带 topic 应移除订阅并回复 unsubscribed', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 先订阅
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '政治' })));
+      socket.send.mockClear();
+
+      // 取消订阅
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'unsubscribe', topic: '政治' })));
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      const reply = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(reply.type).toBe('unsubscribed');
+      expect(reply.topic).toBe('政治');
+    });
+
+    it('unsubscribe 不带 topic 应清除所有订阅', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 先订阅两个 topic
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: 'A' })));
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: 'B' })));
+      socket.send.mockClear();
+
+      // 清空订阅（不带 topic）
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'unsubscribe' })));
+
+      const reply = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(reply.type).toBe('unsubscribed');
+      expect(reply.topic).toBe('*');
+    });
+
+    it('无效 JSON 消息应被忽略（不崩溃）', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 触发无效 JSON
+      expect(() => socket._emit('message', Buffer.from('not json at all'))).not.toThrow();
+      // 不应发送任何消息
+      expect(socket.send).not.toHaveBeenCalled();
+    });
+
+    it('客户端从 map 中删除后 pong 不应报错', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket();
+      app._simulateConnection(socket);
+
+      // 手动删除客户端（模拟 close 发生后还有 pong）
+      socket._emit('close');
+
+      // pong 事件应该无副作用（meta = undefined）
+      expect(() => socket._emit('pong')).not.toThrow();
+    });
+  });
+
+  // ── broadcastSignal ──
+
+  describe('broadcastSignal', () => {
+    it('订阅了 topic 的客户端应收到 signal 推送', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket({ readyState: 1 });
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 订阅 '股市' topic
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '股市' })));
+      socket.send.mockClear();
+
+      broadcastSignal('股市', { price: 3000 });
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      const payload = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(payload.type).toBe('signal');
+      expect(payload.topic).toBe('股市');
+      expect(payload.data).toEqual({ price: 3000 });
+    });
+
+    it('未订阅该 topic 的客户端不应收到推送', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket({ readyState: 1 });
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 订阅 '科技' topic
+      socket._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '科技' })));
+      socket.send.mockClear();
+
+      // 向 '股市' 推送
+      broadcastSignal('股市', { price: 3000 });
+
+      // '科技' 订阅者不应收到 '股市' 推送
+      expect(socket.send).not.toHaveBeenCalled();
+    });
+
+    it('signalTopics 为空的客户端（订阅全部）应收到所有推送', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const socket = createMockSocket({ readyState: 1 });
+      app._simulateConnection(socket);
+      socket.send.mockClear();
+
+      // 不订阅任何 topic（empty set = 订阅全部）
+      broadcastSignal('任意主题', { data: 'x' });
+
+      expect(socket.send).toHaveBeenCalledOnce();
+      const payload = JSON.parse(socket.send.mock.calls[0][0]);
+      expect(payload.type).toBe('signal');
+    });
+
+    it('非 OPEN 状态的客户端不应收到 signal 推送', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const closedSocket = createMockSocket({ readyState: 3 }); // CLOSED
+      app._simulateConnection(closedSocket);
+      closedSocket.send.mockClear();
+
+      broadcastSignal('topic', { data: 1 });
+      expect(closedSocket.send).not.toHaveBeenCalled();
+    });
+
+    it('send 抛异常应移除客户端并继续', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const badSocket = createMockSocket({
+        readyState: 1,
+        send: vi.fn().mockImplementationOnce(() => { /* connected */ })
+                    .mockImplementationOnce(() => { throw new Error('Send failed'); }),
+      });
+      const goodSocket = createMockSocket({ readyState: 1 });
+      app._simulateConnection(badSocket);
+      app._simulateConnection(goodSocket);
+
+      goodSocket.send.mockClear();
+
+      expect(() => broadcastSignal('topic', {})).not.toThrow();
+      expect(goodSocket.send).toHaveBeenCalledOnce();
+      expect(console.warn).toHaveBeenCalled();
+    });
+
+    it('无连接时不应报错', () => {
+      expect(() => broadcastSignal('topic', {})).not.toThrow();
+    });
+
+    it('多个客户端订阅不同 topic 应各自接收', () => {
+      const app = createMockApp();
+      registerWs(app as any);
+
+      const s1 = createMockSocket({ readyState: 1 });
+      const s2 = createMockSocket({ readyState: 1 });
+      app._simulateConnection(s1);
+      app._simulateConnection(s2);
+
+      // s1 订阅 '股市'，s2 订阅 '科技'
+      s1._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '股市' })));
+      s2._emit('message', Buffer.from(JSON.stringify({ action: 'subscribe', topic: '科技' })));
+      s1.send.mockClear();
+      s2.send.mockClear();
+
+      broadcastSignal('股市', { x: 1 });
+
+      expect(s1.send).toHaveBeenCalledOnce();
+      expect(s2.send).not.toHaveBeenCalled();
+
+      s1.send.mockClear();
+      broadcastSignal('科技', { y: 2 });
+
+      expect(s1.send).not.toHaveBeenCalled();
+      expect(s2.send).toHaveBeenCalledOnce();
     });
   });
 });

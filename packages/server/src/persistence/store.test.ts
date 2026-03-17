@@ -971,4 +971,289 @@ describe('Store', () => {
       expect(await store.getApiKeyByHash('hash-k1')).toBeNull();
     });
   });
+
+  // ════════════════════════════════════════
+  // getActiveApiKeyHashes（v2.0）
+  // ════════════════════════════════════════
+
+  describe('getActiveApiKeyHashes', () => {
+    const makeApiKeyEntry = (id: string, overrides?: Partial<{ keyHash: string; name: string }>): ApiKeyEntry => ({
+      id,
+      name: overrides?.name ?? `Key ${id}`,
+      keyHash: overrides?.keyHash ?? `hash-${id}`,
+      permissions: ['read'],
+      rateLimit: 100,
+    });
+
+    it('无 API Key 时应返回空 Set', async () => {
+      const hashes = await store.getActiveApiKeyHashes();
+      expect(hashes.size).toBe(0);
+    });
+
+    it('应返回所有活跃 key 的哈希集合', async () => {
+      await store.createApiKey(makeApiKeyEntry('k1', { keyHash: 'hash-aaa' }));
+      await store.createApiKey(makeApiKeyEntry('k2', { keyHash: 'hash-bbb' }));
+
+      const hashes = await store.getActiveApiKeyHashes();
+      expect(hashes.has('hash-aaa')).toBe(true);
+      expect(hashes.has('hash-bbb')).toBe(true);
+      expect(hashes.size).toBe(2);
+    });
+
+    it('删除 key 后 hashes 集合应缩减', async () => {
+      await store.createApiKey(makeApiKeyEntry('k1'));
+      await store.createApiKey(makeApiKeyEntry('k2'));
+      await store.deleteApiKey('k1');
+
+      const hashes = await store.getActiveApiKeyHashes();
+      expect(hashes.has('hash-k1')).toBe(false);
+      expect(hashes.has('hash-k2')).toBe(true);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // Social Graph（v2.1）
+  // ════════════════════════════════════════
+
+  describe('Social Graph 持久化', () => {
+    const makeSocialEdge = (from: string, to: string, overrides?: Partial<{ type: string; strength: number; formedAtTick: number }>) => ({
+      from,
+      to,
+      type: (overrides?.type ?? 'follow') as 'follow' | 'trust' | 'rival',
+      strength: overrides?.strength ?? 0.5,
+      formedAtTick: overrides?.formedAtTick ?? 1,
+    });
+
+    const makeSocialNode = (agentId: string, overrides?: Partial<{ influence: number; community: string; role: string }>) => ({
+      agentId,
+      influence: overrides?.influence ?? 0.5,
+      community: overrides?.community ?? 'default',
+      role: (overrides?.role ?? 'follower') as 'hub' | 'follower' | 'bridge' | 'isolate',
+    });
+
+    it('loadSocialEdges 初始应为空', async () => {
+      expect(await store.loadSocialEdges()).toEqual([]);
+    });
+
+    it('saveSocialEdges 后应能通过 loadSocialEdges 读取', async () => {
+      const edges = [
+        makeSocialEdge('a1', 'a2'),
+        makeSocialEdge('a2', 'a3', { type: 'trust', strength: 0.9 }),
+      ];
+      await store.saveSocialEdges(edges);
+
+      const loaded = await store.loadSocialEdges();
+      expect(loaded.length).toBe(2);
+    });
+
+    it('saveSocialEdges 应全量覆盖（先清空再插入）', async () => {
+      await store.saveSocialEdges([makeSocialEdge('a1', 'a2')]);
+      // 全量替换为新数据
+      await store.saveSocialEdges([
+        makeSocialEdge('b1', 'b2'),
+        makeSocialEdge('b2', 'b3'),
+      ]);
+
+      const loaded = await store.loadSocialEdges();
+      expect(loaded.length).toBe(2);
+      const fromIds = loaded.map(e => e.from);
+      expect(fromIds).toContain('b1');
+      expect(fromIds).toContain('b2');
+      expect(fromIds).not.toContain('a1');
+    });
+
+    it('saveSocialEdges 空数组应清空所有边', async () => {
+      await store.saveSocialEdges([makeSocialEdge('a1', 'a2')]);
+      await store.saveSocialEdges([]);
+
+      expect(await store.loadSocialEdges()).toEqual([]);
+    });
+
+    it('loadSocialEdges 应正确映射字段', async () => {
+      await store.saveSocialEdges([makeSocialEdge('a1', 'a2', { type: 'rival', strength: 0.3, formedAtTick: 5 })]);
+
+      const loaded = await store.loadSocialEdges();
+      const edge = loaded[0]!;
+      expect(edge.from).toBe('a1');
+      expect(edge.to).toBe('a2');
+      expect(edge.type).toBe('rival');
+      expect(edge.strength).toBe(0.3);
+      expect(edge.formedAtTick).toBe(5);
+    });
+
+    it('loadSocialNodes 初始应为空', async () => {
+      expect(await store.loadSocialNodes()).toEqual([]);
+    });
+
+    it('saveSocialNodes 后应能通过 loadSocialNodes 读取', async () => {
+      const nodes = [
+        makeSocialNode('a1', { influence: 0.9, community: 'crypto', role: 'hub' }),
+        makeSocialNode('a2', { influence: 0.3, community: 'general', role: 'isolate' }),
+      ];
+      await store.saveSocialNodes(nodes);
+
+      const loaded = await store.loadSocialNodes();
+      expect(loaded.length).toBe(2);
+    });
+
+    it('saveSocialNodes 应全量覆盖，正确映射字段', async () => {
+      await store.saveSocialNodes([makeSocialNode('a1')]);
+      await store.saveSocialNodes([
+        makeSocialNode('b1', { influence: 0.8, community: 'finance', role: 'bridge' }),
+      ]);
+
+      const loaded = await store.loadSocialNodes();
+      expect(loaded.length).toBe(1);
+      const node = loaded[0]!;
+      expect(node.agentId).toBe('b1');
+      expect(node.influence).toBe(0.8);
+      expect(node.community).toBe('finance');
+      expect(node.role).toBe('bridge');
+    });
+
+    it('saveSocialNodes 空数组应清空所有节点', async () => {
+      await store.saveSocialNodes([makeSocialNode('a1')]);
+      await store.saveSocialNodes([]);
+
+      expect(await store.loadSocialNodes()).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // 信号高级查询（Phase 2.2）
+  // ════════════════════════════════════════
+
+  describe('高级信号查询', () => {
+    const makeSignal = (tick: number, topic: string): import('@beeclaw/shared').ConsensusSignal => ({
+      tick,
+      topic,
+      sentimentDistribution: { bullish: 0.5, bearish: 0.3, neutral: 0.2 },
+      averageConfidence: 0.7,
+      dominantStance: 'bullish',
+      consensusDegree: 0.6,
+      participantCount: 5,
+      trend: 'forming',
+      alerts: [],
+    });
+
+    it('getDistinctTopics 应返回不重复的 topic 列表', async () => {
+      await store.saveConsensusSignal(makeSignal(1, '股市'));
+      await store.saveConsensusSignal(makeSignal(2, '科技'));
+      await store.saveConsensusSignal(makeSignal(3, '股市'));
+
+      const topics = await store.getDistinctTopics();
+      expect(topics.length).toBe(2);
+      expect(topics).toContain('股市');
+      expect(topics).toContain('科技');
+    });
+
+    it('getDistinctTopics 无信号时应返回空数组', async () => {
+      expect(await store.getDistinctTopics()).toEqual([]);
+    });
+
+    it('getSignalCountByTopic 应返回正确计数', async () => {
+      await store.saveConsensusSignal(makeSignal(1, '股市'));
+      await store.saveConsensusSignal(makeSignal(2, '股市'));
+      await store.saveConsensusSignal(makeSignal(3, '科技'));
+
+      expect(await store.getSignalCountByTopic('股市')).toBe(2);
+      expect(await store.getSignalCountByTopic('科技')).toBe(1);
+      expect(await store.getSignalCountByTopic('不存在')).toBe(0);
+    });
+
+    it('getSignalsByTickRange 应按 tick 范围过滤', async () => {
+      for (let i = 1; i <= 10; i++) {
+        await store.saveConsensusSignal(makeSignal(i, '股市'));
+      }
+
+      const signals = await store.getSignalsByTickRange('股市', 3, 6);
+      expect(signals.length).toBe(4);
+      for (const s of signals) {
+        expect(s.tick).toBeGreaterThanOrEqual(3);
+        expect(s.tick).toBeLessThanOrEqual(6);
+      }
+    });
+
+    it('getSignalsByTickRange 结果应按 tick 升序', async () => {
+      await store.saveConsensusSignal(makeSignal(3, '股市'));
+      await store.saveConsensusSignal(makeSignal(1, '股市'));
+      await store.saveConsensusSignal(makeSignal(2, '股市'));
+
+      const signals = await store.getSignalsByTickRange('股市', 1, 3);
+      expect(signals[0]!.tick).toBe(1);
+      expect(signals[1]!.tick).toBe(2);
+      expect(signals[2]!.tick).toBe(3);
+    });
+
+    it('getSignalsByTickRange 无匹配时应返回空数组', async () => {
+      await store.saveConsensusSignal(makeSignal(10, '股市'));
+      const signals = await store.getSignalsByTickRange('股市', 1, 5);
+      expect(signals).toEqual([]);
+    });
+
+    it('getLatestSignalPerTopic 应每个 topic 只返回最新信号', async () => {
+      await store.saveConsensusSignal(makeSignal(1, '股市'));
+      await store.saveConsensusSignal(makeSignal(5, '股市'));
+      await store.saveConsensusSignal(makeSignal(3, '科技'));
+      await store.saveConsensusSignal(makeSignal(7, '科技'));
+
+      const signals = await store.getLatestSignalPerTopic();
+      expect(signals.length).toBe(2);
+
+      const stockSignal = signals.find(s => s.topic === '股市');
+      const techSignal = signals.find(s => s.topic === '科技');
+      expect(stockSignal?.tick).toBe(5); // 最新的是 tick=5
+      expect(techSignal?.tick).toBe(7);  // 最新的是 tick=7
+    });
+
+    it('getLatestSignalPerTopic 无信号时应返回空数组', async () => {
+      expect(await store.getLatestSignalPerTopic()).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // saveDirtyAgents（增量保存）
+  // ════════════════════════════════════════
+
+  describe('saveDirtyAgents', () => {
+    function createMockAgent(id: string, name: string, influence = 50) {
+      return {
+        id,
+        name,
+        toData: () => ({
+          id,
+          name,
+          persona: { background: 'test', profession: 'tester', traits: {}, expertise: [], biases: [], communicationStyle: 'formal' },
+          memory: { shortTerm: [], longTerm: [], opinions: {}, predictions: [] },
+          relationships: [],
+          followers: [],
+          following: [],
+          influence,
+          credibility: 0.8,
+          status: 'active' as const,
+          modelTier: 'cheap' as const,
+          spawnedAtTick: 0,
+          lastActiveTick: 5,
+          modelId: 'cheap-default',
+        }),
+      } as any;
+    }
+
+    it('传入空数组时应不操作（返回 undefined）', async () => {
+      // saveDirtyAgents([]) 应无副作用
+      await store.saveDirtyAgents([]);
+      expect(await store.loadAgentRows()).toEqual([]);
+    });
+
+    it('传入非空数组时应保存 agents', async () => {
+      const agents = [
+        createMockAgent('a1', 'Agent1'),
+        createMockAgent('a2', 'Agent2'),
+      ];
+      await store.saveDirtyAgents(agents);
+
+      const rows = await store.loadAgentRows();
+      expect(rows.length).toBe(2);
+    });
+  });
 });
