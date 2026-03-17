@@ -21,7 +21,7 @@ export function registerKeysRoute(app: FastifyInstance, ctx: ServerContext): voi
     const keyHash = hashApiKey(rawKey);
     const id = randomUUID();
 
-    ctx.store.createApiKey({
+    await ctx.store.createApiKey({
       id,
       name,
       keyHash,
@@ -42,13 +42,13 @@ export function registerKeysRoute(app: FastifyInstance, ctx: ServerContext): voi
 
   // GET /api/keys — 列出所有 keys（不返回明文/hash）
   app.get('/api/keys', async () => {
-    const keys = ctx.store.getApiKeys();
+    const keys = await ctx.store.getApiKeys();
     return { keys };
   });
 
   // DELETE /api/keys/:id — 删除 key
   app.delete<{ Params: { id: string } }>('/api/keys/:id', async (req, reply) => {
-    const deleted = ctx.store.deleteApiKey(req.params.id);
+    const deleted = await ctx.store.deleteApiKey(req.params.id);
     if (!deleted) {
       return reply.status(404).send({ error: 'API key not found' });
     }

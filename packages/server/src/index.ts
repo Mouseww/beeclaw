@@ -80,7 +80,7 @@ async function main(): Promise<void> {
   const modelRouter = new ModelRouter();
 
   // 从数据库加载持久化的 LLM 配置，覆盖环境变量默认值
-  const savedLLMConfig = store.loadLLMConfigs();
+  const savedLLMConfig = await store.loadLLMConfigs();
   if (savedLLMConfig) {
     modelRouter.updateGlobalConfig(savedLLMConfig);
     console.log(`[Server] 已从数据库恢复 LLM 配置`);
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
   });
 
   // 4. 加载或创建 Agents
-  const savedAgents = store.loadAgentRows();
+  const savedAgents = await store.loadAgentRows();
   if (savedAgents.length > 0) {
     console.log(`[Server] 从数据库恢复 ${savedAgents.length} 个 Agent`);
     const agents: Agent[] = [];
@@ -251,9 +251,9 @@ async function main(): Promise<void> {
   ];
 
   // 从数据库加载已有 RSS 源，为空则使用默认配置并写入 DB
-  let rssSources = store.loadRssSources();
+  let rssSources = await store.loadRssSources();
   if (rssSources.length === 0) {
-    store.saveRssSources(defaultRssSources);
+    await store.saveRssSources(defaultRssSources);
     rssSources = defaultRssSources;
     console.log(`[Server] 使用默认 RSS 配置并写入数据库`);
   } else {
@@ -454,23 +454,23 @@ async function main(): Promise<void> {
 
       // 定期保存
       if (tickCount % SAVE_INTERVAL === 0) {
-        store.setTick(result.tick);
-        store.saveTickResult(result);
-        store.saveAgents(engine.getAgents());
+        await store.setTick(result.tick);
+        await store.saveTickResult(result);
+        await store.saveAgents(engine.getAgents());
         console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库`);
       }
 
       // 每个 tick 保存事件和响应（v2.0: 内容持久化）
       if (result.events && result.events.length > 0) {
-        store.saveEvents(result.events, result.tick);
+        await store.saveEvents(result.events, result.tick);
       }
       if (result.responses && result.responses.length > 0) {
-        store.saveResponses(result.responses, result.tick);
+        await store.saveResponses(result.responses, result.tick);
       }
 
       // 每个 tick 保存共识信号（v2.0: 不再等 SAVE_INTERVAL）
       for (const signal of signals) {
-        store.saveConsensusSignal(signal);
+        await store.saveConsensusSignal(signal);
       }
 
       // 警告 tick 耗时过长
@@ -517,10 +517,10 @@ async function main(): Promise<void> {
     try {
       // 最终保存
       const tick = engine.getCurrentTick();
-      store.setTick(tick);
-      store.saveAgents(engine.getAgents());
+      await store.setTick(tick);
+      await store.saveAgents(engine.getAgents());
       const lastResult = engine.getLastTickResult();
-      if (lastResult) store.saveTickResult(lastResult);
+      if (lastResult) await store.saveTickResult(lastResult);
       console.log(`[Server] 状态已保存 (Tick ${tick}, ${engine.getAgents().length} agents)`);
 
       // 关闭所有 WebSocket 连接

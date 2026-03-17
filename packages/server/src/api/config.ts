@@ -76,7 +76,7 @@ export function registerConfigRoute(app: FastifyInstance, ctx: ServerContext): v
     });
 
     // 持久化到数据库
-    ctx.store.saveLLMConfigs({
+    await ctx.store.saveLLMConfigs({
       local: configs['local']!,
       cheap: configs['cheap']!,
       strong: configs['strong']!,
@@ -102,7 +102,7 @@ export function registerConfigRoute(app: FastifyInstance, ctx: ServerContext): v
     ctx.modelRouter.updateConfig(tier, result);
 
     // 持久化到数据库
-    ctx.store.saveLLMConfig(tier, result);
+    await ctx.store.saveLLMConfig(tier, result);
 
     console.log(`[Config] LLM ${tier} 配置已更新并持久化`);
     return { ok: true, tier, config: ctx.modelRouter.getConfig() };

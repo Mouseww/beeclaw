@@ -17,14 +17,14 @@ export function registerConsensusRoute(app: FastifyInstance, ctx: ServerContext)
     // v2.0: 支持从数据库查询历史共识
     if (fromDb) {
       if (req.query.topic) {
-        const signals = ctx.store.getSignalsByTopic(req.query.topic, limit);
+        const signals = await ctx.store.getSignalsByTopic(req.query.topic, limit);
         return {
           topic: req.query.topic,
           signals: normalizeSentimentDistributions(signals),
           source: 'db',
         };
       }
-      const signals = ctx.store.getLatestSignals(limit);
+      const signals = await ctx.store.getLatestSignals(limit);
       return {
         latest: normalizeSentimentDistributions(signals),
         source: 'db',

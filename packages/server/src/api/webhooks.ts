@@ -68,14 +68,14 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
       createdAt: Math.floor(Date.now() / 1000),
     };
 
-    ctx.store.createWebhook(subscription);
+    await ctx.store.createWebhook(subscription);
 
     return reply.status(201).send({ ok: true, webhook: subscription });
   });
 
   // GET /api/webhooks — 列出所有 webhook
   app.get('/api/webhooks', { schema: listWebhooksSchema }, async () => {
-    const webhooks = ctx.store.getWebhooks();
+    const webhooks = await ctx.store.getWebhooks();
     // 不返回 secret 明文，仅返回掩码
     const masked = webhooks.map(w => ({
       ...w,
@@ -86,7 +86,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
 
   // DELETE /api/webhooks/:id — 删除 webhook
   app.delete<{ Params: { id: string } }>('/api/webhooks/:id', { schema: deleteWebhookSchema }, async (req, reply) => {
-    const deleted = ctx.store.deleteWebhook(req.params.id);
+    const deleted = await ctx.store.deleteWebhook(req.params.id);
     if (!deleted) {
       return reply.status(404).send({ error: 'Webhook not found' });
     }
@@ -109,7 +109,7 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
       }
     }
 
-    const updated = ctx.store.updateWebhook(req.params.id, {
+    const updated = await ctx.store.updateWebhook(req.params.id, {
       url,
       events: events as WebhookEventType[] | undefined,
       active,
@@ -119,13 +119,13 @@ export function registerWebhooksRoute(app: FastifyInstance, ctx: ServerContext):
       return reply.status(404).send({ error: 'Webhook not found' });
     }
 
-    const webhook = ctx.store.getWebhook(req.params.id);
+    const webhook = await ctx.store.getWebhook(req.params.id);
     return { ok: true, webhook };
   });
 
   // POST /api/webhooks/:id/test — 发送测试 payload
   app.post<{ Params: { id: string } }>('/api/webhooks/:id/test', { schema: testWebhookSchema }, async (req, reply) => {
-    const webhook = ctx.store.getWebhook(req.params.id);
+    const webhook = await ctx.store.getWebhook(req.params.id);
     if (!webhook) {
       return reply.status(404).send({ error: 'Webhook not found' });
     }

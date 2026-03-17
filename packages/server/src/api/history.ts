@@ -13,7 +13,7 @@ export function registerHistoryRoute(app: FastifyInstance, ctx: ServerContext): 
     const limit = Math.min(200, parseInt(req.query.limit ?? '50', 10) || 50);
 
     // 优先从持久化读，fallback 到内存
-    const fromDb = ctx.store.getTickHistory(limit);
+    const fromDb = await ctx.store.getTickHistory(limit);
     if (fromDb.length > 0) {
       return { history: fromDb, source: 'db' };
     }
@@ -26,7 +26,7 @@ export function registerHistoryRoute(app: FastifyInstance, ctx: ServerContext): 
     Params: { tick: string };
   }>('/api/ticks/:tick/events', { schema: tickEventsSchema }, async (req) => {
     const tick = parseInt(req.params.tick, 10);
-    const events = ctx.store.getEventsByTick(tick);
+    const events = await ctx.store.getEventsByTick(tick);
     return { tick, events, count: events.length };
   });
 
@@ -35,7 +35,7 @@ export function registerHistoryRoute(app: FastifyInstance, ctx: ServerContext): 
     Params: { tick: string };
   }>('/api/ticks/:tick/responses', { schema: tickResponsesSchema }, async (req) => {
     const tick = parseInt(req.params.tick, 10);
-    const responses = ctx.store.getResponsesByTick(tick);
+    const responses = await ctx.store.getResponsesByTick(tick);
     return { tick, responses, count: responses.length };
   });
 
@@ -48,7 +48,7 @@ export function registerHistoryRoute(app: FastifyInstance, ctx: ServerContext): 
       return reply.status(400).send({ error: 'Missing search query "q"' });
     }
     const limit = Math.min(100, parseInt(req.query.limit ?? '20', 10) || 20);
-    const events = ctx.store.searchEvents(q, limit);
+    const events = await ctx.store.searchEvents(q, limit);
     return { query: q, events, count: events.length };
   });
 }

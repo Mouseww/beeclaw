@@ -55,7 +55,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
     };
     ctx.ingestion.addSource(source);
     // v2.0: 同步到数据库
-    ctx.store.saveRssSource(source);
+    await ctx.store.saveRssSource(source);
     return { ok: true, id };
   });
 
@@ -84,7 +84,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
     };
     ctx.ingestion.addSource(source);
     // v2.0: 同步到数据库
-    ctx.store.saveRssSource(source);
+    await ctx.store.saveRssSource(source);
     return { ok: true, id: req.params.sourceId };
   });
 
@@ -101,7 +101,7 @@ export function registerIngestionRoute(app: FastifyInstance, ctx: ServerContext)
       }
       ctx.ingestion.removeSource(req.params.sourceId);
       // v2.0: 同步到数据库
-      ctx.store.deleteRssSource(req.params.sourceId);
+      await ctx.store.deleteRssSource(req.params.sourceId);
       return { ok: true, deleted: req.params.sourceId };
     },
   );

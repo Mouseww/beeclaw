@@ -48,11 +48,11 @@ function isPublicRoute(url: string): boolean {
  * - /health, /metrics/prometheus, 静态资源不需要认证
  * - 支持 Authorization: Bearer <key> 和 X-API-Key: <key>
  * - 支持 WebSocket ?token=<key>
- * - getDbKeyHashes 回调函数用来查询 DB 中的 API keys
+ * - getDbKeyHashes 回调函数用来查询 DB 中的 API keys（支持同步或异步）
  */
 export function registerAuthMiddleware(
   app: FastifyInstance,
-  getDbKeyHashes?: () => Set<string>,
+  getDbKeyHashes?: () => Promise<Set<string>> | Set<string>,
 ): void {
   const masterKey = process.env['BEECLAW_API_KEY'];
 
@@ -72,7 +72,7 @@ export function registerAuthMiddleware(
     // WebSocket 通过 query param 鉴权
     if (request.url.startsWith('/ws')) {
       const token = (request.query as Record<string, string>)?.token;
-      if (token && isValidKey(token, masterKey, getDbKeyHashes)) {
+      if (token && await isValidKey(token, masterKey, getDbKeyHashes)) {
         return;
       }
       reply.code(401).send({ error: 'Unauthorized', message: 'Missing or invalid token' });
@@ -90,7 +90,7 @@ export function registerAuthMiddleware(
       key = xApiKey;
     }
 
-    if (key && isValidKey(key, masterKey, getDbKeyHashes)) {
+    if (key && await isValidKey(key, masterKey, getDbKeyHashes)) {
       return;
     }
 
@@ -98,17 +98,18 @@ export function registerAuthMiddleware(
   });
 }
 
-function isValidKey(
+async function isValidKey(
   key: string,
   masterKey: string,
-  getDbKeyHashes?: () => Set<string>,
-): boolean {
+  getDbKeyHashes?: () => Promise<Set<string>> | Set<string>,
+): Promise<boolean> {
   // 直接比对 master key
   if (key === masterKey) return true;
   // 比对 DB 中的 key hash
   if (getDbKeyHashes) {
     const keyHash = hashApiKey(key);
-    return getDbKeyHashes().has(keyHash);
+    const hashes = await getDbKeyHashes();
+    return hashes.has(keyHash);
   }
   return false;
 }

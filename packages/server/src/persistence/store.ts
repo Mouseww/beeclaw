@@ -10,7 +10,7 @@ import type { FeedSource } from '@beeclaw/event-ingestion';
 import { generateId } from '@beeclaw/shared';
 import type { DatabaseAdapter } from './adapter.js';
 
-export class Store implements DatabaseAdapter {
+export class SqliteAdapter implements DatabaseAdapter {
   private db: Database.Database;
 
   constructor(db: Database.Database) {
@@ -19,30 +19,30 @@ export class Store implements DatabaseAdapter {
 
   // ── 世界状态 KV ──
 
-  getState(key: string): string | undefined {
+  async getState(key: string): Promise<string | undefined> {
     const row = this.db.prepare('SELECT value FROM world_state WHERE key = ?').get(key) as
       | { value: string }
       | undefined;
     return row?.value;
   }
 
-  setState(key: string, value: string): void {
+  async setState(key: string, value: string): Promise<void> {
     this.db
       .prepare('INSERT OR REPLACE INTO world_state (key, value) VALUES (?, ?)')
       .run(key, value);
   }
 
-  getTick(): number {
-    return parseInt(this.getState('tick') ?? '0', 10);
+  async getTick(): Promise<number> {
+    return parseInt((await this.getState('tick')) ?? '0', 10);
   }
 
-  setTick(tick: number): void {
-    this.setState('tick', String(tick));
+  async setTick(tick: number): Promise<void> {
+    await this.setState('tick', String(tick));
   }
 
   // ── Agents ──
 
-  saveAgent(agent: Agent): void {
+  async saveAgent(agent: Agent): Promise<void> {
     const data = agent.toData();
     this.db
       .prepare(
@@ -66,24 +66,45 @@ export class Store implements DatabaseAdapter {
       );
   }
 
-  saveAgents(agents: Agent[]): void {
+  async saveAgents(agents: Agent[]): Promise<void> {
     const tx = this.db.transaction(() => {
       for (const agent of agents) {
-        this.saveAgent(agent);
+        // 同步调用内部 db 操作，避免在 transaction 中 await
+        const data = agent.toData();
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO agents
+             (id, name, persona, memory, followers, following, influence, credibility, status, model_tier, spawned_at_tick, last_active_tick, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`
+          )
+          .run(
+            data.id,
+            data.name,
+            JSON.stringify(data.persona),
+            JSON.stringify(data.memory),
+            JSON.stringify(data.followers),
+            JSON.stringify(data.following),
+            data.influence,
+            data.credibility,
+            data.status,
+            data.modelTier,
+            data.spawnedAtTick,
+            data.lastActiveTick
+          );
       }
     });
     tx();
   }
 
-  loadAgentRows(): AgentRow[] {
+  async loadAgentRows(): Promise<AgentRow[]> {
     return this.db.prepare('SELECT * FROM agents').all() as AgentRow[];
   }
 
-  getAgentRow(id: string): AgentRow | undefined {
+  async getAgentRow(id: string): Promise<AgentRow | undefined> {
     return this.db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as AgentRow | undefined;
   }
 
-  getAgentRows(page: number, size: number): { rows: AgentRow[]; total: number } {
+  async getAgentRows(page: number, size: number): Promise<{ rows: AgentRow[]; total: number }> {
     const total = (
       this.db.prepare('SELECT COUNT(*) as cnt FROM agents').get() as { cnt: number }
     ).cnt;
@@ -96,7 +117,7 @@ export class Store implements DatabaseAdapter {
 
   // ── Tick 历史 ──
 
-  saveTickResult(result: TickResult): void {
+  async saveTickResult(result: TickResult): Promise<void> {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO tick_history
@@ -114,7 +135,7 @@ export class Store implements DatabaseAdapter {
       );
   }
 
-  getTickHistory(limit = 50): TickResult[] {
+  async getTickHistory(limit = 50): Promise<TickResult[]> {
     const rows = this.db
       .prepare(
         'SELECT * FROM tick_history ORDER BY tick DESC LIMIT ?'
@@ -134,7 +155,7 @@ export class Store implements DatabaseAdapter {
 
   // ── 共识信号 ──
 
-  saveConsensusSignal(signal: ConsensusSignal): void {
+  async saveConsensusSignal(signal: ConsensusSignal): Promise<void> {
     this.db
       .prepare(
         'INSERT INTO consensus_signals (tick, topic, data) VALUES (?, ?, ?)'
@@ -142,14 +163,14 @@ export class Store implements DatabaseAdapter {
       .run(signal.tick, signal.topic, JSON.stringify(signal));
   }
 
-  getLatestSignals(limit = 20): ConsensusSignal[] {
+  async getLatestSignals(limit = 20): Promise<ConsensusSignal[]> {
     const rows = this.db
       .prepare('SELECT data FROM consensus_signals ORDER BY id DESC LIMIT ?')
       .all(limit) as { data: string }[];
     return rows.map(r => JSON.parse(r.data) as ConsensusSignal);
   }
 
-  getSignalsByTopic(topic: string, limit = 20): ConsensusSignal[] {
+  async getSignalsByTopic(topic: string, limit = 20): Promise<ConsensusSignal[]> {
     const rows = this.db
       .prepare('SELECT data FROM consensus_signals WHERE topic = ? ORDER BY id DESC LIMIT ?')
       .all(topic, limit) as { data: string }[];
@@ -159,7 +180,7 @@ export class Store implements DatabaseAdapter {
   // ── LLM 配置持久化 ──
 
   /** 保存单个 tier 的 LLM 配置 */
-  saveLLMConfig(tier: ModelTier, config: LLMConfig): void {
+  async saveLLMConfig(tier: ModelTier, config: LLMConfig): Promise<void> {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO llm_config
@@ -177,18 +198,32 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 保存所有 tier 的 LLM 配置 */
-  saveLLMConfigs(configs: ModelRouterConfig): void {
+  async saveLLMConfigs(configs: ModelRouterConfig): Promise<void> {
     const tiers: ModelTier[] = ['local', 'cheap', 'strong'];
     const tx = this.db.transaction(() => {
       for (const tier of tiers) {
-        this.saveLLMConfig(tier, configs[tier]);
+        const c = configs[tier];
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO llm_config
+             (tier, base_url, api_key, model, max_tokens, temperature, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, unixepoch())`
+          )
+          .run(
+            tier,
+            c.baseURL,
+            c.apiKey,
+            c.model,
+            c.maxTokens ?? null,
+            c.temperature ?? null
+          );
       }
     });
     tx();
   }
 
   /** 加载数据库中保存的 LLM 配置，返回 null 表示无记录 */
-  loadLLMConfigs(): ModelRouterConfig | null {
+  async loadLLMConfigs(): Promise<ModelRouterConfig | null> {
     const rows = this.db
       .prepare('SELECT * FROM llm_config ORDER BY tier')
       .all() as LLMConfigRow[];
@@ -215,7 +250,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 加载单个 tier 的 LLM 配置 */
-  loadLLMConfig(tier: ModelTier): LLMConfig | null {
+  async loadLLMConfig(tier: ModelTier): Promise<LLMConfig | null> {
     const row = this.db
       .prepare('SELECT * FROM llm_config WHERE tier = ?')
       .get(tier) as LLMConfigRow | undefined;
@@ -232,7 +267,7 @@ export class Store implements DatabaseAdapter {
   // ── Webhook 订阅 ──
 
   /** 创建 webhook 订阅 */
-  createWebhook(sub: WebhookSubscription): void {
+  async createWebhook(sub: WebhookSubscription): Promise<void> {
     this.db
       .prepare(
         `INSERT INTO webhook_subscriptions (id, url, events, secret, active, created_at)
@@ -242,7 +277,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取所有 webhook 订阅 */
-  getWebhooks(): WebhookSubscription[] {
+  async getWebhooks(): Promise<WebhookSubscription[]> {
     const rows = this.db
       .prepare('SELECT * FROM webhook_subscriptions ORDER BY created_at DESC')
       .all() as WebhookRow[];
@@ -250,7 +285,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取单个 webhook 订阅 */
-  getWebhook(id: string): WebhookSubscription | null {
+  async getWebhook(id: string): Promise<WebhookSubscription | null> {
     const row = this.db
       .prepare('SELECT * FROM webhook_subscriptions WHERE id = ?')
       .get(id) as WebhookRow | undefined;
@@ -258,8 +293,8 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 更新 webhook 订阅 */
-  updateWebhook(id: string, updates: { url?: string; events?: WebhookEventType[]; active?: boolean }): boolean {
-    const existing = this.getWebhook(id);
+  async updateWebhook(id: string, updates: { url?: string; events?: WebhookEventType[]; active?: boolean }): Promise<boolean> {
+    const existing = await this.getWebhook(id);
     if (!existing) return false;
 
     const url = updates.url ?? existing.url;
@@ -275,7 +310,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 删除 webhook 订阅 */
-  deleteWebhook(id: string): boolean {
+  async deleteWebhook(id: string): Promise<boolean> {
     const result = this.db
       .prepare('DELETE FROM webhook_subscriptions WHERE id = ?')
       .run(id);
@@ -283,7 +318,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取所有活跃的、订阅了指定事件类型的 webhook */
-  getActiveWebhooksForEvent(eventType: WebhookEventType): WebhookSubscription[] {
+  async getActiveWebhooksForEvent(eventType: WebhookEventType): Promise<WebhookSubscription[]> {
     const rows = this.db
       .prepare('SELECT * FROM webhook_subscriptions WHERE active = 1')
       .all() as WebhookRow[];
@@ -295,7 +330,7 @@ export class Store implements DatabaseAdapter {
   // ── 事件持久化（v2.0） ──
 
   /** 保存 Tick 事件到数据库 */
-  saveEvents(events: TickEventSummary[], tick: number): void {
+  async saveEvents(events: TickEventSummary[], tick: number): Promise<void> {
     const stmt = this.db.prepare(
       `INSERT OR IGNORE INTO events (id, tick, title, content, category, importance, tags, source_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
@@ -318,7 +353,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 保存 Tick Agent 响应到数据库 */
-  saveResponses(responses: TickResponseSummary[], tick: number): void {
+  async saveResponses(responses: TickResponseSummary[], tick: number): Promise<void> {
     const stmt = this.db.prepare(
       `INSERT OR IGNORE INTO agent_responses (id, tick, event_id, agent_id, agent_name, opinion, action, sentiment, emotional_state, reasoning)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -345,7 +380,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取某个 Tick 的所有事件 */
-  getEventsByTick(tick: number): TickEventSummary[] {
+  async getEventsByTick(tick: number): Promise<TickEventSummary[]> {
     const rows = this.db
       .prepare('SELECT * FROM events WHERE tick = ? ORDER BY importance DESC')
       .all(tick) as EventRow[];
@@ -353,7 +388,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取某个 Tick 的所有 Agent 响应 */
-  getResponsesByTick(tick: number): TickResponseSummary[] {
+  async getResponsesByTick(tick: number): Promise<TickResponseSummary[]> {
     const rows = this.db
       .prepare('SELECT * FROM agent_responses WHERE tick = ? ORDER BY created_at ASC')
       .all(tick) as ResponseRow[];
@@ -361,7 +396,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取某个事件的所有 Agent 响应 */
-  getResponsesByEvent(eventId: string): TickResponseSummary[] {
+  async getResponsesByEvent(eventId: string): Promise<TickResponseSummary[]> {
     const rows = this.db
       .prepare('SELECT * FROM agent_responses WHERE event_id = ? ORDER BY created_at ASC')
       .all(eventId) as ResponseRow[];
@@ -369,7 +404,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 搜索事件（标题模糊匹配） */
-  searchEvents(query: string, limit = 20): TickEventSummary[] {
+  async searchEvents(query: string, limit = 20): Promise<TickEventSummary[]> {
     const rows = this.db
       .prepare('SELECT * FROM events WHERE title LIKE ? ORDER BY tick DESC, importance DESC LIMIT ?')
       .all(`%${query}%`, limit) as EventRow[];
@@ -379,7 +414,7 @@ export class Store implements DatabaseAdapter {
   // ── RSS 数据源持久化（v2.0） ──
 
   /** 保存 RSS 数据源配置 */
-  saveRssSource(source: FeedSource): void {
+  async saveRssSource(source: FeedSource): Promise<void> {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO rss_sources (id, name, url, category, tags, poll_interval_ms, enabled, updated_at)
@@ -397,17 +432,30 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 批量保存 RSS 数据源配置 */
-  saveRssSources(sources: FeedSource[]): void {
+  async saveRssSources(sources: FeedSource[]): Promise<void> {
     const tx = this.db.transaction(() => {
       for (const source of sources) {
-        this.saveRssSource(source);
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO rss_sources (id, name, url, category, tags, poll_interval_ms, enabled, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())`
+          )
+          .run(
+            source.id,
+            source.name,
+            source.url,
+            source.category,
+            JSON.stringify(source.tags ?? []),
+            source.pollIntervalMs ?? 300_000,
+            (source.enabled ?? true) ? 1 : 0,
+          );
       }
     });
     tx();
   }
 
   /** 加载所有 RSS 数据源配置 */
-  loadRssSources(): FeedSource[] {
+  async loadRssSources(): Promise<FeedSource[]> {
     const rows = this.db
       .prepare('SELECT * FROM rss_sources ORDER BY created_at ASC')
       .all() as RssSourceRow[];
@@ -415,7 +463,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取单个 RSS 数据源配置 */
-  getRssSource(id: string): FeedSource | null {
+  async getRssSource(id: string): Promise<FeedSource | null> {
     const row = this.db
       .prepare('SELECT * FROM rss_sources WHERE id = ?')
       .get(id) as RssSourceRow | undefined;
@@ -423,7 +471,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 删除 RSS 数据源配置 */
-  deleteRssSource(id: string): boolean {
+  async deleteRssSource(id: string): Promise<boolean> {
     const result = this.db
       .prepare('DELETE FROM rss_sources WHERE id = ?')
       .run(id);
@@ -433,7 +481,7 @@ export class Store implements DatabaseAdapter {
   // ── API Key 管理（v2.0） ──
 
   /** 创建 API Key 记录 */
-  createApiKey(entry: ApiKeyEntry): void {
+  async createApiKey(entry: ApiKeyEntry): Promise<void> {
     this.db
       .prepare(
         `INSERT INTO api_keys (id, name, key_hash, permissions, rate_limit, created_at, active)
@@ -443,7 +491,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取所有 API Key 记录 */
-  getApiKeys(): ApiKeyRecord[] {
+  async getApiKeys(): Promise<ApiKeyRecord[]> {
     const rows = this.db
       .prepare('SELECT * FROM api_keys ORDER BY created_at DESC')
       .all() as ApiKeyRow[];
@@ -451,7 +499,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 通过 key_hash 查找 API Key */
-  getApiKeyByHash(keyHash: string): ApiKeyRecord | null {
+  async getApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null> {
     const row = this.db
       .prepare('SELECT * FROM api_keys WHERE key_hash = ? AND active = 1')
       .get(keyHash) as ApiKeyRow | undefined;
@@ -459,14 +507,14 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 更新 API Key 最后使用时间 */
-  touchApiKey(id: string): void {
+  async touchApiKey(id: string): Promise<void> {
     this.db
       .prepare('UPDATE api_keys SET last_used_at = unixepoch() WHERE id = ?')
       .run(id);
   }
 
   /** 删除 API Key */
-  deleteApiKey(id: string): boolean {
+  async deleteApiKey(id: string): Promise<boolean> {
     const result = this.db
       .prepare('DELETE FROM api_keys WHERE id = ?')
       .run(id);
@@ -474,7 +522,7 @@ export class Store implements DatabaseAdapter {
   }
 
   /** 获取所有活跃 API Key 的哈希集合（用于鉴权快速查找） */
-  getActiveApiKeyHashes(): Set<string> {
+  async getActiveApiKeyHashes(): Promise<Set<string>> {
     const rows = this.db
       .prepare('SELECT key_hash FROM api_keys WHERE active = 1')
       .all() as { key_hash: string }[];
@@ -667,3 +715,11 @@ function rowToApiKeyRecord(row: ApiKeyRow): ApiKeyRecord {
     active: row.active === 1,
   };
 }
+
+// ── 向后兼容别名 ──
+
+/** @deprecated 请使用 SqliteAdapter */
+export const Store = SqliteAdapter;
+
+/** 向后兼容类型别名：允许 `store: Store` 类型注解 */
+export type Store = SqliteAdapter;

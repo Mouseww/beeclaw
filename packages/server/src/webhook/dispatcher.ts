@@ -99,7 +99,7 @@ export class WebhookDispatcher {
    * 分发事件到所有匹配的 webhook 订阅者（可等待）
    */
   async dispatchAsync(eventType: WebhookEventType, data: unknown): Promise<DeliveryRecord[]> {
-    const subscriptions = this.store.getActiveWebhooksForEvent(eventType);
+    const subscriptions = await this.store.getActiveWebhooksForEvent(eventType);
     if (subscriptions.length === 0) return [];
 
     const records: DeliveryRecord[] = [];
