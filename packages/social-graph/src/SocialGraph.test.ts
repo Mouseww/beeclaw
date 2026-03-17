@@ -466,3 +466,135 @@ describe('SocialGraph', () => {
     });
   });
 });
+
+// ── 补充测试：SocialGraph 进阶场景 ──
+
+describe('SocialGraph 进阶测试', () => {
+  describe('removeNode 复杂场景', () => {
+    it('移除有多条入边的节点应清理所有指向它的边', () => {
+      const graph = new SocialGraph();
+      graph.addNode('target');
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addNode('a3');
+      graph.addEdge('a1', 'target', 'follow');
+      graph.addEdge('a2', 'target', 'trust');
+      graph.addEdge('a3', 'target', 'rival');
+
+      graph.removeNode('target');
+      expect(graph.hasNode('target')).toBe(false);
+      // 所有指向 target 的边应被移除
+      expect(graph.getOutEdges('a1')).toHaveLength(0);
+      expect(graph.getOutEdges('a2')).toHaveLength(0);
+      expect(graph.getOutEdges('a3')).toHaveLength(0);
+    });
+
+    it('移除中间节点不应影响其他节点间的边', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addNode('a3');
+      graph.addEdge('a1', 'a2');
+      graph.addEdge('a2', 'a3');
+      graph.addEdge('a1', 'a3');
+
+      graph.removeNode('a2');
+      // a1 -> a3 的边应仍存在
+      expect(graph.getEdge('a1', 'a3')).toBeDefined();
+      expect(graph.getEdgeCount()).toBe(1);
+    });
+  });
+
+  describe('getStats 详细验证', () => {
+    it('avgDegree 计算正确', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1');
+      graph.addNode('a2');
+      graph.addNode('a3');
+      graph.addEdge('a1', 'a2');
+      graph.addEdge('a1', 'a3');
+      graph.addEdge('a2', 'a3');
+
+      const stats = graph.getStats();
+      expect(stats.nodeCount).toBe(3);
+      expect(stats.edgeCount).toBe(3);
+      expect(stats.avgDegree).toBe(1); // 3/3
+    });
+
+    it('社区列表应去重', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1', 10, 'alpha');
+      graph.addNode('a2', 10, 'alpha');
+      graph.addNode('a3', 10, 'beta');
+
+      const stats = graph.getStats();
+      expect(stats.communities).toHaveLength(2);
+      expect(stats.communities).toContain('alpha');
+      expect(stats.communities).toContain('beta');
+    });
+  });
+
+  describe('toData 详细验证', () => {
+    it('导出的数据应包含完整的边属性', () => {
+      const graph = new SocialGraph();
+      graph.addNode('a1', 50, 'c1', 'leader');
+      graph.addNode('a2', 30, 'c1', 'follower');
+      graph.addEdge('a1', 'a2', 'trust', 0.9, 42);
+
+      const data = graph.toData();
+      expect(data.nodes[0]!.influence).toBe(50);
+      expect(data.nodes[0]!.community).toBe('c1');
+      expect(data.nodes[0]!.role).toBe('leader');
+      expect(data.edges[0]!.type).toBe('trust');
+      expect(data.edges[0]!.strength).toBe(0.9);
+      expect(data.edges[0]!.formedAtTick).toBe(42);
+    });
+  });
+
+  describe('addEdge 无节点场景', () => {
+    it('addEdge 后 getEdgeCount 应正确计数', () => {
+      const graph = new SocialGraph();
+      // 不注册节点，直接添加边
+      graph.addEdge('x1', 'x2', 'follow', 0.5);
+      graph.addEdge('x2', 'x3', 'trust', 0.8);
+      expect(graph.getEdgeCount()).toBe(2);
+    });
+  });
+
+  describe('initializeRandomRelations 边强度检验', () => {
+    it('随机初始化的边强度应在 0.2～0.8 范围内', () => {
+      const graph = new SocialGraph();
+      const ids = ['a1', 'a2', 'a3', 'a4', 'a5'];
+      for (const id of ids) graph.addNode(id);
+      graph.initializeRandomRelations(ids, 3, 10);
+
+      const edges = graph.getAllEdges();
+      expect(edges.length).toBeGreaterThan(0);
+      for (const edge of edges) {
+        expect(edge.strength).toBeGreaterThanOrEqual(0.2);
+        expect(edge.strength).toBeLessThanOrEqual(0.8);
+        expect(edge.formedAtTick).toBe(10);
+        expect(edge.type).toBe('follow');
+      }
+    });
+  });
+
+  describe('getNeighbors 复杂场景', () => {
+    it('有多种类型边的邻居应全部返回', () => {
+      const graph = new SocialGraph();
+      graph.addNode('center');
+      graph.addNode('n1');
+      graph.addNode('n2');
+      graph.addNode('n3');
+      graph.addEdge('center', 'n1', 'follow');
+      graph.addEdge('center', 'n2', 'rival');
+      graph.addEdge('n3', 'center', 'trust');
+
+      const neighbors = graph.getNeighbors('center');
+      expect(neighbors).toContain('n1');
+      expect(neighbors).toContain('n2');
+      expect(neighbors).toContain('n3');
+      expect(neighbors).toHaveLength(3);
+    });
+  });
+});

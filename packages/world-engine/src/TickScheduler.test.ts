@@ -200,5 +200,110 @@ describe('TickScheduler', () => {
       const t1 = scheduler.getWorldTimestamp().getTime();
       expect(t1 - t0).toBe(60000);
     });
+
+    it('多次推进时间戳应线性增长', async () => {
+      const scheduler = new TickScheduler({ tickIntervalMs: 1000 });
+      const t0 = scheduler.getWorldTimestamp().getTime();
+      await scheduler.advance();
+      await scheduler.advance();
+      await scheduler.advance();
+      const t3 = scheduler.getWorldTimestamp().getTime();
+      expect(t3 - t0).toBe(3000);
+    });
+
+    it('setTick 后时间戳应对应', () => {
+      const scheduler = new TickScheduler({ tickIntervalMs: 5000 });
+      scheduler.setTick(10);
+      const t0 = scheduler.getWorldTimestamp().getTime();
+      scheduler.setTick(20);
+      const t1 = scheduler.getWorldTimestamp().getTime();
+      expect(t1 - t0).toBe(50000); // 10 * 5000
+    });
+  });
+
+  // ── 补充测试：边界场景 ──
+
+  describe('边界场景', () => {
+    it('stop 未 start 时不应抛出', () => {
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      expect(() => scheduler.stop()).not.toThrow();
+    });
+
+    it('快速连续 start/stop 不应引发问题', () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 50 });
+      for (let i = 0; i < 10; i++) {
+        scheduler.start();
+        scheduler.stop();
+      }
+      expect(scheduler.isRunning()).toBe(false);
+      expect(scheduler.getCurrentTick()).toBe(0);
+      vi.useRealTimers();
+    });
+
+    it('start 后 stop 再 start 应继续推进', async () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      const callback = vi.fn().mockResolvedValue(undefined);
+      scheduler.onTick(callback);
+
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(1);
+
+      scheduler.stop();
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(callback).toHaveBeenCalledWith(2);
+
+      scheduler.stop();
+      vi.useRealTimers();
+    });
+
+    it('advance 无论 running 状态都应工作', async () => {
+      const scheduler = new TickScheduler({ tickIntervalMs: 1000 });
+      // 未 start，直接 advance
+      expect(scheduler.isRunning()).toBe(false);
+      const tick = await scheduler.advance();
+      expect(tick).toBe(1);
+    });
+
+    it('setTick 为 0 应重置到初始状态', async () => {
+      const scheduler = new TickScheduler({ tickIntervalMs: 1000 });
+      await scheduler.advance();
+      await scheduler.advance();
+      expect(scheduler.getCurrentTick()).toBe(2);
+      scheduler.setTick(0);
+      expect(scheduler.getCurrentTick()).toBe(0);
+    });
+
+    it('不同 tickIntervalMs 不应影响 advance 的行为', async () => {
+      const fast = new TickScheduler({ tickIntervalMs: 1 });
+      const slow = new TickScheduler({ tickIntervalMs: 999999 });
+
+      // advance 是手动推进，不受间隔影响
+      expect(await fast.advance()).toBe(1);
+      expect(await slow.advance()).toBe(1);
+    });
+
+    it('回调中调用 stop 应阻止后续 tick', async () => {
+      vi.useFakeTimers();
+      const scheduler = new TickScheduler({ tickIntervalMs: 100 });
+      const callback = vi.fn().mockImplementation(async (tick: number) => {
+        if (tick === 2) {
+          scheduler.stop();
+        }
+      });
+      scheduler.onTick(callback);
+      scheduler.start();
+
+      await vi.advanceTimersByTimeAsync(100); // tick 1
+      await vi.advanceTimersByTimeAsync(100); // tick 2, stop called
+      await vi.advanceTimersByTimeAsync(300); // 应无更多 tick
+
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(scheduler.isRunning()).toBe(false);
+      vi.useRealTimers();
+    });
   });
 });
