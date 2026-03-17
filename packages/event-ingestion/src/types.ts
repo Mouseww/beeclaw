@@ -234,3 +234,100 @@ export interface MarketSentimentResult {
   /** 描述文本 */
   description: string;
 }
+
+// ============================================================================
+// Phase 2.2 — DataSourceAdapter 插件架构类型
+// ============================================================================
+
+/** 数据源适配器类型标识 */
+export type DataSourceType = 'rss' | 'finance' | 'twitter' | 'reddit' | 'newsapi' | 'custom';
+
+/** 数据源健康监控指标 */
+export interface SourceHealthMetrics {
+  /** 数据源 ID */
+  sourceId: string;
+  /** 是否可连通 */
+  connected: boolean;
+  /** 连续错误次数 */
+  consecutiveErrors: number;
+  /** 总错误次数 */
+  totalErrors: number;
+  /** 总成功次数 */
+  totalSuccesses: number;
+  /** 错误率 (0-1) */
+  errorRate: number;
+  /** 最近一次轮询的延迟（毫秒） */
+  lastLatencyMs: number;
+  /** 平均延迟（毫秒） */
+  averageLatencyMs: number;
+  /** 最后一次成功时间 */
+  lastSuccessTime: Date | null;
+  /** 最后一次错误时间 */
+  lastErrorTime: Date | null;
+  /** 最后一条错误信息 */
+  lastErrorMessage: string | null;
+  /** 累计注入事件数 */
+  eventsEmitted: number;
+  /** 运行时长（毫秒） */
+  uptimeMs: number;
+}
+
+/** 数据源适配器产出的标准化事件 */
+export interface IngestedEvent {
+  /** 事件标题 */
+  title: string;
+  /** 事件内容 */
+  content: string;
+  /** 事件分类 */
+  category: import('@beeclaw/shared').EventCategory;
+  /** 来源标识 */
+  source: string;
+  /** 重要性 0-1 */
+  importance: number;
+  /** 传播半径 0-1 */
+  propagationRadius: number;
+  /** 标签 */
+  tags: string[];
+  /** 原始去重 ID（用于跨数据源去重） */
+  deduplicationId?: string;
+}
+
+/**
+ * DataSourceAdapter — 统一数据源适配器接口
+ *
+ * 所有数据源（RSS、Finance、Twitter、Reddit 等）都实现此接口，
+ * 由 EventIngestion 统一管理生命周期和轮询调度。
+ */
+export interface DataSourceAdapter {
+  /** 适配器唯一标识 */
+  readonly id: string;
+  /** 适配器显示名称 */
+  readonly name: string;
+  /** 数据源类型 */
+  readonly type: DataSourceType;
+
+  /**
+   * 启动适配器（初始化连接、定时器等）
+   */
+  start(): void;
+
+  /**
+   * 停止适配器（清理定时器、关闭连接）
+   */
+  stop(): void;
+
+  /**
+   * 手动执行一次轮询，返回产出的事件列表
+   */
+  poll(): Promise<IngestedEvent[]>;
+
+  /**
+   * 获取当前健康监控指标
+   */
+  getHealthMetrics(): SourceHealthMetrics;
+
+  /**
+   * 更新当前世界 tick
+   */
+  setCurrentTick(tick: number): void;
+}
