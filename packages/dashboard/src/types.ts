@@ -18,6 +18,15 @@ export interface ServerStatus {
       neutral: number;
       tick: number;
     }[];
+    targetBreakdown?: {
+      name: string;
+      category: 'stock' | 'sector' | 'commodity' | 'crypto' | 'index' | 'macro' | 'other';
+      bullish: number;
+      bearish: number;
+      neutral: number;
+      avgStance: number;
+      avgConfidence: number;
+    }[];
   };
   activeEvents: number;
   lastTick: TickResult | null;
@@ -104,6 +113,15 @@ export interface ConsensusSignal {
     description: string;
     confidence: number;
     triggeredBy: string[];
+  }[];
+  targetSentiments?: {
+    name: string;
+    category: 'stock' | 'sector' | 'commodity' | 'crypto' | 'index' | 'macro' | 'other';
+    bullish: number;
+    bearish: number;
+    neutral: number;
+    avgStance: number;
+    avgConfidence: number;
   }[];
 }
 

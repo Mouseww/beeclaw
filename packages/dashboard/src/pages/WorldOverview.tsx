@@ -138,6 +138,57 @@ export function WorldOverview() {
         </Card>
       </div>
 
+      {/* 标的情绪分布 */}
+      {status?.sentiment?.targetBreakdown && status.sentiment.targetBreakdown.length > 0 && (
+        <Card title="标的情绪分布">
+          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>Agent 对具体投资标的的多空分布</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {status.sentiment.targetBreakdown.slice(0, 12).map((target) => {
+              const total = target.bullish + target.bearish + target.neutral;
+              const categoryIcons: Record<string, string> = {
+                stock: '📈', sector: '🏭', commodity: '🛢️', crypto: '₿',
+                index: '📊', macro: '🌐', other: '📋',
+              };
+              const icon = categoryIcons[target.category] ?? '📋';
+              const stanceColor = target.avgStance > 0.15
+                ? 'text-green-400'
+                : target.avgStance < -0.15
+                  ? 'text-red-400'
+                  : 'var(--text-tertiary)';
+
+              return (
+                <div
+                  key={target.name}
+                  className="rounded-lg p-3"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span>{icon}</span>
+                      <span className="font-medium text-sm" style={{ color: 'var(--text-heading)' }}>{target.name}</span>
+                    </div>
+                    <span className={`text-xs font-mono ${stanceColor}`}>
+                      {target.avgStance > 0 ? '+' : ''}{target.avgStance.toFixed(2)}
+                    </span>
+                  </div>
+                  <SentimentBar
+                    bullish={target.bullish}
+                    bearish={target.bearish}
+                    neutral={target.neutral}
+                    showLabels={false}
+                    height="h-2"
+                  />
+                  <div className="flex justify-between mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    <span>{total} 人关注</span>
+                    <span>置信 {(target.avgConfidence * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Tick 历史 */}
       <Card title="Tick 历史记录">
         {historyData?.history && historyData.history.length > 0 ? (

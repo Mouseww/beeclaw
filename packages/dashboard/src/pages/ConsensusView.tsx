@@ -155,6 +155,34 @@ function SignalCard({ signal }: { signal: ConsensusSignal }) {
           </div>
         </div>
       )}
+
+      {/* 标的情绪 */}
+      {signal.targetSentiments && signal.targetSentiments.length > 0 && (
+        <div className="border-t border-gray-800 pt-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">受影响标的</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {signal.targetSentiments.map((target) => {
+              const total = target.bullish + target.bearish + target.neutral;
+              const bPct = total > 0 ? Math.round((target.bullish / total) * 100) : 0;
+              const sPct = total > 0 ? Math.round((target.bearish / total) * 100) : 0;
+              const categoryIcons: Record<string, string> = {
+                stock: '📈', sector: '🏭', commodity: '🛢️', crypto: '₿',
+                index: '📊', macro: '🌐', other: '📋',
+              };
+              return (
+                <div key={target.name} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/40">
+                  <span>{categoryIcons[target.category] ?? '📋'}</span>
+                  <span className="text-sm text-gray-200 flex-1">{target.name}</span>
+                  <span className="text-xs font-mono text-green-400">{bPct}%</span>
+                  <span className="text-xs text-gray-600">/</span>
+                  <span className="text-xs font-mono text-red-400">{sPct}%</span>
+                  <span className="text-xs text-gray-500">({total}人)</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

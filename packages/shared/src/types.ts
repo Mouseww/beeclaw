@@ -174,11 +174,20 @@ export interface SocialEdge {
 
 // ── Agent LLM 响应 ──
 
+export interface SentimentTarget {
+  name: string;              // 标的名称，如 "NVDA"、"半导体板块"、"美债"
+  category: 'stock' | 'sector' | 'commodity' | 'crypto' | 'index' | 'macro' | 'other';
+  stance: number;            // -1(极度看空) ~ +1(极度看多)
+  confidence: number;        // 0 ~ 1
+  reasoning?: string;        // 为什么对这个标的持此看法
+}
+
 export interface AgentResponse {
   opinion: string;
   action: AgentActionType;
   emotionalState: number;       // -1 ~ +1
   reasoning?: string;
+  targets?: SentimentTarget[];  // 情绪影响的具体标的
   newOpinions?: Record<string, { stance: number; confidence: number }>;
   socialActions?: SocialAction[];
 }
@@ -210,6 +219,16 @@ export interface AlertSignal {
   triggeredBy: string[];
 }
 
+export interface TargetSentiment {
+  name: string;
+  category: 'stock' | 'sector' | 'commodity' | 'crypto' | 'index' | 'macro' | 'other';
+  bullish: number;           // 看多的 agent 数
+  bearish: number;           // 看空的 agent 数
+  neutral: number;           // 中立的 agent 数
+  avgStance: number;         // 加权平均立场
+  avgConfidence: number;     // 平均置信度
+}
+
 export interface ConsensusSignal {
   topic: string;
   tick: number;
@@ -219,6 +238,7 @@ export interface ConsensusSignal {
   trend: TrendDirection;
   topArguments: TopArgument[];
   alerts: AlertSignal[];
+  targetSentiments?: TargetSentiment[];  // 按标的聚合的情绪
 }
 
 // ── Agent 孵化 ──

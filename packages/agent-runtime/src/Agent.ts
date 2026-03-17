@@ -205,6 +205,17 @@ export class Agent {
         ? clamp(raw.emotionalState, -1, 1)
         : 0,
       reasoning: typeof raw.reasoning === 'string' ? raw.reasoning : undefined,
+      targets: Array.isArray(raw.targets) ? raw.targets.filter(t =>
+        typeof t.name === 'string' && t.name.length > 0 &&
+        typeof t.stance === 'number' &&
+        typeof t.confidence === 'number'
+      ).map(t => ({
+        name: t.name,
+        category: ['stock', 'sector', 'commodity', 'crypto', 'index', 'macro', 'other'].includes(t.category) ? t.category : 'other',
+        stance: clamp(t.stance, -1, 1),
+        confidence: clamp(t.confidence, 0, 1),
+        reasoning: typeof t.reasoning === 'string' ? t.reasoning : undefined,
+      })).slice(0, 5) : undefined,
       newOpinions: raw.newOpinions ?? undefined,
       socialActions: raw.socialActions ?? undefined,
     };

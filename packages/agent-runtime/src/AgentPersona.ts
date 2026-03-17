@@ -158,6 +158,15 @@ ${persona.biases.map(b => `- ${b}`).join('\n')}
   "action": "speak|forward|silent|predict",
   "emotionalState": 0.0,
   "reasoning": "你做出这个判断的内在推理（简要）",
+  "targets": [
+    {
+      "name": "标的名称（如 NVDA、半导体板块、美债、比特币）",
+      "category": "stock|sector|commodity|crypto|index|macro|other",
+      "stance": 0.0,
+      "confidence": 0.0,
+      "reasoning": "为什么对这个标的持此看法"
+    }
+  ],
   "newOpinions": {
     "话题名": { "stance": 0.0, "confidence": 0.0 }
   }
@@ -169,6 +178,13 @@ ${persona.biases.map(b => `- ${b}`).join('\n')}
 - action: speak=发表观点, forward=转发给关注者, silent=不说话, predict=做一个预测
 - emotionalState: -1.0(极度消极) ~ +1.0(极度积极)
 - reasoning: 你的推理过程
+- targets: 【重要】这个事件影响到的具体标的列表。每个标的需要指明：
+  - name: 具体标的名称。股票用代码（如 AAPL、TSLA、NVDA），也可以是板块（如 "半导体板块"）、商品（如 "原油"）、指数（如 "纳斯达克"）、宏观（如 "美元指数"）等
+  - category: stock=个股, sector=板块, commodity=商品, crypto=加密货币, index=指数, macro=宏观指标, other=其他
+  - stance: -1(极度看空) ~ +1(极度看多)
+  - confidence: 0~1 你对这个判断的确信程度
+  - reasoning: 简短解释（可选）
+  - 至少列出 1 个标的，最多 5 个。选择你认为受事件影响最大的标的。
 - newOpinions: 对相关话题的立场更新，stance: -1~+1, confidence: 0~1
 
 请始终以你的角色身份思考和回应，保持人格一致性。`;

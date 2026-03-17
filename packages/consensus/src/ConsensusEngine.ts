@@ -7,6 +7,7 @@ import type {
   AlertSignal,
   TrendDirection,
   TopArgument,
+  TargetSentiment,
   WorldEvent,
 } from '@beeclaw/shared';
 import {
@@ -41,6 +42,9 @@ export class ConsensusEngine {
     // 检测预警信号
     const alerts = this.detectAlerts(topic, sentiment, responses);
 
+    // 按标的聚合情绪
+    const targetSentiments = this.aggregateTargetSentiments(responses);
+
     const signal: ConsensusSignal = {
       topic,
       tick,
@@ -50,6 +54,7 @@ export class ConsensusEngine {
       trend,
       topArguments,
       alerts,
+      targetSentiments: targetSentiments.length > 0 ? targetSentiments : undefined,
     };
 
     // 保存到历史
@@ -193,6 +198,67 @@ export class ConsensusEngine {
     }
 
     return alerts;
+  }
+
+  /**
+   * 按标的聚合 Agent 情绪
+   */
+  private aggregateTargetSentiments(responses: AgentResponseRecord[]): TargetSentiment[] {
+    const targetMap = new Map<string, {
+      category: TargetSentiment['category'];
+      stances: { stance: number; confidence: number; credibility: number }[];
+    }>();
+
+    for (const record of responses) {
+      const targets = record.response.targets;
+      if (!targets || targets.length === 0) continue;
+
+      for (const target of targets) {
+        const key = target.name.toUpperCase(); // 统一大写避免重复
+        if (!targetMap.has(key)) {
+          targetMap.set(key, { category: target.category, stances: [] });
+        }
+        targetMap.get(key)!.stances.push({
+          stance: target.stance,
+          confidence: target.confidence,
+          credibility: record.credibility,
+        });
+      }
+    }
+
+    const results: TargetSentiment[] = [];
+    for (const [name, data] of targetMap) {
+      let bullish = 0;
+      let bearish = 0;
+      let neutral = 0;
+      let totalWeightedStance = 0;
+      let totalWeight = 0;
+      let totalConfidence = 0;
+
+      for (const s of data.stances) {
+        const weight = 0.5 + s.credibility * 0.5;
+        totalWeightedStance += s.stance * weight;
+        totalWeight += weight;
+        totalConfidence += s.confidence;
+
+        if (s.stance > 0.15) bullish++;
+        else if (s.stance < -0.15) bearish++;
+        else neutral++;
+      }
+
+      results.push({
+        name,
+        category: data.category,
+        bullish,
+        bearish,
+        neutral,
+        avgStance: totalWeight > 0 ? totalWeightedStance / totalWeight : 0,
+        avgConfidence: data.stances.length > 0 ? totalConfidence / data.stances.length : 0,
+      });
+    }
+
+    // 按参与人数排序
+    return results.sort((a, b) => (b.bullish + b.bearish + b.neutral) - (a.bullish + a.bearish + a.neutral));
   }
 
   /**
