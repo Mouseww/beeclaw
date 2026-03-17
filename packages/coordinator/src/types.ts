@@ -2,7 +2,7 @@
 // Coordinator Types — 分布式协调层类型定义
 // ============================================================================
 
-import type { WorldEvent, AgentResponse, ConsensusSignal } from '@beeclaw/shared';
+import type { WorldEvent, AgentResponse, ConsensusSignal, SocialRole, RelationType } from '@beeclaw/shared';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 
 // ── Worker 标识 ──
@@ -104,4 +104,98 @@ export interface CoordinatorConfig {
 export interface WorkerConfig {
   /** Worker 唯一标识 */
   id: string;
+}
+
+// ── Social Graph 跨节点同步 ──
+
+/** Social Graph 同步消息类型 */
+export type SocialGraphSyncMessage =
+  | SocialGraphNodeAddedMessage
+  | SocialGraphNodeRemovedMessage
+  | SocialGraphEdgeAddedMessage
+  | SocialGraphEdgeRemovedMessage
+  | SocialGraphFullSyncRequestMessage
+  | SocialGraphFullSyncResponseMessage
+  | SocialGraphQueryRequestMessage
+  | SocialGraphQueryResponseMessage;
+
+export interface SocialGraphNodeAddedMessage {
+  type: 'sg_node_added';
+  agentId: string;
+  influence: number;
+  community: string;
+  role: SocialRole;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphNodeRemovedMessage {
+  type: 'sg_node_removed';
+  agentId: string;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphEdgeAddedMessage {
+  type: 'sg_edge_added';
+  from: string;
+  to: string;
+  edgeType: RelationType;
+  strength: number;
+  formedAtTick: number;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphEdgeRemovedMessage {
+  type: 'sg_edge_removed';
+  from: string;
+  to: string;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphFullSyncRequestMessage {
+  type: 'sg_full_sync_request';
+  requesterId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphFullSyncResponseMessage {
+  type: 'sg_full_sync_response';
+  nodes: Array<{ agentId: string; influence: number; community: string; role: SocialRole }>;
+  edges: Array<{ from: string; to: string; edgeType: RelationType; strength: number; formedAtTick: number }>;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphQueryRequestMessage {
+  type: 'sg_query_request';
+  queryId: string;
+  queryType: 'neighbors' | 'followers' | 'following' | 'node' | 'edge';
+  agentId: string;
+  /** 用于 edge 查询的目标 agentId */
+  targetAgentId?: string;
+  requesterId: string;
+  timestamp: number;
+}
+
+export interface SocialGraphQueryResponseMessage {
+  type: 'sg_query_response';
+  queryId: string;
+  result: unknown;
+  sourceNodeId: string;
+  timestamp: number;
+}
+
+/** Social Graph 同步配置 */
+export interface SocialGraphSyncConfig {
+  /** 当前节点 ID */
+  nodeId: string;
+  /** 发布变更的 channel 前缀，默认 'beeclaw:sg' */
+  channelPrefix?: string;
+  /** 是否为主写节点（coordinator 角色），默认 false */
+  isPrimary?: boolean;
+  /** 远程查询超时（毫秒），默认 5000 */
+  queryTimeoutMs?: number;
 }

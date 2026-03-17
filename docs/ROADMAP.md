@@ -49,10 +49,10 @@
 - TickCoordinator / Worker / AgentPartitioner / EventRelay 核心协调逻辑 ✅
 - InProcessTransport 进程内通信实现 ✅
 - RedisTransportLayer 跨进程通信实现（基于 Redis Pub/Sub） ✅
+- SocialGraphSync 跨节点同步方案（primary 写入广播 + replica 只读副本 + 远程查询） ✅
 
 **待完成：**
 - NATSTransport 高性能传输层（可选）
-- Social Graph 跨节点同步方案
 - 生产级部署与监控
 
 **关键步骤：**
