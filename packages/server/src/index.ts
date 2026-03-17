@@ -138,6 +138,17 @@ async function main(): Promise<void> {
       engine.scheduler.setTick(recoveryResult.tick);
       console.log(`[Server] tick 已恢复至 ${recoveryResult.tick}`);
     }
+
+    // 恢复共识信号历史（从 DB 加载最近信号到 ConsensusEngine 内存）
+    try {
+      const savedSignals = await store.getLatestSignals(200);
+      if (savedSignals.length > 0) {
+        engine.getConsensusEngine().restoreSignals(savedSignals);
+        console.log(`[Server] 共识信号已恢复 ${savedSignals.length} 条（${engine.getConsensusEngine().getAllTopics().length} 个话题）`);
+      }
+    } catch (err) {
+      console.warn('[Server] 共识信号恢复失败:', err instanceof Error ? err.message : err);
+    }
   } else {
     // 混合 tier 创建 Agent：60% cheap, 25% local, 15% strong
     const cheapCount = Math.round(INITIAL_AGENTS * 0.6);

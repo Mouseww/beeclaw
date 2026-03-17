@@ -645,3 +645,6 @@ export class EventIngestion {
 // Re-export adapters for convenience
 export { RssAdapter } from './RssAdapter.js';
 export { FinanceAdapter } from './FinanceAdapter.js';
+export { TwitterAdapter } from './TwitterAdapter.js';
+export { RedditAdapter } from './RedditAdapter.js';
+export { NewsApiAdapter } from './NewsApiAdapter.js';

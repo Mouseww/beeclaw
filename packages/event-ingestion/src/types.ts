@@ -236,6 +236,227 @@ export interface MarketSentimentResult {
 }
 
 // ============================================================================
+// Twitter/X 数据源类型定义
+// ============================================================================
+
+/** Twitter/X 适配器配置 */
+export interface TwitterAdapterConfig {
+  /** 数据源唯一标识 */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** Bearer Token（Twitter API v2 认证） */
+  bearerToken: string;
+  /** 搜索查询列表（Twitter search query syntax） */
+  queries: TwitterSearchQuery[];
+  /** 轮询间隔（毫秒），默认 60_000 (1分钟) */
+  pollIntervalMs?: number;
+  /** 是否启用，默认 true */
+  enabled?: boolean;
+  /** 每次查询最多返回条目数，默认 10，最大 100 */
+  maxResultsPerQuery?: number;
+}
+
+/** Twitter 搜索查询 */
+export interface TwitterSearchQuery {
+  /** 查询表达式（Twitter search syntax） */
+  query: string;
+  /** 映射到的事件分类 */
+  category: EventCategory;
+  /** 附加标签 */
+  tags?: string[];
+}
+
+/** Twitter API v2 推文数据 */
+export interface TwitterTweet {
+  /** 推文 ID */
+  id: string;
+  /** 推文文本 */
+  text: string;
+  /** 创建时间（ISO 8601） */
+  created_at?: string;
+  /** 作者 ID */
+  author_id?: string;
+  /** 公开指标 */
+  public_metrics?: {
+    retweet_count: number;
+    reply_count: number;
+    like_count: number;
+    quote_count: number;
+  };
+  /** 来源(客户端) */
+  source?: string;
+}
+
+/** Twitter API v2 搜索响应 */
+export interface TwitterSearchResponse {
+  data?: TwitterTweet[];
+  includes?: {
+    users?: Array<{
+      id: string;
+      name: string;
+      username: string;
+    }>;
+  };
+  meta?: {
+    newest_id?: string;
+    oldest_id?: string;
+    result_count: number;
+    next_token?: string;
+  };
+  errors?: Array<{
+    title: string;
+    detail: string;
+    type: string;
+  }>;
+}
+
+// ============================================================================
+// Reddit 数据源类型定义
+// ============================================================================
+
+/** Reddit 适配器配置 */
+export interface RedditAdapterConfig {
+  /** 数据源唯一标识 */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** Reddit API Client ID */
+  clientId: string;
+  /** Reddit API Client Secret */
+  clientSecret: string;
+  /** Reddit 用户名（可选，用于 user-agent） */
+  username?: string;
+  /** 关注的 Subreddit 列表 */
+  subreddits: RedditSubredditConfig[];
+  /** 轮询间隔（毫秒），默认 120_000 (2分钟) */
+  pollIntervalMs?: number;
+  /** 是否启用，默认 true */
+  enabled?: boolean;
+  /** 每个 subreddit 抓取的帖子数，默认 10，最大 100 */
+  postsPerSubreddit?: number;
+  /** 是否抓取评论，默认 false */
+  fetchComments?: boolean;
+}
+
+/** Reddit Subreddit 配置 */
+export interface RedditSubredditConfig {
+  /** Subreddit 名称（不含 r/ 前缀） */
+  name: string;
+  /** 排序方式 */
+  sort: 'hot' | 'new' | 'top' | 'rising';
+  /** 映射到的事件分类 */
+  category: EventCategory;
+  /** 附加标签 */
+  tags?: string[];
+}
+
+/** Reddit 帖子数据 */
+export interface RedditPost {
+  /** 帖子完整名称（thing ID，如 t3_xxx） */
+  name: string;
+  /** 帖子标题 */
+  title: string;
+  /** 帖子内容（self-text） */
+  selftext: string;
+  /** 作者 */
+  author: string;
+  /** 所属 subreddit */
+  subreddit: string;
+  /** 创建时间（Unix 时间戳） */
+  created_utc: number;
+  /** 分数（upvotes - downvotes） */
+  score: number;
+  /** 评论数 */
+  num_comments: number;
+  /** 链接 URL */
+  url: string;
+  /** 永久链接 */
+  permalink: string;
+  /** 帖子 Flair 文本 */
+  link_flair_text?: string;
+  /** Upvote 比例 (0-1) */
+  upvote_ratio: number;
+}
+
+/** Reddit API Listing 响应 */
+export interface RedditListingResponse {
+  kind: 'Listing';
+  data: {
+    after?: string;
+    before?: string;
+    children: Array<{
+      kind: string;
+      data: RedditPost;
+    }>;
+  };
+}
+
+// ============================================================================
+// NewsAPI 数据源类型定义
+// ============================================================================
+
+/** NewsAPI 适配器配置 */
+export interface NewsApiAdapterConfig {
+  /** 数据源唯一标识 */
+  id: string;
+  /** 数据源名称 */
+  name: string;
+  /** NewsAPI API Key */
+  apiKey: string;
+  /** 搜索查询列表 */
+  queries: NewsApiQuery[];
+  /** 轮询间隔（毫秒），默认 900_000 (15分钟) */
+  pollIntervalMs?: number;
+  /** 是否启用，默认 true */
+  enabled?: boolean;
+  /** 每次查询最多返回条目数，默认 10，最大 100 */
+  pageSize?: number;
+  /** 语言过滤（ISO 639-1 代码），如 'en', 'zh' */
+  language?: string;
+  /** 排序方式 */
+  sortBy?: 'relevancy' | 'popularity' | 'publishedAt';
+}
+
+/** NewsAPI 搜索查询 */
+export interface NewsApiQuery {
+  /** 搜索关键词（支持 AND/OR/NOT 运算符） */
+  q: string;
+  /** 映射到的事件分类 */
+  category: EventCategory;
+  /** 附加标签 */
+  tags?: string[];
+  /** 指定来源（如 'bbc-news,cnn'） */
+  sources?: string;
+  /** 指定域名（如 'bbc.co.uk,cnn.com'） */
+  domains?: string;
+}
+
+/** NewsAPI 文章数据 */
+export interface NewsApiArticle {
+  source: {
+    id: string | null;
+    name: string;
+  };
+  author: string | null;
+  title: string;
+  description: string | null;
+  url: string;
+  urlToImage: string | null;
+  publishedAt: string;
+  content: string | null;
+}
+
+/** NewsAPI 响应 */
+export interface NewsApiResponse {
+  status: 'ok' | 'error';
+  totalResults: number;
+  articles: NewsApiArticle[];
+  code?: string;
+  message?: string;
+}
+
+// ============================================================================
 // Phase 2.2 — DataSourceAdapter 插件架构类型
 // ============================================================================
 

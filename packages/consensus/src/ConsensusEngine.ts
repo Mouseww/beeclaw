@@ -287,4 +287,26 @@ export class ConsensusEngine {
     }
     return latest;
   }
+
+  /**
+   * 从持久化存储恢复历史信号
+   */
+  restoreSignals(signals: ConsensusSignal[]): void {
+    for (const signal of signals) {
+      if (!this.signalHistory.has(signal.topic)) {
+        this.signalHistory.set(signal.topic, []);
+      }
+      this.signalHistory.get(signal.topic)!.push(signal);
+    }
+
+    // 每个 topic 保留最近 50 个，按 tick 排序
+    for (const [topic, history] of this.signalHistory) {
+      if (history.length > 1) {
+        history.sort((a, b) => a.tick - b.tick);
+      }
+      if (history.length > 50) {
+        this.signalHistory.set(topic, history.slice(-50));
+      }
+    }
+  }
 }
