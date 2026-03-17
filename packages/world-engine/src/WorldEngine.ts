@@ -32,6 +32,8 @@ import { NaturalSelection } from './NaturalSelection.js';
 import type { NaturalSelectionConfig } from './NaturalSelection.js';
 import { AgentActivationPool } from './AgentActivationPool.js';
 import type { ActivationPoolConfig } from './AgentActivationPool.js';
+import { TickCoordinator, Worker, InProcessTransport } from '@beeclaw/coordinator';
+import type { AgentExecutor } from '@beeclaw/coordinator';
 
 /**
  * WorldEngine 配置选项
@@ -115,6 +117,11 @@ export class WorldEngine {
   /** 累计 LLM 调用计数（含跨 tick） */
   private totalLLMCalls = 0;
 
+  /** 分布式模式组件 */
+  private coordinator?: TickCoordinator;
+  private workers: Worker[] = [];
+  private transport?: InProcessTransport;
+
   constructor(options: WorldEngineOptions) {
     this.config = options.config;
     this.modelRouter = options.modelRouter ?? new ModelRouter();
@@ -140,10 +147,96 @@ export class WorldEngine {
       tickIntervalMs: options.config.tickIntervalMs,
     });
 
+    // 初始化分布式模式（如果启用）
+    if (options.config.distributed) {
+      this.initializeDistributedMode(options.config.workerCount ?? 2);
+    }
+
     // 注册 tick 回调
     this.scheduler.onTick(async (tick) => {
       await this.processTick(tick);
     });
+  }
+
+  // ── 分布式模式初始化 ──
+
+  /**
+   * 初始化分布式模式
+   */
+  private initializeDistributedMode(workerCount: number): void {
+    this.transport = new InProcessTransport();
+    this.coordinator = new TickCoordinator(this.transport);
+
+    // 创建 AgentExecutor 实现
+    const executor: AgentExecutor = {
+      executeAgent: async (agentId, event, tick) => {
+        const agent = this.agents.get(agentId);
+        if (!agent) return null;
+
+        const response = await agent.react(event, this.modelRouter, tick);
+        const record: AgentResponseRecord = {
+          agentId: agent.id,
+          agentName: agent.name,
+          credibility: agent.credibility,
+          response,
+        };
+
+        const newEvents: WorldEvent[] = [];
+        if (response.action === 'speak' || response.action === 'forward') {
+          newEvents.push({
+            id: `${agent.id}-${tick}-${Date.now()}`,
+            type: 'agent_action',
+            category: event.category,
+            title: `${agent.name}的观点`,
+            content: response.opinion,
+            source: agent.id,
+            importance: Math.min(event.importance * 0.5, agent.influence / 100),
+            propagationRadius: 0.1,
+            tick,
+            tags: event.tags,
+          });
+        }
+
+        return { record, newEvents };
+      },
+      isAgentInterested: (agentId, event) => {
+        const agent = this.agents.get(agentId);
+        return agent ? agent.isInterestedIn(event) : false;
+      },
+      isAgentActive: (agentId) => {
+        const agent = this.agents.get(agentId);
+        return agent ? agent.status === 'active' : false;
+      },
+    };
+
+    // 创建 Worker 实例
+    for (let i = 0; i < workerCount; i++) {
+      const worker = new Worker(
+        { id: `worker-${i}` },
+        this.transport,
+        executor,
+      );
+      this.workers.push(worker);
+      this.coordinator.registerWorker(worker);
+    }
+
+    this.log.info(`分布式模式已启用，Worker 数量: ${workerCount}`);
+  }
+
+  /**
+   * 获取 Coordinator 状态（用于 API 暴露）
+   */
+  getCoordinatorStatus() {
+    if (!this.coordinator) {
+      return null;
+    }
+
+    return {
+      enabled: true,
+      currentTick: this.coordinator.getCurrentTick(),
+      workers: this.coordinator.getAllWorkers(),
+      assignments: this.coordinator.getCurrentAssignments(),
+    };
   }
 
   // ── Agent 管理 ──
@@ -155,6 +248,12 @@ export class WorldEngine {
     this.agents.set(agent.id, agent);
     this.socialGraph.addNode(agent.id, agent.influence);
     this.worldState.setAgentCount(this.agents.size);
+
+    // 如果启用分布式模式，重新分配 Agent
+    if (this.coordinator && !this.running) {
+      const agentIds = Array.from(this.agents.keys());
+      this.coordinator.assignAgents(agentIds);
+    }
   }
 
   /**
@@ -285,118 +384,22 @@ export class WorldEngine {
     let totalFiltered = 0;
     const allResponseRecords: Array<{ event: WorldEvent; records: AgentResponseRecord[] }> = [];
 
-    // 3. 对每个事件进行传播和 Agent 响应
-    for (const event of events) {
-      try {
-        // 3a. 使用 AgentActivationPool 计算激活范围
-        const activeAgentIds: string[] = [];
-        for (const agent of this.agents.values()) {
-          if (agent.status === 'active') {
-            activeAgentIds.push(agent.id);
-          }
-        }
-
-        const activation = this.activationPool.computeActivation(
-          event,
-          this.socialGraph,
-          activeAgentIds,
-        );
-
-        totalFiltered += activation.filteredCount;
-
-        console.log(
-          `[WorldEngine] 事件 "${event.title}" 激活 ${activation.activatedIds.length} 个 Agent` +
-          (activation.filteredCount > 0 ? `（过滤 ${activation.filteredCount}）` : ''),
-        );
-
-        // 3b. 筛选出对事件感兴趣的 Agent
-        const interestedAgents: Agent[] = [];
-        for (const agentId of activation.activatedIds) {
-          const agent = this.agents.get(agentId);
-          if (agent && agent.isInterestedIn(event)) {
-            interestedAgents.push(agent);
-          }
-        }
-
-        totalActivated += interestedAgents.length;
-
-        if (interestedAgents.length === 0) continue;
-
-        // 3c. 使用 BatchInference 批量并发调用 Agent
-        const responseRecords: AgentResponseRecord[] = [];
-
-        const inferenceRequests: InferenceRequest<{ agent: Agent; response: AgentResponse }>[] =
-          interestedAgents.map((agent) => ({
-            id: agent.id,
-            execute: async () => {
-              const response = await agent.react(event, this.modelRouter, tick);
-              return { agent, response };
-            },
-          }));
-
-        const inferenceResults = await this.batchInference.executeBatch(inferenceRequests);
-
-        for (const inferResult of inferenceResults) {
-          if (!inferResult.success || !inferResult.result) {
-            console.error(
-              `[WorldEngine] Agent ${inferResult.id} 推理失败:`,
-              inferResult.error?.message,
-            );
-            continue;
-          }
-
-          const { agent, response } = inferResult.result;
-
-          responseRecords.push({
-            agentId: agent.id,
-            agentName: agent.name,
-            credibility: agent.credibility,
-            response,
-          });
-
-          // 3d. Agent 发言/转发 → 产生内部事件（级联传播）
-          if (response.action === 'speak' || response.action === 'forward') {
-            this.eventBus.emitAgentEvent({
-              agentId: agent.id,
-              agentName: agent.name,
-              title: `${agent.name}(${agent.persona.profession})的观点`,
-              content: response.opinion,
-              category: event.category,
-              importance: Math.min(event.importance * 0.5, agent.influence / 100),
-              propagationRadius: 0.1,
-              tick,
-              tags: event.tags,
-            });
-          }
-
-          // 3e. 处理社交行为（follow/unfollow）
-          if (response.socialActions) {
-            for (const socialAction of response.socialActions) {
-              if (socialAction.type === 'follow') {
-                agent.follow(socialAction.targetAgentId);
-                this.socialGraph.addEdge(agent.id, socialAction.targetAgentId, 'follow', 0.5, tick);
-                const target = this.agents.get(socialAction.targetAgentId);
-                if (target) target.addFollower(agent.id);
-              } else if (socialAction.type === 'unfollow') {
-                agent.unfollow(socialAction.targetAgentId);
-                this.socialGraph.removeEdge(agent.id, socialAction.targetAgentId);
-                const target = this.agents.get(socialAction.targetAgentId);
-                if (target) target.removeFollower(agent.id);
-              }
-            }
-          }
-
-          totalResponses++;
-        }
-
-        allResponseRecords.push({ event, records: responseRecords });
-      } catch (eventError) {
-        console.error(
-          `[WorldEngine] 处理事件 "${event.title}" 时出错，跳过:`,
-          eventError instanceof Error ? eventError.message : eventError,
-        );
+    // 如果启用分布式模式，使用 TickCoordinator 处理
+    if (this.coordinator) {
+      await this.processTickDistributed(tick, events, allResponseRecords);
+      // 从分布式结果中提取统计信息
+      for (const { records } of allResponseRecords) {
+        totalResponses += records.length;
       }
+    } else {
+      // 单进程模式：原有逻辑
+      await this.processTickLocal(tick, events, allResponseRecords, (activated, filtered) => {
+        totalActivated += activated;
+        totalFiltered += filtered;
+        totalResponses += activated;
+      });
     }
+
 
     // 4. 共识引擎分析
     let signalCount = 0;
@@ -539,6 +542,190 @@ export class WorldEngine {
       (tickCacheHits > 0 ? ` 缓存命中:${tickCacheHits}` : '') +
       (totalFiltered > 0 ? ` 过滤:${totalFiltered}` : '')
     );
+  }
+
+  // ── 分布式和本地处理方法 ──
+
+  /**
+   * 分布式模式处理 tick
+   */
+  private async processTickDistributed(
+    tick: number,
+    events: WorldEvent[],
+    allResponseRecords: Array<{ event: WorldEvent; records: AgentResponseRecord[] }>,
+  ): Promise<void> {
+    if (!this.coordinator) return;
+
+    // 注入事件到 coordinator
+    this.coordinator.injectEvents(events);
+
+    // 执行分布式 tick
+    const result = await this.coordinator.executeTick();
+
+    console.log(
+      `[WorldEngine] 分布式 Tick ${tick}: ` +
+      `Worker 数: ${result.workerResults.length}, ` +
+      `激活: ${result.totalAgentsActivated}, ` +
+      `响应: ${result.totalResponses}, ` +
+      `耗时: ${result.durationMs}ms`,
+    );
+
+    // 将 Worker 结果转换为 allResponseRecords 格式
+    const eventRecordsMap = new Map<string, AgentResponseRecord[]>();
+
+    for (const workerResult of result.workerResults) {
+      for (const record of workerResult.responses) {
+        // 找到对应的事件（简化处理，实际可能需要更复杂的匹配）
+        for (const event of events) {
+          if (!eventRecordsMap.has(event.id)) {
+            eventRecordsMap.set(event.id, []);
+          }
+          eventRecordsMap.get(event.id)!.push(record);
+        }
+      }
+    }
+
+    // 转换为 allResponseRecords 格式
+    for (const event of events) {
+      const records = eventRecordsMap.get(event.id) || [];
+      if (records.length > 0) {
+        allResponseRecords.push({ event, records });
+      }
+    }
+
+    // 处理新产生的事件（级联传播）
+    for (const newEvent of result.collectedNewEvents) {
+      this.eventBus.emitAgentEvent({
+        agentId: newEvent.source,
+        agentName: newEvent.source,
+        title: newEvent.title,
+        content: newEvent.content,
+        category: newEvent.category,
+        importance: newEvent.importance,
+        propagationRadius: newEvent.propagationRadius,
+        tick,
+        tags: newEvent.tags,
+      });
+    }
+  }
+
+  /**
+   * 本地模式处理 tick
+   */
+  private async processTickLocal(
+    tick: number,
+    events: WorldEvent[],
+    allResponseRecords: Array<{ event: WorldEvent; records: AgentResponseRecord[] }>,
+    onStats: (activated: number, filtered: number) => void,
+  ): Promise<void> {
+    // 3. 对每个事件进行传播和 Agent 响应
+    for (const event of events) {
+      try {
+        // 3a. 使用 AgentActivationPool 计算激活范围
+        const activeAgentIds: string[] = [];
+        for (const agent of this.agents.values()) {
+          if (agent.status === 'active') {
+            activeAgentIds.push(agent.id);
+          }
+        }
+
+        const activation = this.activationPool.computeActivation(
+          event,
+          this.socialGraph,
+          activeAgentIds,
+        );
+
+        console.log(
+          `[WorldEngine] 事件 "${event.title}" 激活 ${activation.activatedIds.length} 个 Agent` +
+          (activation.filteredCount > 0 ? `（过滤 ${activation.filteredCount}）` : ''),
+        );
+
+        // 3b. 筛选出对事件感兴趣的 Agent
+        const interestedAgents: Agent[] = [];
+        for (const agentId of activation.activatedIds) {
+          const agent = this.agents.get(agentId);
+          if (agent && agent.isInterestedIn(event)) {
+            interestedAgents.push(agent);
+          }
+        }
+
+        onStats(interestedAgents.length, activation.filteredCount);
+
+        if (interestedAgents.length === 0) continue;
+
+        // 3c. 使用 BatchInference 批量并发调用 Agent
+        const responseRecords: AgentResponseRecord[] = [];
+
+        const inferenceRequests: InferenceRequest<{ agent: Agent; response: AgentResponse }>[] =
+          interestedAgents.map((agent) => ({
+            id: agent.id,
+            execute: async () => {
+              const response = await agent.react(event, this.modelRouter, tick);
+              return { agent, response };
+            },
+          }));
+
+        const inferenceResults = await this.batchInference.executeBatch(inferenceRequests);
+
+        for (const inferResult of inferenceResults) {
+          if (!inferResult.success || !inferResult.result) {
+            console.error(
+              `[WorldEngine] Agent ${inferResult.id} 推理失败:`,
+              inferResult.error?.message,
+            );
+            continue;
+          }
+
+          const { agent, response } = inferResult.result;
+
+          responseRecords.push({
+            agentId: agent.id,
+            agentName: agent.name,
+            credibility: agent.credibility,
+            response,
+          });
+
+          // 3d. Agent 发言/转发 → 产生内部事件（级联传播）
+          if (response.action === 'speak' || response.action === 'forward') {
+            this.eventBus.emitAgentEvent({
+              agentId: agent.id,
+              agentName: agent.name,
+              title: `${agent.name}(${agent.persona.profession})的观点`,
+              content: response.opinion,
+              category: event.category,
+              importance: Math.min(event.importance * 0.5, agent.influence / 100),
+              propagationRadius: 0.1,
+              tick,
+              tags: event.tags,
+            });
+          }
+
+          // 3e. 处理社交行为（follow/unfollow）
+          if (response.socialActions) {
+            for (const socialAction of response.socialActions) {
+              if (socialAction.type === 'follow') {
+                agent.follow(socialAction.targetAgentId);
+                this.socialGraph.addEdge(agent.id, socialAction.targetAgentId, 'follow', 0.5, tick);
+                const target = this.agents.get(socialAction.targetAgentId);
+                if (target) target.addFollower(agent.id);
+              } else if (socialAction.type === 'unfollow') {
+                agent.unfollow(socialAction.targetAgentId);
+                this.socialGraph.removeEdge(agent.id, socialAction.targetAgentId);
+                const target = this.agents.get(socialAction.targetAgentId);
+                if (target) target.removeFollower(agent.id);
+              }
+            }
+          }
+        }
+
+        allResponseRecords.push({ event, records: responseRecords });
+      } catch (eventError) {
+        console.error(
+          `[WorldEngine] 处理事件 "${event.title}" 时出错，跳过:`,
+          eventError instanceof Error ? eventError.message : eventError,
+        );
+      }
+    }
   }
 
   // ── 查询方法 ──

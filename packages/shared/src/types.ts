@@ -153,6 +153,10 @@ export interface WorldConfig {
   maxAgents: number;
   eventRetentionTicks: number;
   enableNaturalSelection: boolean;
+  /** 是否启用分布式模式（使用 TickCoordinator） */
+  distributed?: boolean;
+  /** 分布式模式下的 Worker 数量 */
+  workerCount?: number;
 }
 
 // ── Social Graph ──

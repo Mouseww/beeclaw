@@ -26,12 +26,16 @@ function parseArgs(): {
   tickInterval: number;
   maxTicks: number;
   seedEvent?: string;
+  distributed: boolean;
+  workers: number;
 } {
   const args = process.argv.slice(2);
   let agentCount = DEFAULT_AGENT_COUNT;
   let tickInterval = DEFAULT_CONFIG.tickIntervalMs;
   let maxTicks = 0; // 0 = 无限
   let seedEvent: string | undefined;
+  let distributed = false;
+  let workers = 2;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
@@ -52,6 +56,14 @@ function parseArgs(): {
       case '-s':
         seedEvent = args[++i];
         break;
+      case '--distributed':
+      case '-d':
+        distributed = true;
+        break;
+      case '--workers':
+      case '-w':
+        workers = parseInt(args[++i] ?? '', 10) || 2;
+        break;
       case '--help':
       case '-h':
         printHelp();
@@ -60,7 +72,7 @@ function parseArgs(): {
     }
   }
 
-  return { agentCount, tickInterval, maxTicks, seedEvent };
+  return { agentCount, tickInterval, maxTicks, seedEvent, distributed, workers };
 }
 
 function printHelp(): void {
@@ -76,10 +88,13 @@ function printHelp(): void {
   -i, --interval <毫秒>    Tick 间隔时间 (默认: ${DEFAULT_CONFIG.tickIntervalMs}ms)
   -t, --ticks <数量>       最大运行 tick 数 (默认: 0=无限)
   -s, --seed <事件内容>    注入种子事件启动仿真
+  -d, --distributed       启用分布式模式
+  -w, --workers <数量>     Worker 数量 (默认: 2, 仅在分布式模式下有效)
   -h, --help              显示帮助信息
 
 示例:
   node packages/cli/dist/index.js --agents 20 --ticks 5 --seed "央行宣布加息25个基点"
+  node packages/cli/dist/index.js --distributed --workers 4 --agents 100
 `);
 }
 
@@ -119,6 +134,9 @@ async function main(): Promise<void> {
   console.log(`  Agent 数量: ${opts.agentCount}`);
   console.log(`  Tick 间隔:  ${opts.tickInterval}ms`);
   console.log(`  最大 Tick:  ${opts.maxTicks || '无限'}`);
+  if (opts.distributed) {
+    console.log(`  分布式模式: 启用 (${opts.workers} Workers)`);
+  }
   if (opts.seedEvent) {
     console.log(`  种子事件:  ${opts.seedEvent}`);
   }
@@ -132,6 +150,8 @@ async function main(): Promise<void> {
   const config: WorldConfig = {
     ...DEFAULT_CONFIG,
     tickIntervalMs: opts.tickInterval,
+    distributed: opts.distributed,
+    workerCount: opts.workers,
   };
 
   const engine = new WorldEngine({
