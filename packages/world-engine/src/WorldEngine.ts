@@ -261,7 +261,14 @@ export class WorldEngine {
    */
   private async processTick(tick: number): Promise<void> {
     const startTime = Date.now();
-    console.log(`\n[WorldEngine] ════ Tick ${tick} 开始 ════`);
+
+    // 2. 消费事件队列
+    const events = this.eventBus.consumeEvents();
+    const hasEvents = events.length > 0;
+
+    if (hasEvents) {
+      console.log(`\n[WorldEngine] ════ Tick ${tick} 开始 ════`);
+    }
 
     // 记录 tick 开始时的缓存状态
     const cacheStatsBefore = this.responseCache.getStats();
@@ -269,9 +276,9 @@ export class WorldEngine {
     // 1. 推进世界状态
     this.worldState.advanceTick(tick);
 
-    // 2. 消费事件队列
-    const events = this.eventBus.consumeEvents();
-    console.log(`[WorldEngine] 本轮事件数: ${events.length}`);
+    if (hasEvents) {
+      console.log(`[WorldEngine] 本轮事件数: ${events.length}`);
+    }
 
     let totalActivated = 0;
     let totalResponses = 0;

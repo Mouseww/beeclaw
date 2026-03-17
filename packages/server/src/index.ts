@@ -440,90 +440,96 @@ async function main(): Promise<void> {
       const result = await engine.step();
       tickCount++;
 
-      // WebSocket 广播 tick 结果
-      broadcast('tick', result);
+      // 无事件的空 tick：不广播、不推送 webhook，减少噪音
+      const isEmptyTick = result.eventsProcessed === 0 && result.responsesCollected === 0;
 
-      // Webhook: tick.completed
-      webhookDispatcher.dispatch('tick.completed', result);
+      if (!isEmptyTick) {
+        // WebSocket 广播 tick 结果
+        broadcast('tick', result);
 
-      // 广播共识信号
-      const signals = engine.getConsensusEngine().getLatestSignals();
-      if (signals.length > 0) {
-        broadcast('consensus', signals);
+        // Webhook: tick.completed
+        webhookDispatcher.dispatch('tick.completed', result);
 
-        // Webhook: consensus.signal + 趋势相关事件
-        for (const signal of signals) {
-          webhookDispatcher.dispatch('consensus.signal', signal);
-          if (signal.trend === 'forming') {
-            webhookDispatcher.dispatch('trend.detected', signal);
-          } else if (signal.trend === 'reversing' || signal.trend === 'weakening') {
-            webhookDispatcher.dispatch('trend.shift', signal);
+        // 广播共识信号
+        const signals = engine.getConsensusEngine().getLatestSignals();
+        if (signals.length > 0) {
+          broadcast('consensus', signals);
+
+          // Webhook: consensus.signal + 趋势相关事件
+          for (const signal of signals) {
+            webhookDispatcher.dispatch('consensus.signal', signal);
+            if (signal.trend === 'forming') {
+              webhookDispatcher.dispatch('trend.detected', signal);
+            } else if (signal.trend === 'reversing' || signal.trend === 'weakening') {
+              webhookDispatcher.dispatch('trend.shift', signal);
+            }
+            // Phase 2.2: 精确推送 signal 给订阅特定 topic 的 WS 客户端
+            broadcastSignal(signal.topic, signal);
           }
-          // Phase 2.2: 精确推送 signal 给订阅特定 topic 的 WS 客户端
-          broadcastSignal(signal.topic, signal);
         }
-      }
 
-      // Webhook: agent.spawned
-      if (result.newAgentsSpawned > 0) {
-        webhookDispatcher.dispatch('agent.spawned', {
-          tick: result.tick,
-          count: result.newAgentsSpawned,
-        });
-      }
-
-      // 定期保存（使用增量保存：仅脏数据 + Social Graph）
-      if (tickCount % SAVE_INTERVAL === 0) {
-        await store.setTick(result.tick);
-        await store.saveTickResult(result);
-
-        // 增量保存：标记本轮参与的 Agent 为脏
-        if (result.responses && result.responses.length > 0) {
-          stateRecovery.markAgentsDirty(result.responses.map(r => r.agentId));
-        }
-        // 新孵化的 Agent 也需要标记
+        // Webhook: agent.spawned
         if (result.newAgentsSpawned > 0) {
-          stateRecovery.markAgentsDirty(
-            engine.getAgents().slice(-result.newAgentsSpawned).map(a => a.id)
+          webhookDispatcher.dispatch('agent.spawned', {
+            tick: result.tick,
+            count: result.newAgentsSpawned,
+          });
+        }
+
+        // 定期保存（使用增量保存：仅脏数据 + Social Graph）
+        if (tickCount % SAVE_INTERVAL === 0) {
+          await store.setTick(result.tick);
+          await store.saveTickResult(result);
+
+          // 增量保存：标记本轮参与的 Agent 为脏
+          if (result.responses && result.responses.length > 0) {
+            stateRecovery.markAgentsDirty(result.responses.map(r => r.agentId));
+          }
+          // 新孵化的 Agent 也需要标记
+          if (result.newAgentsSpawned > 0) {
+            stateRecovery.markAgentsDirty(
+              engine.getAgents().slice(-result.newAgentsSpawned).map(a => a.id)
+            );
+          }
+
+          const dirtyCount = await stateRecovery.flushDirtyAgents(
+            new Map(engine.getAgents().map(a => [a.id, a]))
+          );
+
+          // 保存 Social Graph 边关系（仅在有变更时）
+          stateRecovery.markGraphDirty(); // tick 循环中社交行为随时可能改变图
+          await stateRecovery.flushGraphIfDirty(engine.socialGraph);
+
+          console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库（增量: ${dirtyCount} 个 Agent）`);
+        }
+
+        // 每个 tick 保存事件和响应（v2.0: 内容持久化）
+        if (result.events && result.events.length > 0) {
+          await store.saveEvents(result.events, result.tick);
+        }
+        if (result.responses && result.responses.length > 0) {
+          await store.saveResponses(result.responses, result.tick);
+        }
+
+        // 每个 tick 保存共识信号（v2.0: 不再等 SAVE_INTERVAL）
+        const signalsToSave = engine.getConsensusEngine().getLatestSignals();
+        for (const signal of signalsToSave) {
+          await store.saveConsensusSignal(signal);
+        }
+
+        // 警告 tick 耗时过长
+        if (result.durationMs > TICK_INTERVAL * 0.8) {
+          console.warn(
+            `[Server] ⚠️ Tick ${result.tick} 耗时 ${result.durationMs}ms，接近间隔 ${TICK_INTERVAL}ms，可能需要调大间隔或减少 Agent`
           );
         }
 
-        const dirtyCount = await stateRecovery.flushDirtyAgents(
-          new Map(engine.getAgents().map(a => [a.id, a]))
-        );
-
-        // 保存 Social Graph 边关系（仅在有变更时）
-        stateRecovery.markGraphDirty(); // tick 循环中社交行为随时可能改变图
-        await stateRecovery.flushGraphIfDirty(engine.socialGraph);
-
-        console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库（增量: ${dirtyCount} 个 Agent）`);
-      }
-
-      // 每个 tick 保存事件和响应（v2.0: 内容持久化）
-      if (result.events && result.events.length > 0) {
-        await store.saveEvents(result.events, result.tick);
-      }
-      if (result.responses && result.responses.length > 0) {
-        await store.saveResponses(result.responses, result.tick);
-      }
-
-      // 每个 tick 保存共识信号（v2.0: 不再等 SAVE_INTERVAL）
-      for (const signal of signals) {
-        await store.saveConsensusSignal(signal);
-      }
-
-      // 警告 tick 耗时过长
-      if (result.durationMs > TICK_INTERVAL * 0.8) {
-        console.warn(
-          `[Server] ⚠️ Tick ${result.tick} 耗时 ${result.durationMs}ms，接近间隔 ${TICK_INTERVAL}ms，可能需要调大间隔或减少 Agent`
+        console.log(
+          `[Server] Tick ${result.tick} — ` +
+          `事件:${result.eventsProcessed} 响应:${result.responsesCollected} ` +
+          `耗时:${result.durationMs}ms WS:${getConnectionCount()}`
         );
       }
-
-      console.log(
-        `[Server] Tick ${result.tick} — ` +
-        `事件:${result.eventsProcessed} 响应:${result.responsesCollected} ` +
-        `耗时:${result.durationMs}ms WS:${getConnectionCount()}`
-      );
     } catch (err) {
       console.error('[Server] Tick 执行错误:', err);
     } finally {
