@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -26,10 +26,10 @@ import type {
 // 使用回调捕获机制，使得 D3 回调函数在 proxy 中能被执行以覆盖内部逻辑
 
 // 存储 D3 回调以便测试中触发
-const d3Callbacks: Record<string, Function[]> = {};
-const simulationCallbacks: Record<string, Function> = {};
+const d3Callbacks: Record<string, ((...args: unknown[]) => unknown)[]> = {};
+const simulationCallbacks: Record<string, (...args: unknown[]) => unknown> = {};
 
-function captureCallback(name: string, fn: Function) {
+function captureCallback(name: string, fn: (...args: unknown[]) => unknown) {
   if (!d3Callbacks[name]) d3Callbacks[name] = [];
   d3Callbacks[name]!.push(fn);
 }
@@ -49,9 +49,9 @@ vi.mock('d3', () => {
       {},
       {
         get: (_t, prop) => {
-          if (prop === 'id') return (fn: Function) => { captureCallback('linkId', fn); return proxy; };
-          if (prop === 'distance') return (fn: Function) => { captureCallback('linkDistance', fn); return proxy; };
-          if (prop === 'strength') return (fn: Function) => { captureCallback('linkStrength', fn); return proxy; };
+          if (prop === 'id') return (fn: (...args: unknown[]) => unknown) => { captureCallback('linkId', fn); return proxy; };
+          if (prop === 'distance') return (fn: (...args: unknown[]) => unknown) => { captureCallback('linkDistance', fn); return proxy; };
+          if (prop === 'strength') return (fn: (...args: unknown[]) => unknown) => { captureCallback('linkStrength', fn); return proxy; };
           return vi.fn().mockReturnValue(proxy);
         },
       },
@@ -64,7 +64,7 @@ vi.mock('d3', () => {
       {},
       {
         get: (_t, prop) => {
-          if (prop === 'strength') return (fn: Function) => { captureCallback('chargeStrength', fn); return proxy; };
+          if (prop === 'strength') return (fn: (...args: unknown[]) => unknown) => { captureCallback('chargeStrength', fn); return proxy; };
           return vi.fn().mockReturnValue(proxy);
         },
       },
@@ -77,7 +77,7 @@ vi.mock('d3', () => {
       {},
       {
         get: (_t, prop) => {
-          if (prop === 'radius') return (fn: Function) => { captureCallback('collideRadius', fn); return proxy; };
+          if (prop === 'radius') return (fn: (...args: unknown[]) => unknown) => { captureCallback('collideRadius', fn); return proxy; };
           return vi.fn().mockReturnValue(proxy);
         },
       },
@@ -92,7 +92,7 @@ vi.mock('d3', () => {
       {
         get: (_t, prop) => {
           if (prop === 'on') {
-            return (eventName: string, fn: Function) => {
+            return (eventName: string, fn: (...args: unknown[]) => unknown) => {
               captureCallback(`node.${eventName}`, fn);
               return proxy;
             };
@@ -100,7 +100,7 @@ vi.mock('d3', () => {
           if (prop === 'attr') {
             return (attrName: string, valOrFn: unknown) => {
               if (typeof valOrFn === 'function') {
-                captureCallback(`node.attr.${attrName}`, valOrFn as Function);
+                captureCallback(`node.attr.${attrName}`, valOrFn as (...args: unknown[]) => unknown);
               }
               return proxy;
             };
@@ -113,7 +113,7 @@ vi.mock('d3', () => {
                   if (p2 === 'attr') {
                     return (attrName: string, valOrFn: unknown) => {
                       if (typeof valOrFn === 'function') {
-                        captureCallback(`node.elem.attr.${attrName}`, valOrFn as Function);
+                        captureCallback(`node.elem.attr.${attrName}`, valOrFn as (...args: unknown[]) => unknown);
                       }
                       return elemProxy;
                     };
@@ -121,7 +121,7 @@ vi.mock('d3', () => {
                   if (p2 === 'text') {
                     return (valOrFn: unknown) => {
                       if (typeof valOrFn === 'function') {
-                        captureCallback('node.elem.text', valOrFn as Function);
+                        captureCallback('node.elem.text', valOrFn as (...args: unknown[]) => unknown);
                       }
                       return elemProxy;
                     };
@@ -133,7 +133,7 @@ vi.mock('d3', () => {
             };
           }
           if (prop === 'filter') {
-            return (fn: Function) => {
+            return (fn: (...args: unknown[]) => unknown) => {
               captureCallback('node.filter', fn);
               return proxy; // 返回同个 proxy，后续 append 依然被捕获
             };
@@ -156,7 +156,7 @@ vi.mock('d3', () => {
           if (prop === 'attr') {
             return (attrName: string, valOrFn: unknown) => {
               if (typeof valOrFn === 'function') {
-                captureCallback(`link.attr.${attrName}`, valOrFn as Function);
+                captureCallback(`link.attr.${attrName}`, valOrFn as (...args: unknown[]) => unknown);
               }
               return proxy;
             };
@@ -226,7 +226,7 @@ vi.mock('d3', () => {
           get: (_t, prop) => {
             if (prop === 'stop') return vi.fn();
             if (prop === 'on') {
-              return (eventName: string, fn: Function) => {
+              return (eventName: string, fn: (...args: unknown[]) => unknown) => {
                 simulationCallbacks[eventName] = fn;
                 return proxy;
               };
@@ -251,7 +251,7 @@ vi.mock('d3', () => {
         {
           get: (_t, prop) => {
             if (prop === 'on') {
-              return (eventName: string, fn: Function) => {
+              return (eventName: string, fn: (...args: unknown[]) => unknown) => {
                 captureCallback(`zoom.${eventName}`, fn);
                 return proxy;
               };
@@ -275,7 +275,7 @@ vi.mock('d3', () => {
         {
           get: (_t, prop) => {
             if (prop === 'on') {
-              return (eventName: string, fn: Function) => {
+              return (eventName: string, fn: (...args: unknown[]) => unknown) => {
                 captureCallback(`drag.${eventName}`, fn);
                 return proxy;
               };

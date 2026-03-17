@@ -655,7 +655,7 @@ describe('TickCoordinator', () => {
 
     it('消息中 workerId 不存在时应安全忽略（worker_ready）', () => {
       const transport = new InProcessTransport();
-      const coordinator = new TickCoordinator(transport);
+      const _coordinator = new TickCoordinator(transport);
 
       // 不注册任何 Worker，直接发消息不应抛错
       expect(() => {
@@ -665,7 +665,7 @@ describe('TickCoordinator', () => {
 
     it('消息中 workerId 不存在时应安全忽略（worker_error）', () => {
       const transport = new InProcessTransport();
-      const coordinator = new TickCoordinator(transport);
+      const _coordinator = new TickCoordinator(transport);
 
       expect(() => {
         transport.sendToLeader({ type: 'worker_error', workerId: 'nonexistent', tick: 1, error: 'err' });
@@ -674,7 +674,7 @@ describe('TickCoordinator', () => {
 
     it('消息中 workerId 不存在时应安全忽略（worker_tick_result）', () => {
       const transport = new InProcessTransport();
-      const coordinator = new TickCoordinator(transport);
+      const _coordinator = new TickCoordinator(transport);
 
       expect(() => {
         transport.sendToLeader({
