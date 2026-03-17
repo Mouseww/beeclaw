@@ -1,5 +1,63 @@
 # Changelog
 
+## [1.0.18] - 2026-03-17
+
+### ✨ Features
+
+- **共识信号持久化恢复** — 重启不再丢失情绪数据，信号自动从 SQLite 恢复
+- **Dashboard 实时图表** — 新增情绪趋势和 Agent 活跃度实时可视化图表
+
+### ⚡ Performance
+
+- **Dashboard 代码分割** — 实现路由级 lazy loading 和 vendor chunk 优化（react/d3/recharts 独立分包）
+
+### 🐛 Bug Fixes
+
+- **Dashboard:** 修复 TimelineReplay.tsx 三个 TS 编译错误
+- **Event Ingestion:** 修复 Twitter/Reddit/NewsAPI 适配器测试中的多查询计数问题
+- **Server:** 修复 9 个 server 测试失败
+
+### 🧪 Tests
+
+- **Dashboard:** 补全页面组件测试文件
+
+## [1.0.17] - 2026-03-17
+
+### ✨ Features
+
+- **情绪系统升级** — Agent 情绪绑定具体标的（subject/target），支持按话题维度的情绪分布
+- **Event Ingestion 增强** — 新增 ContentDeduplicator（内容去重）、FinanceAdapter、RssAdapter
+
+### 🐛 Bug Fixes
+
+- **Event Ingestion:** 修复 13 个失败测试
+- **Consensus:** 修复全局情绪分布为空 + 增加按话题情绪分布
+
+### 🧪 Tests
+
+- **Server:** 新增 Signals API 综合测试
+
+## [1.0.16] - 2026-03-17
+
+### ✨ Features
+
+- **PostgresAdapter** — Phase 2 PostgreSQL 数据库适配器实现
+- **AgentStateRecovery** — Agent 状态恢复服务，多轮增量刷新
+- **Signals API** — 新增 `/api/signals` 端点
+
+### 🐛 Bug Fixes
+
+- **Auth:** 修复 `isValidKey` 异步接口对齐
+- **Persistence:** 修复 social graph 方法移回 SqliteAdapter 类
+
+### 🧪 Tests
+
+- 新增 AgentStateRecovery 多轮增量刷新周期测试
+
+### 🧹 Code Quality
+
+- 清理 store 和 server 测试格式
+
 ## [1.0.15] - 2026-03-17
 
 ### ⚡ Performance
