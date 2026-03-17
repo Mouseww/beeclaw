@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.27] - 2026-03-18
+
+### 🧪 Tests
+
+- **函数覆盖率提升** — coordinator、social-graph、world-engine 包函数级覆盖率优化
+- **Lint 修复** — 解决所有 `Function` → typed signatures 的 lint 错误
+- **SocialGraphView 全面测试** — 新增 1300+ 行、123 项前端组件测试
+- **Coordinator 测试** — TickCoordinator + RedisTransport 测试覆盖
+- 全项目 **2606 tests** 全部通过（105 测试文件），总覆盖率 **95.24%**
+
+---
+
 ## [1.0.26] - 2026-03-18
 
 ### 🧪 Tests
