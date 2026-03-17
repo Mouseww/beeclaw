@@ -172,42 +172,69 @@ export class ContentDeduplicator {
   }
 
   /**
-   * 计算两个标题的相似度（Dice 系数，基于 bigram）
+   * 计算两个标题的相似度（Dice 系数，基于 gram）
+   * 中文字符使用 unigram（单字），非中文字符使用 bigram
    * 返回 0-1，1 表示完全一致
    */
   computeTitleSimilarity(a: string, b: string): number {
     if (a === b) return 1;
     if (a.length < 2 || b.length < 2) return 0;
 
-    const bigramsA = this.getBigrams(a);
-    const bigramsB = this.getBigrams(b);
+    const gramsA = this.getGrams(a);
+    const gramsB = this.getGrams(b);
+
+    if (gramsA.length === 0 || gramsB.length === 0) return 0;
 
     let intersection = 0;
     const countB = new Map<string, number>();
-    for (const bg of bigramsB) {
-      countB.set(bg, (countB.get(bg) ?? 0) + 1);
+    for (const g of gramsB) {
+      countB.set(g, (countB.get(g) ?? 0) + 1);
     }
 
-    for (const bg of bigramsA) {
-      const count = countB.get(bg);
+    for (const g of gramsA) {
+      const count = countB.get(g);
       if (count && count > 0) {
         intersection++;
-        countB.set(bg, count - 1);
+        countB.set(g, count - 1);
       }
     }
 
-    return (2 * intersection) / (bigramsA.length + bigramsB.length);
+    return (2 * intersection) / (gramsA.length + gramsB.length);
   }
 
   /**
-   * 生成 bigram 列表
+   * 生成 gram 列表：中文字符用 unigram，非中文用 bigram
+   * 这样中文单字作为独立语义单元参与相似度计算，避免 bigram 在仅差数字时过度放大差异
    */
-  private getBigrams(str: string): string[] {
-    const bigrams: string[] = [];
-    for (let i = 0; i < str.length - 1; i++) {
-      bigrams.push(str.slice(i, i + 2));
+  private getGrams(str: string): string[] {
+    const grams: string[] = [];
+    const chars = [...str]; // 正确处理 Unicode 字符
+    let i = 0;
+    while (i < chars.length) {
+      if (this.isCJK(chars[i]!)) {
+        // 中文/CJK 字符：使用 unigram
+        grams.push(chars[i]!);
+        i++;
+      } else {
+        // 非 CJK 字符：使用 bigram
+        if (i + 1 < chars.length) {
+          grams.push(chars[i]! + chars[i + 1]!);
+        }
+        i++;
+      }
     }
-    return bigrams;
+    return grams;
+  }
+
+  /** 判断字符是否为 CJK 统一表意文字 */
+  private isCJK(char: string): boolean {
+    const code = char.codePointAt(0)!;
+    return (
+      (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK 统一表意文字
+      (code >= 0x3400 && code <= 0x4DBF) ||   // CJK 统一表意文字扩展 A
+      (code >= 0x20000 && code <= 0x2A6DF) || // CJK 统一表意文字扩展 B
+      (code >= 0xF900 && code <= 0xFAFF)      // CJK 兼容表意文字
+    );
   }
 
   /**

@@ -53,6 +53,9 @@ export class FinanceAdapter implements DataSourceAdapter {
   /** 允许注入自定义 fetch（用于测试） */
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>;
 
+  /** 允许注入自定义延迟函数（用于测试时跳过重试等待） */
+  delayFn: (ms: number) => Promise<void>;
+
   constructor(config: FinanceSourceConfig) {
     this.config = {
       ...config,
@@ -65,6 +68,7 @@ export class FinanceAdapter implements DataSourceAdapter {
     this.name = this.config.name;
     this.sentiment = new MarketSentiment();
     this.fetchFn = globalThis.fetch.bind(globalThis);
+    this.delayFn = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /** 获取配置（深拷贝） */
@@ -245,7 +249,7 @@ export class FinanceAdapter implements DataSourceAdapter {
         lastError = error instanceof Error ? error.message : String(error);
         if (attempt < retries) {
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10_000);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await this.delayFn(delayMs);
         }
       }
     }

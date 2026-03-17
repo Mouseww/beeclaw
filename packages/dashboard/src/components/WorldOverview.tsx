@@ -16,7 +16,7 @@ function SentimentBar({
   value: number;
   color: string;
 }) {
-  const pct = Math.round(value * 100);
+  const pct = Math.round(value);
   return (
     <div className="flex items-center gap-2">
       <span className="w-10 text-xs text-gray-400 text-right">{label}</span>
@@ -78,11 +78,11 @@ export function WorldOverview() {
   const activeAgents = status?.activeAgents ?? 0;
   const activeEvents = status?.activeEvents ?? 0;
   const running = status?.running ?? false;
-  const sentiment = status?.sentiment ?? {};
+  const sentiment = status?.sentiment ?? { bullish: 0, bearish: 0, neutral: 0, topicBreakdown: [] };
 
-  const bullish = sentiment['bullish'] ?? 0;
-  const bearish = sentiment['bearish'] ?? 0;
-  const neutral = sentiment['neutral'] ?? 0;
+  const bullish = sentiment.bullish ?? 0;
+  const bearish = sentiment.bearish ?? 0;
+  const neutral = sentiment.neutral ?? 0;
 
   return (
     <div className="space-y-6">
@@ -139,11 +139,37 @@ export function WorldOverview() {
       {/* 整体情绪 */}
       <div className="card">
         <div className="card-header">整体情绪分布</div>
-        <div className="space-y-3 max-w-md">
-          <SentimentBar label="看多" value={bullish} color="bg-green-500" />
-          <SentimentBar label="中立" value={neutral} color="bg-gray-500" />
-          <SentimentBar label="看空" value={bearish} color="bg-red-500" />
-        </div>
+        {bullish > 0 || bearish > 0 || neutral > 0 ? (
+          <div className="space-y-4">
+            <div className="space-y-3 max-w-md">
+              <SentimentBar label="看多" value={bullish} color="bg-green-500" />
+              <SentimentBar label="中立" value={neutral} color="bg-gray-500" />
+              <SentimentBar label="看空" value={bearish} color="bg-red-500" />
+            </div>
+            {sentiment.topicBreakdown && sentiment.topicBreakdown.length > 0 && (
+              <div className="border-t border-gray-800 pt-3">
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">各话题情绪</p>
+                <div className="space-y-2">
+                  {sentiment.topicBreakdown.slice(0, 6).map((item) => {
+                    const total = item.bullish + item.bearish + item.neutral;
+                    const bPct = total > 0 ? Math.round((item.bullish / total) * 100) : 0;
+                    const sPct = total > 0 ? Math.round((item.bearish / total) * 100) : 0;
+                    return (
+                      <div key={item.topic} className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-300 truncate flex-1">{item.topic}</span>
+                        <span className="text-xs font-mono text-green-400">{bPct}%</span>
+                        <span className="text-xs text-gray-600">/</span>
+                        <span className="text-xs font-mono text-red-400">{sPct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">暂无情绪数据</p>
+        )}
       </div>
 
       {/* 最近 Tick 事件 */}

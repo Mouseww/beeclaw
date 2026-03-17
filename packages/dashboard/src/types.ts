@@ -7,7 +7,18 @@ export interface ServerStatus {
   tick: number;
   agentCount: number;
   activeAgents: number;
-  sentiment: Record<string, number>;
+  sentiment: {
+    bullish: number;
+    bearish: number;
+    neutral: number;
+    topicBreakdown: {
+      topic: string;
+      bullish: number;
+      bearish: number;
+      neutral: number;
+      tick: number;
+    }[];
+  };
   activeEvents: number;
   lastTick: TickResult | null;
   wsConnections: number;

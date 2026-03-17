@@ -61,34 +61,67 @@ export function WorldOverview() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 全局情绪 */}
         <Card title="全局情绪分布">
-          {status?.sentiment ? (
+          {status?.sentiment && (status.sentiment.bullish > 0 || status.sentiment.bearish > 0 || status.sentiment.neutral > 0) ? (
             <div className="space-y-4">
               <SentimentBar
-                bullish={status.sentiment['bullish'] ?? 0}
-                bearish={status.sentiment['bearish'] ?? 0}
-                neutral={status.sentiment['neutral'] ?? 0}
+                bullish={status.sentiment.bullish}
+                bearish={status.sentiment.bearish}
+                neutral={status.sentiment.neutral}
                 height="h-5"
               />
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
                   <p className="text-2xl font-bold text-green-400">
-                    {(status.sentiment['bullish'] ?? 0).toFixed(1)}%
+                    {status.sentiment.bullish}%
                   </p>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>看多</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold" style={{ color: 'var(--text-tertiary)' }}>
-                    {(status.sentiment['neutral'] ?? 0).toFixed(1)}%
+                    {status.sentiment.neutral}%
                   </p>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>中立</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-red-400">
-                    {(status.sentiment['bearish'] ?? 0).toFixed(1)}%
+                    {status.sentiment.bearish}%
                   </p>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>看空</p>
                 </div>
               </div>
+
+              {/* 按话题分布 */}
+              {status.sentiment.topicBreakdown.length > 0 && (
+                <div className="border-t pt-4" style={{ borderColor: 'var(--border-primary)' }}>
+                  <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>各话题情绪</p>
+                  <div className="space-y-3">
+                    {status.sentiment.topicBreakdown.slice(0, 8).map((item) => {
+                      const total = item.bullish + item.bearish + item.neutral;
+                      const bPct = total > 0 ? Math.round((item.bullish / total) * 100) : 0;
+                      const sPct = total > 0 ? Math.round((item.bearish / total) * 100) : 0;
+                      return (
+                        <div key={item.topic}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm truncate mr-2" style={{ color: 'var(--text-secondary)' }}>{item.topic}</span>
+                            <span className="text-xs font-mono flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                              <span className="text-green-400">{bPct}%</span>
+                              {' / '}
+                              <span className="text-red-400">{sPct}%</span>
+                            </span>
+                          </div>
+                          <SentimentBar
+                            bullish={item.bullish}
+                            bearish={item.bearish}
+                            neutral={item.neutral}
+                            showLabels={false}
+                            height="h-2"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>暂无情绪数据</p>

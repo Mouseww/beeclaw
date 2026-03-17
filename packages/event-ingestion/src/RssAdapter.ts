@@ -54,6 +54,9 @@ export class RssAdapter implements DataSourceAdapter {
   /** 允许注入自定义 fetch（用于测试） */
   fetchFn: (url: string, init?: RequestInit) => Promise<Response>;
 
+  /** 允许注入自定义延迟函数（用于测试时跳过重试等待） */
+  delayFn: (ms: number) => Promise<void>;
+
   constructor(config: RssAdapterConfig) {
     this.source = { ...config.source, enabled: config.source.enabled ?? true };
     this.id = this.source.id;
@@ -64,6 +67,7 @@ export class RssAdapter implements DataSourceAdapter {
     );
     this.maxItemsPerPoll = config.maxItemsPerPoll ?? 20;
     this.fetchFn = globalThis.fetch.bind(globalThis);
+    this.delayFn = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /** 获取数据源配置 */
@@ -196,7 +200,7 @@ export class RssAdapter implements DataSourceAdapter {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt < retries) {
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10_000);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await this.delayFn(delayMs);
         }
       }
     }
