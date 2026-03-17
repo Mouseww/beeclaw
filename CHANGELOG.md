@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.24] - 2026-03-17
+
+### 🧪 Tests
+
+- **Coordinator 全面测试** — 新增 EventRelay、RedisTransport、SocialGraphSync 测试套件（+900 行）
+- **AgentMemory 测试扩展** — 新增 425 行 AgentMemory 深度测试（记忆检索/压缩/优先级/上下文窗口）
+- **Social Graph 测试** — 新增 CommunityDetection、Propagation、SocialGraph 测试（+513 行）
+- **TickScheduler 测试** — 新增 105 行调度器测试
+- **Webhook 测试修复** — backoff jitter 边界条件修复（<= 替代 <）
+- 总计新增约 **1950 行测试代码**，全项目 **2249+ tests 全部通过**
+
+---
+
 ## [1.0.23] - 2026-03-17
 
 ### ✨ Features

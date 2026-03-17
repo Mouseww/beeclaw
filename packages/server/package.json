@@ -1,6 +1,6 @@
 {
   "name": "@beeclaw/server",
-  "version": "1.0.22",
+  "version": "1.0.24",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
