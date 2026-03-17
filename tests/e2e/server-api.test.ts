@@ -391,17 +391,17 @@ describe('Server API 集成测试', () => {
       const result = testCtx.engine.getLastTickResult()!;
 
       // 保存到 Store
-      testCtx.store.setTick(result.tick);
-      testCtx.store.saveTickResult(result);
-      testCtx.store.saveAgents(testCtx.engine.getAgents());
+      await testCtx.store.setTick(result.tick);
+      await testCtx.store.saveTickResult(result);
+      await testCtx.store.saveAgents(testCtx.engine.getAgents());
 
       // 验证持久化
-      expect(testCtx.store.getTick()).toBe(result.tick);
-      const savedHistory = testCtx.store.getTickHistory(5);
+      expect(await testCtx.store.getTick()).toBe(result.tick);
+      const savedHistory = await testCtx.store.getTickHistory(5);
       expect(savedHistory.length).toBe(1);
       expect(savedHistory[0]!.tick).toBe(result.tick);
 
-      const savedAgents = testCtx.store.loadAgentRows();
+      const savedAgents = await testCtx.store.loadAgentRows();
       expect(savedAgents.length).toBe(3);
     });
   });
