@@ -18,6 +18,7 @@ COPY packages/consensus/package.json      packages/consensus/
 COPY packages/event-ingestion/package.json packages/event-ingestion/
 COPY packages/server/package.json         packages/server/
 COPY packages/cli/package.json            packages/cli/
+COPY packages/coordinator/package.json    packages/coordinator/
 COPY packages/dashboard/package.json      packages/dashboard/
 
 RUN npm ci --network-timeout 120000
@@ -36,6 +37,7 @@ RUN npm run build --workspace=packages/shared
 RUN npm run build --workspace=packages/event-bus
 RUN npm run build --workspace=packages/social-graph
 RUN npm run build --workspace=packages/consensus
+RUN npm run build --workspace=packages/coordinator
 RUN npm run build --workspace=packages/agent-runtime
 RUN npm run build --workspace=packages/world-engine
 RUN npm run build --workspace=packages/event-ingestion
@@ -69,6 +71,7 @@ COPY packages/consensus/package.json      packages/consensus/
 COPY packages/event-ingestion/package.json packages/event-ingestion/
 COPY packages/server/package.json         packages/server/
 COPY packages/cli/package.json            packages/cli/
+COPY packages/coordinator/package.json    packages/coordinator/
 COPY packages/dashboard/package.json      packages/dashboard/
 
 RUN npm ci --omit=dev --network-timeout 120000 && npm cache clean --force
@@ -83,6 +86,7 @@ COPY --from=builder /app/packages/agent-runtime/dist  packages/agent-runtime/dis
 COPY --from=builder /app/packages/social-graph/dist   packages/social-graph/dist
 COPY --from=builder /app/packages/event-bus/dist      packages/event-bus/dist
 COPY --from=builder /app/packages/consensus/dist      packages/consensus/dist
+COPY --from=builder /app/packages/coordinator/dist     packages/coordinator/dist
 COPY --from=builder /app/packages/event-ingestion/dist packages/event-ingestion/dist
 COPY --from=builder /app/packages/server/dist         packages/server/dist
 COPY --from=builder /app/packages/cli/dist            packages/cli/dist

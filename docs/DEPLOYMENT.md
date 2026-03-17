@@ -156,6 +156,90 @@ docker exec beeclaw-postgres pg_dump -U beeclaw beeclaw > beeclaw-backup.sql
 cat beeclaw-backup.sql | docker exec -i beeclaw-postgres psql -U beeclaw beeclaw
 ```
 
+#### 分布式模式
+
+项目使用 `distributed` profile 支持多节点分布式部署，通过 Redis 进行节点间通信，将 Tick 计算分发到多个 Worker 节点。
+
+1. **配置环境变量**
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，配置分布式相关变量：
+
+```env
+# 分布式配置
+BEECLAW_DISTRIBUTED=true
+BEECLAW_REDIS_URL=redis://redis:6379
+BEECLAW_WORKER_COUNT=2
+
+# LLM 配置
+BEECLAW_LLM_BASE_URL=http://host.docker.internal:11434
+BEECLAW_LLM_API_KEY=no-key
+BEECLAW_LOCAL_MODEL=qwen2.5:7b
+```
+
+2. **启动分布式模式**
+
+```bash
+# 构建并启动（Redis + Coordinator Server + 默认 Worker）
+docker compose --profile distributed up -d --build
+
+# 水平扩展 Worker 到 3 个实例
+docker compose --profile distributed up -d --scale worker=3
+
+# 查看所有节点状态
+docker compose --profile distributed ps
+
+# 查看日志
+docker compose --profile distributed logs -f
+
+# 停止
+docker compose --profile distributed down
+```
+
+> `--profile distributed` 会启动 `redis`、`server-distributed`（协调器节点）和 `worker`（计算节点）。可通过 `--scale worker=N` 按需扩展 Worker 数量。
+
+3. **分布式 + PostgreSQL**
+
+可以同时启用分布式和 PostgreSQL：
+
+```bash
+docker compose --profile distributed --profile postgres up -d --build
+```
+
+4. **验证**
+
+```bash
+# 检查协调器健康状态
+curl http://localhost:3000/health
+
+# 检查 Redis 连接
+docker exec beeclaw-redis redis-cli ping
+
+# 查看 Worker 数量
+docker compose --profile distributed ps worker
+```
+
+5. **架构说明**
+
+```
+┌─────────────────┐     ┌───────────┐     ┌──────────────┐
+│  Coordinator    │────▶│   Redis   │◀────│   Worker 1   │
+│  (server-       │     │  (消息总线) │     │  (Agent 计算) │
+│   distributed)  │     └───────────┘     ├──────────────┤
+│                 │                        │   Worker 2   │
+│  - Tick 调度    │                        ├──────────────┤
+│  - 任务分发     │                        │   Worker N   │
+│  - 结果聚合     │                        │  (--scale)   │
+└─────────────────┘                        └──────────────┘
+```
+
+- **Coordinator**：负责 Tick 调度、任务分发和结果聚合
+- **Worker**：执行具体的 Agent LLM 调用和计算
+- **Redis**：作为消息传输层，协调节点间通信
+
 ### docker-compose.yml 说明
 
 ```yaml
@@ -193,9 +277,40 @@ services:
       - BEECLAW_DB_DRIVER=postgres
       - DATABASE_URL=postgresql://...@postgres:5432/beeclaw
 
+  # Redis (--profile distributed)
+  redis:
+    image: redis:7-alpine
+    profiles: [distributed]
+    volumes:
+      - beeclaw-redis-data:/data
+
+  # Server 分布式版 (--profile distributed)
+  server-distributed:
+    extends: { service: server }
+    profiles: [distributed]
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      - BEECLAW_DISTRIBUTED=true
+      - BEECLAW_REDIS_URL=redis://redis:6379
+      - BEECLAW_NODE_ROLE=coordinator
+
+  # Worker 节点 (--profile distributed, 可 scale)
+  worker:
+    build: .
+    profiles: [distributed]
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      - BEECLAW_DISTRIBUTED=true
+      - BEECLAW_REDIS_URL=redis://redis:6379
+      - BEECLAW_NODE_ROLE=worker
+    command: ["node", "packages/coordinator/dist/worker.js"]
+
 volumes:
   beeclaw-data:       # SQLite 数据
   beeclaw-pgdata:     # PostgreSQL 数据
+  beeclaw-redis-data: # Redis 持久化数据
 ```
 
 ### Dockerfile 多阶段构建
@@ -321,6 +436,17 @@ pm2 startup
 |------|--------|------|
 | `BEECLAW_LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
 | `NODE_ENV` | `development` | `production` 时启用 JSON 格式日志 |
+
+### 分布式配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `BEECLAW_DISTRIBUTED` | `false` | 是否启用分布式模式 |
+| `BEECLAW_REDIS_URL` | `redis://localhost:6379` | Redis 连接字符串（分布式模式必须） |
+| `BEECLAW_REDIS_PORT` | `6379` | Redis 宿主机映射端口（Docker Compose 用） |
+| `BEECLAW_REDIS_MAXMEM` | `256mb` | Redis 最大内存限制 |
+| `BEECLAW_NODE_ROLE` | _(空)_ | 节点角色：`coordinator`（协调器）或 `worker`（工作节点），Docker Compose 自动设置 |
+| `BEECLAW_WORKER_COUNT` | `2` | 期望的 Worker 数量（协调器用于任务分片） |
 
 ---
 
