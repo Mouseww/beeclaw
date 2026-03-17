@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.23] - 2026-03-17
+
+### ✨ Features
+
+- **Prometheus + Grafana 监控栈** — 预配置的 `deploy/monitoring/` 监控部署，含 Prometheus scrape config、Grafana Dashboard（世界状态/LLM 调用/事件处理/内存/WebSocket 面板）
+- **Docker Compose 监控 overlay** — `docker-compose.monitoring.yml` 一键启动完整监控栈
+
+### 🐛 Bug Fixes
+
+- **e2e 测试修复** — 持久化测试中异步 store 方法添加 await
+- **Dockerfile 修复** — 添加 coordinator 包到 Docker 构建，支持分布式模式
+
+### 🧪 Tests
+
+- **Coordinator 路由测试** — 新增 `/api/coordinator` 路由测试，验证 v1.0.22 一致性
+
+---
+
 ## [1.0.22] - 2026-03-17
 
 ### ✨ Features
