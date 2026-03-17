@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.21] - 2026-03-17
+
+### ✨ Features
+
+- **分布式 Tick Coordinator** — 支持多 Worker 进程分布式执行 Tick，Agent 自动分区
+- **Redis TransportLayer** — 基于 Redis Pub/Sub 的跨进程通信层
+- **Worker 管理** — Worker 注册/心跳/故障转移机制
+- **CLI 集成** — `beeclaw start --distributed` 命令支持分布式模式启动
+- **Server API** — 新增 `/api/coordinator` 路由，查看 Worker 状态和分区信息
+
+### 🧪 Tests
+
+- TickCoordinator 测试（494 行）覆盖分区、调度、故障恢复
+- RedisTransportLayer 测试（363 行）覆盖发布/订阅、连接管理
+- WorldEngine 分布式模式集成测试（7 个 case）
+
 ## [1.0.20] - 2026-03-17
 
 ### 🧪 Tests
