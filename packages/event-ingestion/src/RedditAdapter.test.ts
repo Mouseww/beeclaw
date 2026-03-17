@@ -2,13 +2,12 @@
 // RedditAdapter 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { RedditAdapter } from './RedditAdapter.js';
 import type {
   RedditAdapterConfig,
   RedditListingResponse,
   RedditPost,
-  IngestedEvent,
 } from './types.js';
 
 // ── 测试工具 ──
@@ -70,7 +69,7 @@ function createOAuthResponse() {
 // ── fetch mock 工厂 ──
 
 function createMockFetch(posts: RedditPost[]) {
-  return async (url: string, init?: RequestInit): Promise<Response> => {
+  return async (url: string, _init?: RequestInit): Promise<Response> => {
     // OAuth Token 请求
     if (url.includes('access_token')) {
       return {
@@ -386,7 +385,7 @@ describe('RedditAdapter', () => {
       adapter.fetchFn = createMockFetch(posts);
 
       const first = await adapter.poll();
-      const firstCount = first.length;
+      const _firstCount = first.length;
 
       // 第二次使用相同数据 — 应被过滤（lastSeenName 机制）
       const second = await adapter.poll();

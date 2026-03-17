@@ -3,7 +3,7 @@
 // 定义所有数据库操作的通用合约，支持 SQLite / PostgreSQL 等多驱动切换
 // ============================================================================
 
-import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, SocialEdge, SocialNode, TrendDirection } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, SocialEdge, SocialNode } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
 import type { FeedSource } from '@beeclaw/event-ingestion';

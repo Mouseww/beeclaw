@@ -1124,7 +1124,7 @@ describe('Store', () => {
   // ════════════════════════════════════════
 
   describe('高级信号查询', () => {
-    const makeSignal = (tick: number, topic: string): import('@beeclaw/shared').ConsensusSignal => ({
+    const makeSignal = (tick: number, topic: string): import('@beeclaw/shared').ConsensusSignal => ({ // eslint-disable-line @typescript-eslint/consistent-type-imports
       tick,
       topic,
       sentimentDistribution: { bullish: 0.5, bearish: 0.3, neutral: 0.2 },

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FinanceAdapter } from './FinanceAdapter.js';
-import type { FinanceSourceConfig, FinanceSymbol, QuoteData } from './types.js';
+import type { FinanceSourceConfig, FinanceSymbol } from './types.js';
 
 // ── 测试辅助 ──
 

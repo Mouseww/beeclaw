@@ -19,8 +19,6 @@ import { parseFeed } from './FeedParser.js';
 import { ImportanceEvaluator } from './ImportanceEvaluator.js';
 import { FinanceDataSource } from './FinanceDataSource.js';
 import { ContentDeduplicator } from './ContentDeduplicator.js';
-import { RssAdapter } from './RssAdapter.js';
-import { FinanceAdapter } from './FinanceAdapter.js';
 
 /** 默认配置 */
 const DEFAULTS = {

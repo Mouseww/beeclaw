@@ -2,13 +2,12 @@
 // NewsApiAdapter 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { NewsApiAdapter } from './NewsApiAdapter.js';
 import type {
   NewsApiAdapterConfig,
   NewsApiResponse,
   NewsApiArticle,
-  IngestedEvent,
 } from './types.js';
 
 // ── 测试工具 ──

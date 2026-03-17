@@ -67,7 +67,6 @@ export function TimelineReplay() {
     if (sortedTicks.length > 0 && playState === 'stopped') {
       setCurrentIndex(sortedTicks.length - 1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedTicks.length]);
 
   // 播放定时器

@@ -500,7 +500,7 @@ export interface IngestedEvent {
   /** 事件内容 */
   content: string;
   /** 事件分类 */
-  category: import('@beeclaw/shared').EventCategory;
+  category: import('@beeclaw/shared').EventCategory; // eslint-disable-line @typescript-eslint/consistent-type-imports
   /** 来源标识 */
   source: string;
   /** 重要性 0-1 */

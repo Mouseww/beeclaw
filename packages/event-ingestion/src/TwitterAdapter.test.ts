@@ -2,13 +2,11 @@
 // TwitterAdapter 单元测试
 // ============================================================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TwitterAdapter } from './TwitterAdapter.js';
 import type {
   TwitterAdapterConfig,
   TwitterSearchResponse,
-  IngestedEvent,
-  SourceHealthMetrics,
 } from './types.js';
 
 // ── 测试工具 ──
@@ -73,7 +71,7 @@ function mockFetchOk(response: TwitterSearchResponse): (url: string, init?: Requ
   };
 }
 
-function mockFetchError(status: number, statusText: string): (url: string, init?: RequestInit) => Promise<Response> {
+function _mockFetchError(status: number, statusText: string): (url: string, init?: RequestInit) => Promise<Response> {
   return async (_url: string, _init?: RequestInit) => {
     return {
       ok: false,

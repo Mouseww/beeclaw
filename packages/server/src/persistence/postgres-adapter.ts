@@ -3,7 +3,7 @@
 // 实现 DatabaseAdapter 接口，使用 pg.Pool 连接池
 // ============================================================================
 
-import { Pool, type PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, EventCategory, SocialEdge, SocialNode, RelationType, SocialRole } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';

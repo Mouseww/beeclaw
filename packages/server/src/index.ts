@@ -13,7 +13,7 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { WorldEngine } from '@beeclaw/world-engine';
-import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
+import { ModelRouter } from '@beeclaw/agent-runtime';
 import { DEFAULT_TEMPLATE } from '@beeclaw/agent-runtime';
 import type { WorldConfig } from '@beeclaw/shared';
 import type { DatabaseAdapter } from './persistence/adapter.js';
