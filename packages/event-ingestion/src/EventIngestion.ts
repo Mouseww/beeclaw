@@ -411,6 +411,7 @@ export class EventIngestion {
       running: this.running,
       sourceCount: this.sources.size,
       financeSourceCount: this.financeSources.size,
+      adapterCount: this.adapters.size,
       deduplicationCacheSize: this.seenGuids.size + this.deduplicator.size(),
       sources,
       financeSources,

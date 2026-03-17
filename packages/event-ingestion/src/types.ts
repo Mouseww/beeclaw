@@ -211,6 +211,8 @@ export interface IngestionStatus {
   sourceCount: number;
   /** 金融数据源总数 */
   financeSourceCount: number;
+  /** 适配器总数 */
+  adapterCount: number;
   /** 去重缓存大小 */
   deduplicationCacheSize: number;
   /** RSS 数据源状态列表 */
