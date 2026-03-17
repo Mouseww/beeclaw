@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.28] - 2026-03-18
+
+### 🧪 Tests
+
+- **ModelRouter 覆盖增强** — 新增 145 行测试，覆盖 routing 策略边界场景
+- **NaturalSelection 测试扩展** — 新增 230 行，覆盖淘汰/进化全流程
+- **WorldState 测试** — 新增 70 行状态管理测试
+- **CommunityDetection / Propagation** — social-graph 包函数覆盖率优化
+- **TransportLayer 测试** — coordinator 包新增 316 行 Redis 传输层测试
+- **ResponseCache 测试** — agent-runtime 缓存逻辑全覆盖
+- 全项目 **2626 tests** 全部通过（105 测试文件），总覆盖率 **95.31%**
+
+### 📦 Dependencies
+
+- @types/node 25.5.0, typescript-eslint 8.57.1
+
+---
+
 ## [1.0.27] - 2026-03-18
 
 ### 🧪 Tests
