@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.25] - 2026-03-17
+
+### 🐛 Bug Fixes
+
+- **event-ingestion**: 添加 `adapterCount` 到 `getStatus()` 返回值
+- **test**: 更新 IngestionStatus 测试包含 adapterCount 字段
+
+### 🧹 Chores
+
+- 修复测试文件中所有 lint 警告
+
+---
+
 ## [1.0.24] - 2026-03-17
 
 ### 🧪 Tests
