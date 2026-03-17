@@ -12,7 +12,6 @@
 
 import { bench, describe } from 'vitest';
 import { AgentMemory } from '@beeclaw/agent-runtime';
-import type { ChatMessage } from '@beeclaw/agent-runtime';
 import type { MemoryEntry } from '@beeclaw/shared';
 
 // ── Mock LLM Client ─────────────────────────────────────────────────────────
