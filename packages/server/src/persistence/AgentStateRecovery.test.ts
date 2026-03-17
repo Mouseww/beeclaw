@@ -922,4 +922,183 @@ describe('AgentStateRecovery', () => {
       expect(result.skipped).toBe(0);
     });
   });
+
+  // ════════════════════════════════════════
+  // 多轮增量 flush 循环
+  // ════════════════════════════════════════
+
+  describe('多轮增量 flush 循环', () => {
+    it('连续 dirty → flush → dirty → flush 应各自独立计数', async () => {
+      const a1 = createMockAgent('a1');
+      const a2 = createMockAgent('a2');
+      const a3 = createMockAgent('a3');
+      const agents = new Map<string, any>([
+        ['a1', a1],
+        ['a2', a2],
+        ['a3', a3],
+      ]);
+
+      // 第一轮：标记 a1, a2 → flush
+      recovery.markAgentDirty('a1');
+      recovery.markAgentDirty('a2');
+      const count1 = await recovery.flushDirtyAgents(agents);
+      expect(count1).toBe(2);
+      expect(recovery.getDirtyCount()).toBe(0);
+
+      // 第二轮：标记 a3 → flush
+      recovery.markAgentDirty('a3');
+      const count2 = await recovery.flushDirtyAgents(agents);
+      expect(count2).toBe(1);
+      expect(recovery.getDirtyCount()).toBe(0);
+
+      // 第三轮：无脏数据 → flush 应返回 0
+      const count3 = await recovery.flushDirtyAgents(agents);
+      expect(count3).toBe(0);
+
+      // saveDirtyAgents 总共被调用 2 次（第一轮和第二轮）
+      expect(db.saveDirtyAgents).toHaveBeenCalledTimes(2);
+    });
+
+    it('flush 后重新标记同一 Agent 应再次保存', async () => {
+      const a1 = createMockAgent('a1');
+      const agents = new Map<string, any>([['a1', a1]]);
+
+      recovery.markAgentDirty('a1');
+      await recovery.flushDirtyAgents(agents);
+
+      // 重新标记
+      recovery.markAgentDirty('a1');
+      expect(recovery.getDirtyCount()).toBe(1);
+
+      const count = await recovery.flushDirtyAgents(agents);
+      expect(count).toBe(1);
+      expect(db.saveDirtyAgents).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // restoreAgentFromRow — followers/following 为对象类型
+  // ════════════════════════════════════════
+
+  describe('restoreAgentFromRow — followers/following 为对象类型', () => {
+    it('followers/following 为数组对象（非 JSON 字符串）应正常恢复', async () => {
+      const row = createValidRow('a1', {
+        persona: {
+          background: 'test',
+          profession: 'tester',
+          traits: { openness: 0.5 },
+          expertise: [],
+          biases: [],
+          communicationStyle: 'formal',
+        } as any,
+        memory: {
+          shortTerm: [],
+          longTerm: [],
+          opinions: {},
+          predictions: [],
+        } as any,
+        followers: ['f1', 'f2'] as any,
+        following: ['g1'] as any,
+      });
+      (db.loadAgentRows as any).mockResolvedValue([row]);
+      (db.loadSocialNodes as any).mockResolvedValue([]);
+      (db.loadSocialEdges as any).mockResolvedValue([]);
+
+      const result = await recovery.recoverAll();
+      expect(result.agents.recovered).toHaveLength(1);
+      expect(result.agents.corrupted).toHaveLength(0);
+    });
+  });
+
+  // ════════════════════════════════════════
+  // recoverAll — DB 异常传播
+  // ════════════════════════════════════════
+
+  describe('recoverAll — DB 异常传播', () => {
+    it('getTick 抛异常时应传播错误', async () => {
+      (db.getTick as any).mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(recovery.recoverAll()).rejects.toThrow('DB connection lost');
+    });
+
+    it('loadAgentRows 抛异常时应传播错误', async () => {
+      (db.getTick as any).mockResolvedValue(0);
+      (db.loadAgentRows as any).mockRejectedValue(new Error('Query timeout'));
+
+      await expect(recovery.recoverAll()).rejects.toThrow('Query timeout');
+    });
+
+    it('loadSocialNodes 抛异常时应传播错误', async () => {
+      (db.getTick as any).mockResolvedValue(0);
+      (db.loadAgentRows as any).mockResolvedValue([createValidRow('a1')]);
+      (db.loadSocialNodes as any).mockRejectedValue(new Error('Disk full'));
+
+      await expect(recovery.recoverAll()).rejects.toThrow('Disk full');
+    });
+  });
+
+  // ════════════════════════════════════════
+  // 大批量恢复
+  // ════════════════════════════════════════
+
+  describe('大批量恢复', () => {
+    it('应正确恢复 100 个 Agent 和对应的 Social Graph', async () => {
+      const rows: AgentRow[] = [];
+      const nodes: SocialNode[] = [];
+      const edges: SocialEdge[] = [];
+
+      for (let i = 0; i < 100; i++) {
+        rows.push(createValidRow(`a${i}`));
+        nodes.push({ agentId: `a${i}`, influence: i, community: 'default', role: 'follower' } as SocialNode);
+      }
+
+      // 创建部分边（每个 Agent 连接下一个）
+      for (let i = 0; i < 99; i++) {
+        edges.push({
+          from: `a${i}`,
+          to: `a${i + 1}`,
+          type: 'follow',
+          strength: 0.5,
+          formedAtTick: i,
+        } as SocialEdge);
+      }
+
+      (db.loadAgentRows as any).mockResolvedValue(rows);
+      (db.getTick as any).mockResolvedValue(100);
+      (db.loadSocialNodes as any).mockResolvedValue(nodes);
+      (db.loadSocialEdges as any).mockResolvedValue(edges);
+
+      const result = await recovery.recoverAll();
+
+      expect(result.agents.recovered).toHaveLength(100);
+      expect(result.agents.corrupted).toHaveLength(0);
+      expect(result.graph.nodeCount).toBe(100);
+      expect(result.graph.edgeCount).toBe(99);
+      expect(result.graph.skipped).toBe(0);
+      expect(result.tick).toBe(100);
+    });
+
+    it('大批量中混合损坏记录应正确分离', async () => {
+      const rows: AgentRow[] = [];
+      for (let i = 0; i < 50; i++) {
+        if (i % 5 === 0) {
+          // 每 5 个插入一个损坏记录
+          rows.push(createValidRow(`a${i}`, { status: 'invalid_status' }));
+        } else {
+          rows.push(createValidRow(`a${i}`));
+        }
+      }
+
+      (db.loadAgentRows as any).mockResolvedValue(rows);
+      (db.getTick as any).mockResolvedValue(50);
+      (db.loadSocialNodes as any).mockResolvedValue([]);
+      (db.loadSocialEdges as any).mockResolvedValue([]);
+
+      const result = await recovery.recoverAll();
+
+      // 50 条中有 10 条损坏（i=0,5,10,15,20,25,30,35,40,45）
+      expect(result.agents.corrupted).toHaveLength(10);
+      expect(result.agents.recovered).toHaveLength(40);
+    });
+  });
 });
