@@ -15,10 +15,11 @@ import fastifyStatic from '@fastify/static';
 import { WorldEngine } from '@beeclaw/world-engine';
 import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import { DEFAULT_TEMPLATE } from '@beeclaw/agent-runtime';
-import type { WorldConfig, AgentPersona, AgentMemoryState, ModelTier, AgentStatus } from '@beeclaw/shared';
+import type { WorldConfig } from '@beeclaw/shared';
 import type { DatabaseAdapter } from './persistence/adapter.js';
 import { createStore } from './persistence/factory.js';
-import { registerWs, broadcast, getConnectionCount, stopHeartbeat, closeAllConnections } from './ws/handler.js';
+import { AgentStateRecovery } from './persistence/AgentStateRecovery.js';
+import { registerWs, broadcast, broadcastSignal, getConnectionCount, stopHeartbeat, closeAllConnections } from './ws/handler.js';
 import { registerStatusRoute } from './api/status.js';
 import { registerAgentsRoute } from './api/agents.js';
 import { registerEventsRoute } from './api/events.js';
@@ -32,6 +33,7 @@ import { registerPrometheusRoute } from './api/prometheus.js';
 import { registerConfigRoute } from './api/config.js';
 import { registerWebhooksRoute } from './api/webhooks.js';
 import { registerIngestionRoute } from './api/ingestion.js';
+import { registerSignalsRoute } from './api/signals.js';
 import { WebhookDispatcher } from './webhook/dispatcher.js';
 import { EventIngestion } from '@beeclaw/event-ingestion';
 import {
@@ -104,35 +106,38 @@ async function main(): Promise<void> {
     concurrency: 10,
   });
 
-  // 4. 加载或创建 Agents
+  // 初始化 AgentStateRecovery（增量保存 + 校验恢复）
+  const stateRecovery = new AgentStateRecovery(store);
+
+  // 4. 加载或创建 Agents（使用校验恢复器）
   const savedAgents = await store.loadAgentRows();
   if (savedAgents.length > 0) {
-    console.log(`[Server] 从数据库恢复 ${savedAgents.length} 个 Agent`);
-    const agents: Agent[] = [];
-    for (const row of savedAgents) {
-      try {
-        const agent = Agent.fromData({
-          id: row.id,
-          name: row.name,
-          persona: JSON.parse(row.persona) as AgentPersona,
-          memory: JSON.parse(row.memory) as AgentMemoryState,
-          relationships: [],
-          followers: JSON.parse(row.followers) as string[],
-          following: JSON.parse(row.following) as string[],
-          influence: row.influence,
-          status: row.status as AgentStatus,
-          credibility: row.credibility,
-          spawnedAtTick: row.spawned_at_tick,
-          lastActiveTick: row.last_active_tick,
-          modelTier: row.model_tier as ModelTier,
-          modelId: `${row.model_tier}-default`,
-        });
-        agents.push(agent);
-      } catch (err) {
-        console.error(`[Server] Agent "${row.id}" (${row.name}) 数据恢复失败，跳过:`, err);
-      }
+    console.log(`[Server] 从数据库恢复 ${savedAgents.length} 个 Agent（启用完整性校验）`);
+    const recoveryResult = await stateRecovery.recoverAll();
+    const { recovered, corrupted } = recoveryResult.agents;
+
+    if (corrupted.length > 0) {
+      console.warn(`[Server] ⚠️ ${corrupted.length} 个 Agent 数据损坏，已跳过恢复`);
     }
-    engine.addAgents(agents);
+
+    // 逐一添加恢复的 Agent（绕过 initializeRandomRelations，下面恢复图关系）
+    for (const agent of recovered) {
+      engine.addAgent(agent);
+    }
+
+    // 恢复 Social Graph 到 WorldEngine 的 socialGraph 实例
+    const agentIds = new Set(recovered.map(a => a.id));
+    const graphResult = await stateRecovery.applyGraphToEngine(engine.socialGraph, agentIds);
+    console.log(
+      `[Server] Social Graph 已恢复：节点 ${graphResult.nodeCount}，边 ${graphResult.edgeCount}，` +
+      `初始 tick ${recoveryResult.tick}`
+    );
+
+    // 恢复 tick 编号
+    if (recoveryResult.tick > 0) {
+      engine.scheduler.setTick(recoveryResult.tick);
+      console.log(`[Server] tick 已恢复至 ${recoveryResult.tick}`);
+    }
   } else {
     // 混合 tier 创建 Agent：60% cheap, 25% local, 15% strong
     const cheapCount = Math.round(INITIAL_AGENTS * 0.6);
@@ -321,6 +326,7 @@ async function main(): Promise<void> {
         { name: 'config', description: 'LLM 配置' },
         { name: 'webhooks', description: 'Webhook 订阅' },
         { name: 'ingestion', description: '事件接入状态' },
+        { name: 'signals', description: '预测信号' },
         { name: 'monitoring', description: '监控指标' },
       ],
     },
@@ -362,6 +368,7 @@ async function main(): Promise<void> {
   registerConfigRoute(app, ctx);
   registerWebhooksRoute(app, ctx);
   registerIngestionRoute(app, ctx);
+  registerSignalsRoute(app, ctx);
 
   // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
   app.setErrorHandler((error: FastifyError, _req, reply) => {
@@ -441,6 +448,8 @@ async function main(): Promise<void> {
           } else if (signal.trend === 'reversing' || signal.trend === 'weakening') {
             webhookDispatcher.dispatch('trend.shift', signal);
           }
+          // Phase 2.2: 精确推送 signal 给订阅特定 topic 的 WS 客户端
+          broadcastSignal(signal.topic, signal);
         }
       }
 
@@ -452,12 +461,31 @@ async function main(): Promise<void> {
         });
       }
 
-      // 定期保存
+      // 定期保存（使用增量保存：仅脏数据 + Social Graph）
       if (tickCount % SAVE_INTERVAL === 0) {
         await store.setTick(result.tick);
         await store.saveTickResult(result);
-        await store.saveAgents(engine.getAgents());
-        console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库`);
+
+        // 增量保存：标记本轮参与的 Agent 为脏
+        if (result.responses && result.responses.length > 0) {
+          stateRecovery.markAgentsDirty(result.responses.map(r => r.agentId));
+        }
+        // 新孵化的 Agent 也需要标记
+        if (result.newAgentsSpawned > 0) {
+          stateRecovery.markAgentsDirty(
+            engine.getAgents().slice(-result.newAgentsSpawned).map(a => a.id)
+          );
+        }
+
+        const dirtyCount = await stateRecovery.flushDirtyAgents(
+          new Map(engine.getAgents().map(a => [a.id, a]))
+        );
+
+        // 保存 Social Graph 边关系（仅在有变更时）
+        stateRecovery.markGraphDirty(); // tick 循环中社交行为随时可能改变图
+        await stateRecovery.flushGraphIfDirty(engine.socialGraph);
+
+        console.log(`[Server] 💾 Tick ${result.tick} 已保存到数据库（增量: ${dirtyCount} 个 Agent）`);
       }
 
       // 每个 tick 保存事件和响应（v2.0: 内容持久化）
@@ -515,13 +543,16 @@ async function main(): Promise<void> {
     forceExitTimer.unref();
 
     try {
-      // 最终保存
+      // 最终保存（全量快照，确保无数据丢失）
       const tick = engine.getCurrentTick();
       await store.setTick(tick);
-      await store.saveAgents(engine.getAgents());
+      await stateRecovery.forceFlush(
+        new Map(engine.getAgents().map(a => [a.id, a])),
+        engine.socialGraph
+      );
       const lastResult = engine.getLastTickResult();
       if (lastResult) await store.saveTickResult(lastResult);
-      console.log(`[Server] 状态已保存 (Tick ${tick}, ${engine.getAgents().length} agents)`);
+      console.log(`[Server] 状态已保存 (Tick ${tick}, ${engine.getAgents().length} agents, Social Graph 已持久化)`);
 
       // 关闭所有 WebSocket 连接
       stopHeartbeat();

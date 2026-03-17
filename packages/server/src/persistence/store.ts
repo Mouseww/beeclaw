@@ -177,6 +177,48 @@ export class SqliteAdapter implements DatabaseAdapter {
     return rows.map(r => JSON.parse(r.data) as ConsensusSignal);
   }
 
+  // ── 预测信号查询 (Phase 2.2) ──
+
+  /** 获取不同的 topic 列表 */
+  async getDistinctTopics(): Promise<string[]> {
+    const rows = this.db
+      .prepare('SELECT DISTINCT topic FROM consensus_signals ORDER BY topic ASC')
+      .all() as { topic: string }[];
+    return rows.map(r => r.topic);
+  }
+
+  /** 按 topic 获取信号数量 */
+  async getSignalCountByTopic(topic: string): Promise<number> {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as cnt FROM consensus_signals WHERE topic = ?')
+      .get(topic) as { cnt: number };
+    return row.cnt;
+  }
+
+  /** 获取指定 topic 在 tick 范围内的信号 */
+  async getSignalsByTickRange(topic: string, fromTick: number, toTick: number): Promise<ConsensusSignal[]> {
+    const rows = this.db
+      .prepare(
+        'SELECT data FROM consensus_signals WHERE topic = ? AND tick >= ? AND tick <= ? ORDER BY tick ASC'
+      )
+      .all(topic, fromTick, toTick) as { data: string }[];
+    return rows.map(r => JSON.parse(r.data) as ConsensusSignal);
+  }
+
+  /** 获取每个 topic 的最新信号（每 topic 取 id 最大的那条） */
+  async getLatestSignalPerTopic(): Promise<ConsensusSignal[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT data FROM consensus_signals
+         WHERE id IN (
+           SELECT MAX(id) FROM consensus_signals GROUP BY topic
+         )
+         ORDER BY id DESC`
+      )
+      .all() as { data: string }[];
+    return rows.map(r => JSON.parse(r.data) as ConsensusSignal);
+  }
+
   // ── LLM 配置持久化 ──
 
   /** 保存单个 tier 的 LLM 配置 */

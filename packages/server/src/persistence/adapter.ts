@@ -3,7 +3,7 @@
 // 定义所有数据库操作的通用合约，支持 SQLite / PostgreSQL 等多驱动切换
 // ============================================================================
 
-import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, SocialEdge, SocialNode, TrendDirection } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
 import type { FeedSource } from '@beeclaw/event-ingestion';
@@ -69,6 +69,20 @@ export interface DatabaseAdapter {
 
   /** 按 topic 获取共识信号 */
   getSignalsByTopic(topic: string, limit?: number): Promise<ConsensusSignal[]>;
+
+  // ── 预测信号查询 (Phase 2.2) ──
+
+  /** 获取不同的 topic 列表 */
+  getDistinctTopics(): Promise<string[]>;
+
+  /** 按 topic 获取信号数量 */
+  getSignalCountByTopic(topic: string): Promise<number>;
+
+  /** 获取按 tick 范围过滤的信号 */
+  getSignalsByTickRange(topic: string, fromTick: number, toTick: number): Promise<ConsensusSignal[]>;
+
+  /** 获取每个 topic 的最新信号 */
+  getLatestSignalPerTopic(): Promise<ConsensusSignal[]>;
 
   // ── LLM 配置 ──
 
@@ -162,4 +176,23 @@ export interface DatabaseAdapter {
 
   /** 获取所有活跃 API Key 的哈希集合 */
   getActiveApiKeyHashes(): Promise<Set<string>>;
+
+  // ── Social Graph 持久化 ──
+
+  /** 批量保存 Social Graph 边关系（事务性，全量覆盖） */
+  saveSocialEdges(edges: SocialEdge[]): Promise<void>;
+
+  /** 批量保存 Social Graph 节点（事务性，全量覆盖） */
+  saveSocialNodes(nodes: SocialNode[]): Promise<void>;
+
+  /** 加载所有 Social Graph 边关系 */
+  loadSocialEdges(): Promise<SocialEdge[]>;
+
+  /** 加载所有 Social Graph 节点 */
+  loadSocialNodes(): Promise<SocialNode[]>;
+
+  // ── 增量保存支持 ──
+
+  /** 仅保存指定 Agent（增量保存，仅脏数据） */
+  saveDirtyAgents(agents: Agent[]): Promise<void>;
 }

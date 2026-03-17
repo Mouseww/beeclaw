@@ -139,6 +139,28 @@ export function initDatabase(dbPath?: string): Database.Database {
       last_used_at INTEGER,
       active       INTEGER NOT NULL DEFAULT 1
     );
+
+    -- v2.1: Social Graph 持久化
+    CREATE TABLE IF NOT EXISTS social_nodes (
+      agent_id   TEXT PRIMARY KEY,
+      influence  REAL NOT NULL DEFAULT 10,
+      community  TEXT NOT NULL DEFAULT 'default',
+      role       TEXT NOT NULL DEFAULT 'follower',
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS social_edges (
+      from_agent   TEXT NOT NULL,
+      to_agent     TEXT NOT NULL,
+      type         TEXT NOT NULL DEFAULT 'follow',
+      strength     REAL NOT NULL DEFAULT 0.5,
+      formed_at_tick INTEGER NOT NULL DEFAULT 0,
+      updated_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (from_agent, to_agent)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_social_edges_from ON social_edges(from_agent);
+    CREATE INDEX IF NOT EXISTS idx_social_edges_to ON social_edges(to_agent);
   `);
 
   return db;

@@ -693,3 +693,150 @@ export const deleteApiKeySchema = {
     404: ErrorResponseSchema,
   },
 };
+
+// ── /api/signals (Phase 2.2) ──
+
+/** 信号可信度评分 schema */
+const signalCredibilitySchema = {
+  type: 'object' as const,
+  properties: {
+    weightedScore: { type: 'number' as const },
+    agentCount: { type: 'integer' as const },
+    avgCredibility: { type: 'number' as const },
+    highCredibilityCount: { type: 'integer' as const },
+  },
+};
+
+/** 标准化预测信号 schema */
+const predictionSignalSchema = {
+  type: 'object' as const,
+  properties: {
+    id: { type: 'string' as const },
+    topic: { type: 'string' as const },
+    tick: { type: 'integer' as const },
+    timestamp: { type: 'number' as const },
+    sentimentDistribution: {
+      type: 'object' as const,
+      properties: {
+        bullish: { type: 'number' as const },
+        bearish: { type: 'number' as const },
+        neutral: { type: 'number' as const },
+      },
+    },
+    consensus: { type: 'number' as const },
+    intensity: { type: 'number' as const },
+    trend: { type: 'string' as const, enum: ['forming', 'strengthening', 'weakening', 'reversing'] },
+    credibility: signalCredibilitySchema,
+    alerts: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: true } },
+    topArguments: { type: 'array' as const, items: { type: 'object' as const, additionalProperties: true } },
+  },
+};
+
+export const signalsLatestSchema = {
+  tags: ['signals'],
+  summary: '获取最新预测信号',
+  querystring: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'string' as const, description: '返回数量上限（默认 20，最大 50）' },
+      topic: { type: 'string' as const, description: '按 topic 过滤' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        signals: { type: 'array' as const, items: predictionSignalSchema },
+        total: { type: 'integer' as const },
+        topic: { type: ['string', 'null'] as const },
+        timestamp: { type: 'number' as const },
+      },
+    },
+  },
+};
+
+export const signalsTopicSchema = {
+  tags: ['signals'],
+  summary: '按 topic 查询信号历史与趋势分析',
+  params: {
+    type: 'object' as const,
+    properties: {
+      topic: { type: 'string' as const, description: 'Topic 名称' },
+    },
+    required: ['topic'],
+  },
+  querystring: {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'string' as const, description: '返回数量上限（默认 50，最大 100）' },
+      from_tick: { type: 'string' as const, description: '起始 tick（含）' },
+      to_tick: { type: 'string' as const, description: '结束 tick（含）' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        topic: { type: 'string' as const },
+        signals: { type: 'array' as const, items: predictionSignalSchema },
+        total: { type: 'integer' as const },
+        trend: {
+          type: 'object' as const,
+          properties: {
+            direction: { type: 'string' as const, enum: ['forming', 'strengthening', 'weakening', 'reversing'] },
+            momentumDelta: { type: 'number' as const },
+            sentimentMean: { type: 'number' as const },
+            dataPoints: { type: 'integer' as const },
+          },
+        },
+        timestamp: { type: 'number' as const },
+      },
+    },
+  },
+};
+
+export const signalsTrendsSchema = {
+  tags: ['signals'],
+  summary: '获取当前活跃趋势摘要',
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        activeTopics: { type: 'integer' as const },
+        topics: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              topic: { type: 'string' as const },
+              latestSignal: predictionSignalSchema,
+              trend: { type: 'string' as const, enum: ['forming', 'strengthening', 'weakening', 'reversing'] },
+              signalCount: { type: 'integer' as const },
+            },
+          },
+        },
+        globalSentimentMean: { type: 'number' as const },
+        highConfidenceAlerts: { type: 'integer' as const },
+        timestamp: { type: 'number' as const },
+      },
+    },
+  },
+};
+
+export const signalsAccuracySchema = {
+  tags: ['signals'],
+  summary: '获取预测准确性统计',
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        totalSignals: { type: 'integer' as const },
+        evaluatedSignals: { type: 'integer' as const },
+        accuracyRate: { type: 'number' as const },
+        byTopic: { type: 'object' as const, additionalProperties: true },
+        byTrend: { type: 'object' as const, additionalProperties: true },
+        timestamp: { type: 'number' as const },
+      },
+    },
+  },
+};

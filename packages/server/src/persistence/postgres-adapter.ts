@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { Pool, type PoolClient } from 'pg';
-import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, EventCategory } from '@beeclaw/shared';
+import type { ConsensusSignal, LLMConfig, ModelTier, ModelRouterConfig, WebhookSubscription, WebhookEventType, EventCategory, SocialEdge, SocialNode, RelationType, SocialRole } from '@beeclaw/shared';
 import type { Agent } from '@beeclaw/agent-runtime';
 import type { TickResult, TickEventSummary, TickResponseSummary } from '@beeclaw/world-engine';
 import type { FeedSource } from '@beeclaw/event-ingestion';
@@ -163,6 +163,27 @@ export class PostgresAdapter implements DatabaseAdapter {
         last_used_at BIGINT,
         active       BOOLEAN NOT NULL DEFAULT TRUE
       );
+
+      CREATE TABLE IF NOT EXISTS social_nodes (
+        agent_id   TEXT PRIMARY KEY,
+        influence  REAL NOT NULL DEFAULT 10,
+        community  TEXT NOT NULL DEFAULT 'default',
+        role       TEXT NOT NULL DEFAULT 'follower',
+        updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())
+      );
+
+      CREATE TABLE IF NOT EXISTS social_edges (
+        from_agent     TEXT NOT NULL,
+        to_agent       TEXT NOT NULL,
+        type           TEXT NOT NULL DEFAULT 'follow',
+        strength       REAL NOT NULL DEFAULT 0.5,
+        formed_at_tick INTEGER NOT NULL DEFAULT 0,
+        updated_at     BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW()),
+        PRIMARY KEY (from_agent, to_agent)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_social_edges_from ON social_edges(from_agent);
+      CREATE INDEX IF NOT EXISTS idx_social_edges_to ON social_edges(to_agent);
     `);
   }
 
@@ -374,6 +395,46 @@ export class PostgresAdapter implements DatabaseAdapter {
     const res = await this.pool.query(
       'SELECT data FROM consensus_signals WHERE topic = $1 ORDER BY id DESC LIMIT $2',
       [topic, limit]
+    );
+    return res.rows.map((r) => (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as ConsensusSignal);
+  }
+
+  // ── 预测信号查询 (Phase 2.2) ──
+
+  /** 获取不同的 topic 列表 */
+  async getDistinctTopics(): Promise<string[]> {
+    const res = await this.pool.query<{ topic: string }>(
+      'SELECT DISTINCT topic FROM consensus_signals ORDER BY topic ASC'
+    );
+    return res.rows.map((r) => r.topic);
+  }
+
+  /** 按 topic 获取信号数量 */
+  async getSignalCountByTopic(topic: string): Promise<number> {
+    const res = await this.pool.query<{ cnt: string }>(
+      'SELECT COUNT(*) as cnt FROM consensus_signals WHERE topic = $1',
+      [topic]
+    );
+    return parseInt(res.rows[0]?.cnt ?? '0', 10);
+  }
+
+  /** 获取指定 topic 在 tick 范围内的信号 */
+  async getSignalsByTickRange(topic: string, fromTick: number, toTick: number): Promise<ConsensusSignal[]> {
+    const res = await this.pool.query(
+      'SELECT data FROM consensus_signals WHERE topic = $1 AND tick >= $2 AND tick <= $3 ORDER BY tick ASC',
+      [topic, fromTick, toTick]
+    );
+    return res.rows.map((r) => (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as ConsensusSignal);
+  }
+
+  /** 获取每个 topic 的最新信号 */
+  async getLatestSignalPerTopic(): Promise<ConsensusSignal[]> {
+    const res = await this.pool.query(
+      `SELECT data FROM consensus_signals
+       WHERE id IN (
+         SELECT MAX(id) FROM consensus_signals GROUP BY topic
+       )
+       ORDER BY id DESC`
     );
     return res.rows.map((r) => (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as ConsensusSignal);
   }
@@ -714,6 +775,64 @@ export class PostgresAdapter implements DatabaseAdapter {
     );
     return new Set(res.rows.map((r) => r.key_hash));
   }
+
+  // ── Social Graph 持久化 ──
+
+  /** 批量保存 Social Graph 边关系（全量覆盖：先清空再插入） */
+  async saveSocialEdges(edges: SocialEdge[]): Promise<void> {
+    await this.withTransaction(async (client) => {
+      await client.query('TRUNCATE TABLE social_edges');
+      for (const edge of edges) {
+        await client.query(
+          `INSERT INTO social_edges (from_agent, to_agent, type, strength, formed_at_tick, updated_at)
+           VALUES ($1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW()))
+           ON CONFLICT (from_agent, to_agent) DO UPDATE SET
+             type = EXCLUDED.type,
+             strength = EXCLUDED.strength,
+             formed_at_tick = EXCLUDED.formed_at_tick,
+             updated_at = EXTRACT(EPOCH FROM NOW())`,
+          [edge.from, edge.to, edge.type, edge.strength, edge.formedAtTick]
+        );
+      }
+    });
+  }
+
+  /** 批量保存 Social Graph 节点（全量覆盖：先清空再插入） */
+  async saveSocialNodes(nodes: SocialNode[]): Promise<void> {
+    await this.withTransaction(async (client) => {
+      await client.query('TRUNCATE TABLE social_nodes');
+      for (const node of nodes) {
+        await client.query(
+          `INSERT INTO social_nodes (agent_id, influence, community, role, updated_at)
+           VALUES ($1, $2, $3, $4, EXTRACT(EPOCH FROM NOW()))
+           ON CONFLICT (agent_id) DO UPDATE SET
+             influence = EXCLUDED.influence,
+             community = EXCLUDED.community,
+             role = EXCLUDED.role,
+             updated_at = EXTRACT(EPOCH FROM NOW())`,
+          [node.agentId, node.influence, node.community, node.role]
+        );
+      }
+    });
+  }
+
+  /** 加载所有 Social Graph 边关系 */
+  async loadSocialEdges(): Promise<SocialEdge[]> {
+    const res = await this.pool.query('SELECT * FROM social_edges');
+    return res.rows.map(pgRowToSocialEdge);
+  }
+
+  /** 加载所有 Social Graph 节点 */
+  async loadSocialNodes(): Promise<SocialNode[]> {
+    const res = await this.pool.query('SELECT * FROM social_nodes');
+    return res.rows.map(pgRowToSocialNode);
+  }
+
+  /** 仅保存指定 Agent（增量保存，用于 dirty tracking） */
+  async saveDirtyAgents(agents: Agent[]): Promise<void> {
+    if (agents.length === 0) return;
+    await this.saveAgents(agents);
+  }
 }
 
 // ── Row 映射函数 ──
@@ -798,5 +917,24 @@ function pgRowToApiKeyRecord(row: Record<string, unknown>): ApiKeyRecord {
     createdAt: Number(row['created_at']),
     lastUsedAt: row['last_used_at'] != null ? Number(row['last_used_at']) : null,
     active: Boolean(row['active']),
+  };
+}
+
+function pgRowToSocialEdge(row: Record<string, unknown>): SocialEdge {
+  return {
+    from: row['from_agent'] as string,
+    to: row['to_agent'] as string,
+    type: row['type'] as RelationType,
+    strength: Number(row['strength']),
+    formedAtTick: Number(row['formed_at_tick']),
+  };
+}
+
+function pgRowToSocialNode(row: Record<string, unknown>): SocialNode {
+  return {
+    agentId: row['agent_id'] as string,
+    influence: Number(row['influence']),
+    community: row['community'] as string,
+    role: row['role'] as SocialRole,
   };
 }

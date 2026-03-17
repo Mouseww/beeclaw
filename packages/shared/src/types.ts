@@ -330,6 +330,104 @@ export interface ModelRouterConfig {
   strong: LLMConfig;
 }
 
+// ── 预测信号 API (Phase 2.2) ──
+
+/** 预测信号的可信度信息（基于 Agent 信誉加权） */
+export interface SignalCredibilityScore {
+  /** 加权可信度评分 0-1 */
+  weightedScore: number;
+  /** 参与计算的 Agent 数量 */
+  agentCount: number;
+  /** 平均信誉 */
+  avgCredibility: number;
+  /** 高信誉 Agent（credibility > 0.7）数量 */
+  highCredibilityCount: number;
+}
+
+/** 信号趋势分析（基于历史信号时序） */
+export interface SignalTrendAnalysis {
+  topic: string;
+  /** 趋势方向 */
+  direction: TrendDirection;
+  /** 趋势强度（共识强度均值变化） */
+  momentumDelta: number;
+  /** 情绪均值（正=看涨，负=看跌） */
+  sentimentMean: number;
+  /** 分析覆盖的 tick 范围 */
+  tickRange: [number, number];
+  /** 数据点数量 */
+  dataPoints: number;
+}
+
+/** 标准化预测信号（对外输出格式） */
+export interface PredictionSignal {
+  /** 信号唯一标识（topic + tick 组合） */
+  id: string;
+  topic: string;
+  tick: number;
+  /** 信号生成时间戳（Unix ms） */
+  timestamp: number;
+  /** 情绪分布（百分比） */
+  sentimentDistribution: SentimentDistribution;
+  /** 共识强度 0-1 */
+  consensus: number;
+  /** 情绪强度 0-1 */
+  intensity: number;
+  /** 趋势方向 */
+  trend: TrendDirection;
+  /** 可信度评分 */
+  credibility: SignalCredibilityScore;
+  /** 预警信号 */
+  alerts: AlertSignal[];
+  /** 顶部论点 */
+  topArguments: TopArgument[];
+}
+
+/** 活跃趋势摘要（多 topic 交叉分析） */
+export interface TrendSummary {
+  /** 活跃 topic 数量 */
+  activeTopics: number;
+  /** topic 信号列表 */
+  topics: Array<{
+    topic: string;
+    latestSignal: PredictionSignal;
+    trend: TrendDirection;
+    signalCount: number;
+  }>;
+  /** 全局情绪均值 */
+  globalSentimentMean: number;
+  /** 高置信度预警数量 */
+  highConfidenceAlerts: number;
+  /** 汇总时间戳 */
+  timestamp: number;
+}
+
+/** 预测准确性统计 */
+export interface PredictionAccuracyStats {
+  /** 已评估信号总数 */
+  totalSignals: number;
+  /** 有后续验证事件的信号数 */
+  evaluatedSignals: number;
+  /** 准确率（0-1） */
+  accuracyRate: number;
+  /** 按 topic 的准确率 */
+  byTopic: Record<string, { total: number; accurate: number; rate: number }>;
+  /** 按趋势方向的准确率 */
+  byTrend: Record<TrendDirection, { total: number; accurate: number; rate: number }>;
+  /** 统计时间戳 */
+  timestamp: number;
+}
+
+/** WebSocket signal 订阅消息类型 */
+export type SignalSubscriptionAction = 'subscribe' | 'unsubscribe';
+
+/** WebSocket signal 订阅请求 */
+export interface SignalSubscriptionRequest {
+  action: SignalSubscriptionAction;
+  /** 订阅的 topic（不传则订阅全部） */
+  topic?: string;
+}
+
 // ── Webhook 通知 ──
 
 /** Webhook 支持的事件类型 */
