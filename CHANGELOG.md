@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.22] - 2026-03-17
+
+### ✨ Features
+
+- **SocialGraphSync 跨节点社交图同步** — coordinator 包新增 SocialGraphSync 模块，支持多节点间社交图数据的实时同步
+- **Coordinator 集成** — 将分布式协调器集成到 world-engine、server 和 CLI，完善分布式部署链路
+
+### 🧪 Tests
+
+- **613 行新测试** — 新增 webhook、social-graph、distributed engine、world-engine 综合测试，大幅提升测试覆盖率
+
+### 🐛 Bug Fixes
+
+- **ESLint 全量修复** — 修复 coordinator 包和迁移测试中所有 ESLint 错误和警告
+
 ## [1.0.21] - 2026-03-17
 
 ### ✨ Features
