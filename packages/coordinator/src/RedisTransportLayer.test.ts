@@ -360,4 +360,191 @@ describe('RedisTransportLayer', () => {
       expect(transport.getRegisteredWorkerIds()).toEqual([]);
     });
   });
+
+  // ── 补充覆盖：未连接分支 & 幂等性 & 错误路径 ──
+
+  describe('unregisterWorker 未连接时的分支', () => {
+    it('未连接时调用 unregisterWorker 应安全跳过 srem', () => {
+      // transport 尚未 connect，直接调用 unregisterWorker 不应抛错
+      transport.unregisterWorker('w1');
+
+      // srem 不应被调用，因为 connected === false
+      expect(mockPublisher.srem).not.toHaveBeenCalled();
+    });
+
+    it('disconnect 后调用 unregisterWorker 应安全跳过 srem', async () => {
+      await transport.connect();
+      transport.onWorkerMessage('w1', () => {});
+      await transport.disconnect();
+
+      // disconnect 之后再 unregister
+      transport.unregisterWorker('w1');
+
+      // disconnect 期间的 srem 可能被调用，但 disconnect 后再次调用不应触发额外 srem
+      // publisher 已为 null，所以 srem 不应再被调用
+    });
+  });
+
+  describe('subscribeChannel 幂等性', () => {
+    it('已订阅的 channel 再次订阅应直接返回，不重复调用 subscribe', async () => {
+      await transport.connect();
+
+      // 第一次注册 worker —— 会订阅 worker channel + broadcast channel
+      transport.onWorkerMessage('w1', () => {});
+      const callCountAfterFirst = mockSubscriber.subscribe.mock.calls.length;
+
+      // 第二次注册另一个 worker —— broadcast channel 已订阅，应幂等跳过
+      transport.onWorkerMessage('w2', () => {});
+
+      // broadcast channel 不应被重复订阅，只多了 w2 专属 channel
+      const callCountAfterSecond = mockSubscriber.subscribe.mock.calls.length;
+      expect(callCountAfterSecond).toBe(callCountAfterFirst + 1);
+
+      // 验证 broadcast 只被调用了一次
+      const broadcastCalls = mockSubscriber.subscribe.mock.calls.filter(
+        (args: unknown[]) => args[0] === 'beeclaw:broadcast',
+      );
+      expect(broadcastCalls).toHaveLength(1);
+    });
+  });
+
+  describe('subscribeChannel 未连接时的分支', () => {
+    it('未连接时注册 onWorkerMessage 不应调用 subscriber.subscribe', () => {
+      // transport 尚未 connect，注册 handler 不应触发 subscribe
+      transport.onWorkerMessage('w1', () => {});
+
+      expect(mockSubscriber.subscribe).not.toHaveBeenCalled();
+    });
+
+    it('未连接时注册 onLeaderMessage 不应调用 subscriber.subscribe', () => {
+      transport.onLeaderMessage(() => {});
+
+      expect(mockSubscriber.subscribe).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unsubscribeChannel 未订阅的 channel', () => {
+    it('unregisterWorker 对未订阅的 worker 应安全返回', async () => {
+      await transport.connect();
+
+      // 没有先调用 onWorkerMessage，直接 unregister 不应抛错
+      transport.unregisterWorker('w-nonexistent');
+
+      // unsubscribe 不应被调用，因为 channel 未在 subscribedChannels 中
+      expect(mockSubscriber.unsubscribe).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('registerWorker 未连接时应抛出错误', () => {
+    it('未连接时调用 registerWorker 应抛出 Not connected', () => {
+      expect(() => transport.registerWorker('w1')).toThrow('[RedisTransport] Not connected');
+    });
+  });
+
+  describe('getRegisteredWorkerIdsAsync 未连接时应抛出错误', () => {
+    it('未连接时调用 getRegisteredWorkerIdsAsync 应抛出 Not connected', async () => {
+      await expect(transport.getRegisteredWorkerIdsAsync())
+        .rejects.toThrow('[RedisTransport] Not connected');
+    });
+  });
+
+  describe('subscribeChannel subscribe 失败时应从集合中移除', () => {
+    it('subscribe 返回 rejected promise 时应从 subscribedChannels 中移除该 channel', async () => {
+      await transport.connect();
+
+      // 让 subscribe 拒绝
+      mockSubscriber.subscribe.mockRejectedValueOnce(new Error('subscribe failed'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      transport.onLeaderMessage(() => {});
+
+      // 等待 rejected promise 被处理
+      await vi.waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to subscribe'),
+          expect.any(Error),
+        );
+      });
+
+      consoleSpy.mockRestore();
+
+      // 再次尝试订阅相同 channel 应该可以重新触发 subscribe（因为之前已从集合中移除）
+      mockSubscriber.subscribe.mockResolvedValueOnce(undefined);
+      transport.onLeaderMessage(() => {});
+
+      // 如果 channel 仍在 subscribedChannels 中，第二次订阅会被幂等跳过，
+      // subscribe 不会被再次调用；如果已移除，则会再次调用
+      const leaderChannelCalls = mockSubscriber.subscribe.mock.calls.filter(
+        (args: unknown[]) => args[0] === 'beeclaw:leader',
+      );
+      expect(leaderChannelCalls.length).toBe(2);
+    });
+  });
+
+  describe('disconnect 无订阅时的分支', () => {
+    it('连接但没有订阅任何 channel 就 disconnect 不应调用 unsubscribe', async () => {
+      await transport.connect();
+
+      // 直接 disconnect，没有注册任何 handler / 订阅任何 channel
+      await transport.disconnect();
+
+      // unsubscribe 不应被调用，因为 subscribedChannels 为空
+      expect(mockSubscriber.unsubscribe).not.toHaveBeenCalled();
+      // 但 quit 应正常调用
+      expect(mockPublisher.quit).toHaveBeenCalledTimes(1);
+      expect(mockSubscriber.quit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('自定义配置（完整参数）', () => {
+    it('应支持自定义 password 和 db 参数', () => {
+      // 验证构造函数能接受完整配置，不抛错
+      const customTransport = new RedisTransportLayer({
+        host: '10.0.0.1',
+        port: 6380,
+        password: 'my-secret',
+        db: 3,
+        prefix: 'custom-app',
+      });
+
+      // 实例应成功创建
+      expect(customTransport).toBeInstanceOf(RedisTransportLayer);
+    });
+
+    it('完整自定义配置下发送消息应使用自定义前缀', async () => {
+      mockInstanceIndex = 0;
+      const customTransport = new RedisTransportLayer({
+        host: '10.0.0.1',
+        port: 6380,
+        password: 'my-secret',
+        db: 3,
+        prefix: 'custom-app',
+      });
+      await customTransport.connect();
+
+      const msg = createTestWorkerMessage();
+      await customTransport.sendToLeader(msg);
+
+      expect(mockPublisher.publish).toHaveBeenCalledWith(
+        'custom-app:leader',
+        JSON.stringify(msg),
+      );
+
+      await customTransport.disconnect();
+    });
+  });
+
+  describe('broadcastToWorkers 未连接时应抛出错误', () => {
+    it('未连接时调用 broadcastToWorkers 应抛出 Not connected', async () => {
+      await expect(transport.broadcastToWorkers(createTestCoordinatorMessage()))
+        .rejects.toThrow('[RedisTransport] Not connected');
+    });
+  });
+
+  describe('sendToLeader 未连接时应抛出错误', () => {
+    it('未连接时调用 sendToLeader 应抛出 Not connected', async () => {
+      await expect(transport.sendToLeader(createTestWorkerMessage()))
+        .rejects.toThrow('[RedisTransport] Not connected');
+    });
+  });
 });

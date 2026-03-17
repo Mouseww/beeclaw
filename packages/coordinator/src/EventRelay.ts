@@ -59,6 +59,10 @@ export class EventRelay {
    * 清理去重窗口，保留最近的 N 个
    */
   private trimDeduplicationWindow(): void {
+    if (this.deduplicationWindowSize === 0) {
+      this.processedEventIds = new Set();
+      return;
+    }
     const ids = [...this.processedEventIds];
     const keep = ids.slice(-this.deduplicationWindowSize);
     this.processedEventIds = new Set(keep);

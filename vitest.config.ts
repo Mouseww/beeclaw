@@ -23,6 +23,7 @@ export default defineConfig({
             'packages/social-graph/src/**/*.test.ts',
             'packages/event-bus/src/**/*.test.ts',
             'packages/consensus/src/**/*.test.ts',
+            'packages/coordinator/src/**/*.test.ts',
             'packages/world-engine/src/**/*.test.ts',
             'packages/event-ingestion/src/**/*.test.ts',
             'packages/cli/src/**/*.test.ts',

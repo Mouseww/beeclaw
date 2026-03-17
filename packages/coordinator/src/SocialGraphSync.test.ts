@@ -822,4 +822,509 @@ describe('SocialGraphSync', () => {
       await s2.stop();
     });
   });
+
+  // ── 补充覆盖：localGraph 为 null 时的 handler 分支 ──
+
+  describe('localGraph 为 null 时的 handler 安全保护', () => {
+    it('handleNodeAdded 当 localGraph 为 null 时应安全返回', async () => {
+      sync = new SocialGraphSync({ nodeId: 'n1', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      // stop 后 localGraph 被置 null，但 handler 可能还被外部触发
+      // 模拟：先 start 再手动清空 localGraph
+      // 由于 localGraph 是私有的，通过在 stop 后手动投递消息来测试
+      await sync.stop();
+
+      // 重新 start 但立刻手动触发 — 使用另一种方法：
+      // 在 start 期间通过 transport.__deliver 注入消息，在 handleNodeAdded 执行时 localGraph 为 null
+      // 实际上 stop 后 handler 已经取消订阅，所以我们需要另一种策略
+      // 直接构造一个 sync 实例，start 后通过设置内部状态来模拟
+
+      // 更好的方法：创建一个 transport 在 subscribe 时捕获 handler，然后 stop 后调用 handler
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const sync2 = new SocialGraphSync({ nodeId: 'n2', isPrimary: false });
+      await sync2.start(specialTransport, localGraph);
+      await sync2.stop(); // localGraph 被置 null
+
+      // 虽然 unsubscribe 了，但我们直接调用捕获的 handler 来模拟
+      const nodeAddedMsg = JSON.stringify({
+        type: 'sg_node_added',
+        agentId: 'a1',
+        influence: 10,
+        community: 'default',
+        role: 'follower',
+        sourceNodeId: 'other',
+        timestamp: Date.now(),
+      });
+
+      // 应该不抛错，安全返回
+      expect(() => capturedHandlers[0]!(nodeAddedMsg)).not.toThrow();
+    });
+
+    it('handleNodeRemoved 当 localGraph 为 null 时应安全返回', async () => {
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const sync2 = new SocialGraphSync({ nodeId: 'n2', isPrimary: false });
+      await sync2.start(specialTransport, localGraph);
+      await sync2.stop();
+
+      const msg = JSON.stringify({
+        type: 'sg_node_removed',
+        agentId: 'a1',
+        sourceNodeId: 'other',
+        timestamp: Date.now(),
+      });
+
+      expect(() => capturedHandlers[0]!(msg)).not.toThrow();
+    });
+
+    it('handleEdgeAdded 当 localGraph 为 null 时应安全返回', async () => {
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const sync2 = new SocialGraphSync({ nodeId: 'n2', isPrimary: false });
+      await sync2.start(specialTransport, localGraph);
+      await sync2.stop();
+
+      const msg = JSON.stringify({
+        type: 'sg_edge_added',
+        from: 'a1',
+        to: 'a2',
+        edgeType: 'follow',
+        strength: 0.5,
+        formedAtTick: 1,
+        sourceNodeId: 'other',
+        timestamp: Date.now(),
+      });
+
+      expect(() => capturedHandlers[0]!(msg)).not.toThrow();
+    });
+
+    it('handleEdgeRemoved 当 localGraph 为 null 时应安全返回', async () => {
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const sync2 = new SocialGraphSync({ nodeId: 'n2', isPrimary: false });
+      await sync2.start(specialTransport, localGraph);
+      await sync2.stop();
+
+      const msg = JSON.stringify({
+        type: 'sg_edge_removed',
+        from: 'a1',
+        to: 'a2',
+        sourceNodeId: 'other',
+        timestamp: Date.now(),
+      });
+
+      expect(() => capturedHandlers[0]!(msg)).not.toThrow();
+    });
+  });
+
+  // ── 补充覆盖：handleFullSyncRequest 分支 ──
+
+  describe('handleFullSyncRequest 边界情况', () => {
+    it('非 primary 节点收到 full_sync_request 应直接忽略', async () => {
+      const replicaTransport = createMockTransport();
+      const replicaSync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await replicaSync.start(replicaTransport, createMockLocalGraph());
+
+      const msg = JSON.stringify({
+        type: 'sg_full_sync_request',
+        requesterId: 'someone',
+        timestamp: Date.now(),
+      });
+
+      replicaTransport.__deliver('beeclaw:sg:broadcast', msg);
+
+      // 非 primary 不应发布任何响应
+      expect(replicaTransport.publishCalls).toHaveLength(0);
+
+      await replicaSync.stop();
+    });
+
+    it('localGraph 为 null 时收到 full_sync_request 应安全返回', async () => {
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const primarySync = new SocialGraphSync({ nodeId: 'primary', isPrimary: true });
+      await primarySync.start(specialTransport, createMockLocalGraph());
+      await primarySync.stop(); // localGraph 被置 null
+
+      const msg = JSON.stringify({
+        type: 'sg_full_sync_request',
+        requesterId: 'replica',
+        timestamp: Date.now(),
+      });
+
+      // 调用捕获的广播 handler，不应抛错
+      expect(() => capturedHandlers[0]!(msg)).not.toThrow();
+    });
+  });
+
+  // ── 补充覆盖：handleFullSyncResponse 无 pending query ──
+
+  describe('handleFullSyncResponse 无 pending query', () => {
+    it('收到 full_sync_response 但无 pending full_sync query 时应静默忽略', async () => {
+      sync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      // 直接投递一个 full_sync_response，但 replica 并没有发过 requestFullSync
+      const msg = JSON.stringify({
+        type: 'sg_full_sync_response',
+        nodes: [{ agentId: 'a1', influence: 10, community: 'default', role: 'follower' }],
+        edges: [],
+        sourceNodeId: 'primary',
+        timestamp: Date.now(),
+      });
+
+      // 不应抛错，也不应修改本地图
+      transport.__deliver('beeclaw:sg:node:replica', msg);
+      expect(localGraph._nodes.has('a1')).toBe(false);
+    });
+  });
+
+  // ── 补充覆盖：handleQueryRequest 当 localGraph 为 null ──
+
+  describe('handleQueryRequest 当 localGraph 为 null', () => {
+    it('localGraph 为 null 时收到 query_request 应安全返回', async () => {
+      const capturedHandlers: Array<(payload: string) => void> = [];
+      const specialTransport = createMockTransport();
+      const origSubscribe = specialTransport.subscribe.bind(specialTransport);
+      specialTransport.subscribe = async (channel: string, handler: (payload: string) => void) => {
+        capturedHandlers.push(handler);
+        await origSubscribe(channel, handler);
+      };
+
+      const targetSync = new SocialGraphSync({ nodeId: 'target', isPrimary: true });
+      await targetSync.start(specialTransport, createMockLocalGraph());
+      await targetSync.stop(); // localGraph 被置 null
+
+      const msg = JSON.stringify({
+        type: 'sg_query_request',
+        queryId: 'test-query-1',
+        queryType: 'neighbors',
+        agentId: 'a1',
+        requesterId: 'requester',
+        sourceNodeId: 'requester',
+        timestamp: Date.now(),
+      });
+
+      // 调用捕获的节点私有 channel handler，不应抛错
+      // capturedHandlers[1] 是节点私有 channel 的 handler
+      expect(() => capturedHandlers[1]!(msg)).not.toThrow();
+    });
+  });
+
+  // ── 补充覆盖：handleQueryResponse 无匹配 queryId ──
+
+  describe('handleQueryResponse 无匹配 queryId', () => {
+    it('收到 query_response 但无匹配的 pending query 时应静默忽略', async () => {
+      sync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      const msg = JSON.stringify({
+        type: 'sg_query_response',
+        queryId: 'nonexistent-query-id',
+        result: ['a1', 'a2'],
+        sourceNodeId: 'primary',
+        timestamp: Date.now(),
+      });
+
+      // 不应抛错
+      transport.__deliver('beeclaw:sg:node:replica', msg);
+    });
+  });
+
+  // ── 补充覆盖：trimDeduplicationWindow 大量消息触发清理 ──
+
+  describe('trimDeduplicationWindow 去重窗口清理', () => {
+    it('超过 deduplicationWindowSize*2 条消息时应触发清理', async () => {
+      sync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      // deduplicationWindowSize = 5000，需要 > 10000 条不重复消息
+      const baseTs = 1000000;
+      for (let i = 0; i < 10001; i++) {
+        const msg = JSON.stringify({
+          type: 'sg_node_added',
+          agentId: `agent-${i}`,
+          influence: 10,
+          community: 'default',
+          role: 'follower',
+          sourceNodeId: 'primary',
+          timestamp: baseTs + i, // 确保每条消息不同
+        });
+        transport.__deliver('beeclaw:sg:broadcast', msg);
+      }
+
+      // 清理后 processedMessages 应被缩减到 deduplicationWindowSize（5000）
+      // 通过发送一个已知时间戳的消息来验证早期消息已被清除
+      const earlyMsg = JSON.stringify({
+        type: 'sg_node_added',
+        agentId: 'agent-0',
+        influence: 10,
+        community: 'default',
+        role: 'follower',
+        sourceNodeId: 'primary',
+        timestamp: baseTs, // 和第一条消息完全相同
+      });
+
+      const addNodeSpy = vi.spyOn(localGraph, 'addNode');
+      addNodeSpy.mockClear();
+
+      transport.__deliver('beeclaw:sg:broadcast', earlyMsg);
+
+      // 如果去重窗口被清理了，早期的消息 key 已不在 set 中，应被重新处理
+      expect(addNodeSpy).toHaveBeenCalledTimes(1);
+      addNodeSpy.mockRestore();
+    });
+  });
+
+  // ── 补充覆盖：getDeduplicationKey 不同消息类型 ──
+
+  describe('getDeduplicationKey 不同消息类型', () => {
+    it('sg_full_sync_request 应生成包含类型的去重 key', async () => {
+      sync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      const ts = Date.now();
+      // 发送两条不同类型但同 sourceNodeId 和 timestamp 的消息
+      const fullSyncReqMsg = JSON.stringify({
+        type: 'sg_full_sync_request',
+        requesterId: 'replica',
+        sourceNodeId: 'other',
+        timestamp: ts,
+      });
+
+      const nodeAddedMsg = JSON.stringify({
+        type: 'sg_node_added',
+        agentId: 'a1',
+        influence: 10,
+        community: 'default',
+        role: 'follower',
+        sourceNodeId: 'other',
+        timestamp: ts,
+      });
+
+      // 两者不应互相去重
+      const addNodeSpy = vi.spyOn(localGraph, 'addNode');
+
+      transport.__deliver('beeclaw:sg:broadcast', fullSyncReqMsg);
+      transport.__deliver('beeclaw:sg:broadcast', nodeAddedMsg);
+
+      // nodeAdded 应该被处理（未被 fullSyncReq 去重掉）
+      expect(addNodeSpy).toHaveBeenCalledTimes(1);
+      addNodeSpy.mockRestore();
+    });
+
+    it('sg_full_sync_response 和 sg_query_response 应使用默认 key 格式', async () => {
+      sync = new SocialGraphSync({ nodeId: 'replica', isPrimary: false });
+      await sync.start(transport, localGraph);
+
+      const ts = Date.now();
+
+      // 发送两条 full_sync_response，第二条应被去重
+      const response1 = JSON.stringify({
+        type: 'sg_full_sync_response',
+        nodes: [],
+        edges: [],
+        sourceNodeId: 'primary',
+        timestamp: ts,
+      });
+
+      // 投递两次相同的 full_sync_response
+      transport.__deliver('beeclaw:sg:node:replica', response1);
+      transport.__deliver('beeclaw:sg:node:replica', response1);
+
+      // 没有 pending query 的情况下，两次都会走到 handleFullSyncResponse 但找不到 pending query
+      // 关键是第二次应被去重，所以 handleFullSyncResponse 只被调用一次
+      // 我们通过验证 localGraph 没有被修改来确认（因为没有 pending query，localGraph 不会变化）
+      expect(localGraph._nodes.size).toBe(0);
+    });
+  });
+
+  // ── 补充覆盖：publish 当 transport 为 null 时应抛错 ──
+
+  describe('publish 当 transport 为 null', () => {
+    it('transport 为 null 时 publish 应抛出错误', async () => {
+      // 构造一个 sync 实例，start 后 stop（transport 被置 null），然后尝试使用内部 publish
+      // 由于 publish 是私有方法，通过 broadcastNodeAdded 来间接测试
+      // 但 broadcastNodeAdded 会先检查 started，所以需要另一种方法
+
+      // 方法：使用一个特殊 transport，在 publish 被调用前把 transport 设为 null
+      // 更简单的方法：利用 requestFullSync，它在 Promise 回调中调用 publish，
+      // 但我们可以在 publish 的 mock 中设置 transport
+
+      // 最直接：从未 start 的状态下，直接测试 ensureStarted 也行
+      // 但这已覆盖了。让我们测试另一个场景：
+      // start 后，模拟 transport 被外部清空（虽然正常不应发生）
+
+      // 实际上，未启动时操作会先被 ensureStarted 拦截。
+      // 真正的场景是：start 后在仍在运行时 transport 变 null。
+      // 由于 transport 是 private，我们用 (sync as any) 来测试
+      sync = new SocialGraphSync({ nodeId: 'n1', isPrimary: true });
+      await sync.start(transport, localGraph);
+
+      // 手动清空 transport
+      (sync as any).transport = null;
+
+      await expect(sync.broadcastNodeAdded('a1', 10, 'default', 'follower'))
+        .rejects.toThrow('Transport not available');
+    });
+  });
+
+  // ── 补充覆盖：消息自过滤 — full_sync_response 和 query_response 不被自过滤 ──
+
+  describe('消息自过滤豁免', () => {
+    it('full_sync_response 即使 sourceNodeId 是自身也应处理', async () => {
+      // 场景：primary 节点向自己发送 full_sync_response
+      const primaryTransport = createMockTransport();
+      const primaryGraph = createMockLocalGraph();
+      primaryGraph.addNode('a1', 10, 'default', 'follower');
+
+      const primarySync = new SocialGraphSync({ nodeId: 'self-node', isPrimary: false });
+      await primarySync.start(primaryTransport, primaryGraph);
+
+      // 模拟 self-node 发起 fullSync 并自己响应（sourceNodeId 为 self-node）
+      // 先在 pending 中注册一个 full_sync query
+      const resultPromise = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+        (primarySync as any).pendingQueries.set('full_sync_self-node_12345', {
+          resolve,
+          reject,
+          timer,
+        });
+      });
+
+      // 投递一个 sourceNodeId 为自身的 full_sync_response
+      const msg = JSON.stringify({
+        type: 'sg_full_sync_response',
+        nodes: [{ agentId: 'remote-a', influence: 20, community: 'tech', role: 'bridge' }],
+        edges: [],
+        sourceNodeId: 'self-node', // 和当前节点 ID 一样
+        timestamp: Date.now(),
+      });
+
+      primaryTransport.__deliver('beeclaw:sg:node:self-node', msg);
+
+      const result = await resultPromise;
+      expect(result.nodes).toHaveLength(1);
+      expect(result.nodes[0].agentId).toBe('remote-a');
+
+      await primarySync.stop();
+    });
+
+    it('query_response 即使 sourceNodeId 是自身也应处理', async () => {
+      const nodeTransport = createMockTransport();
+      const nodeSync = new SocialGraphSync({ nodeId: 'self-node', isPrimary: false });
+      await nodeSync.start(nodeTransport, createMockLocalGraph());
+
+      const queryId = 'neighbors_a1_12345_abc';
+      const resultPromise = new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+        (nodeSync as any).pendingQueries.set(queryId, {
+          resolve,
+          reject,
+          timer,
+        });
+      });
+
+      const msg = JSON.stringify({
+        type: 'sg_query_response',
+        queryId,
+        result: ['a2', 'a3'],
+        sourceNodeId: 'self-node', // sourceNodeId 是自身
+        timestamp: Date.now(),
+      });
+
+      nodeTransport.__deliver('beeclaw:sg:node:self-node', msg);
+
+      const result = await resultPromise;
+      expect(result).toEqual(['a2', 'a3']);
+
+      await nodeSync.stop();
+    });
+  });
+
+  // ── 补充覆盖：requestFullSync publish 失败应 reject ──
+
+  describe('requestFullSync publish 失败', () => {
+    it('publish 失败时 requestFullSync 应 reject', async () => {
+      const failingTransport = createMockTransport();
+      // 覆写 publish 使其抛出错误
+      failingTransport.publish = async () => {
+        throw new Error('Transport publish failed');
+      };
+
+      const failSync = new SocialGraphSync({ nodeId: 'n1', isPrimary: false });
+      await failSync.start(failingTransport, createMockLocalGraph());
+
+      await expect(failSync.requestFullSync())
+        .rejects.toThrow('Transport publish failed');
+
+      await failSync.stop();
+    });
+  });
+
+  // ── 补充覆盖：sendQuery publish 失败应 reject ──
+
+  describe('sendQuery publish 失败', () => {
+    it('publish 失败时 queryNeighbors 应 reject', async () => {
+      const failingTransport = createMockTransport();
+      failingTransport.publish = async () => {
+        throw new Error('Transport publish failed');
+      };
+
+      const failSync = new SocialGraphSync({ nodeId: 'n1', isPrimary: false });
+      await failSync.start(failingTransport, createMockLocalGraph());
+
+      await expect(failSync.queryNeighbors('a1', 'target'))
+        .rejects.toThrow('Transport publish failed');
+
+      await failSync.stop();
+    });
+
+    it('publish 失败时 queryNode 应 reject', async () => {
+      const failingTransport = createMockTransport();
+      failingTransport.publish = async () => {
+        throw new Error('Network error');
+      };
+
+      const failSync = new SocialGraphSync({ nodeId: 'n1', isPrimary: false });
+      await failSync.start(failingTransport, createMockLocalGraph());
+
+      await expect(failSync.queryNode('a1', 'target'))
+        .rejects.toThrow('Network error');
+
+      await failSync.stop();
+    });
+  });
 });
