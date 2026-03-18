@@ -21,6 +21,14 @@ import { registerHistoryRoute } from './history.js';
 import { registerConfigRoute } from './config.js';
 import { registerScenarioRoute } from './scenario.js';
 
+vi.mock('../ws/handler.js', () => ({
+  broadcast: vi.fn(),
+  getConnectionCount: () => 0,
+  registerWs: vi.fn(),
+  stopHeartbeat: vi.fn(),
+  closeAllConnections: vi.fn(),
+}));
+
 // ── 共享 setup ──
 
 let testCtx: TestContext;
@@ -229,15 +237,6 @@ describe('POST /api/events', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
-    // mock broadcast 以避免 ws 依赖
-    vi.mock('../ws/handler.js', () => ({
-      broadcast: vi.fn(),
-      getConnectionCount: () => 0,
-      registerWs: vi.fn(),
-      stopHeartbeat: vi.fn(),
-      closeAllConnections: vi.fn(),
-    }));
-
     registerEventsRoute(testCtx.app, testCtx.ctx);
     await testCtx.app.ready();
     app = testCtx.app;
