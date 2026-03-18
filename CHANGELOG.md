@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.41] - 2026-03-19
+
+### 🧪 Tests
+
+- **consensus:** 补齐 `ConsensusEngine` 中 `targetSentiments` 聚合路径测试，覆盖 credibility 加权、标的归一化、排序及空 targets 降级行为
+
+---
+
 ## [1.0.40] - 2026-03-18
 
 ### 🐛 Bug Fixes
