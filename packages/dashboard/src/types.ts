@@ -264,6 +264,14 @@ export interface ForecastResult {
   scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
   scenarioLabel: string;
   event: string;
+  directAnswer: {
+    questionType: 'numeric-forecast' | 'judgement' | 'event-propagation' | 'decision-simulation';
+    answer: string;
+    confidence: 'low' | 'medium' | 'high';
+    range?: string;
+    assumptions: string[];
+    drivers: string[];
+  };
   summary: string;
   factions: {
     name: string;

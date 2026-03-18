@@ -125,6 +125,45 @@ export function ForecastPage() {
 
       {result && (
         <div className="space-y-4">
+          <Card title="直接回答">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="badge bg-green-500/15 text-green-400 border border-green-500/30">
+                  {result.directAnswer.questionType === 'numeric-forecast' ? '数值预测' : result.directAnswer.questionType === 'judgement' ? '判断预测' : result.directAnswer.questionType === 'decision-simulation' ? '决策预演' : '传播推演'}
+                </span>
+                <span className="badge" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                  置信度：{result.directAnswer.confidence}
+                </span>
+                {result.directAnswer.range && (
+                  <span className="badge" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                    区间：{result.directAnswer.range}
+                  </span>
+                )}
+              </div>
+              <p className="text-base sm:text-lg leading-7 font-medium" style={{ color: 'var(--text-heading)' }}>
+                {result.directAnswer.answer}
+              </p>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-heading)' }}>关键假设</p>
+                  <ul className="space-y-2 list-disc pl-5">
+                    {result.directAnswer.assumptions.map((item) => (
+                      <li key={item} className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-heading)' }}>核心驱动因素</p>
+                  <ul className="space-y-2 list-disc pl-5">
+                    {result.directAnswer.drivers.map((item) => (
+                      <li key={item} className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </Card>
+
           <Card title="推演摘要">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">

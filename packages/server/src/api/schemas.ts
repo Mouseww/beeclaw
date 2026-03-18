@@ -867,6 +867,21 @@ export const forecastSchema = {
         scenario: { type: 'string' as const },
         scenarioLabel: { type: 'string' as const },
         event: { type: 'string' as const },
+        directAnswer: {
+          type: 'object' as const,
+          properties: {
+            questionType: {
+              type: 'string' as const,
+              enum: ['numeric-forecast', 'judgement', 'event-propagation', 'decision-simulation'],
+            },
+            answer: { type: 'string' as const },
+            confidence: { type: 'string' as const, enum: ['low', 'medium', 'high'] },
+            range: { type: 'string' as const },
+            assumptions: { type: 'array' as const, items: { type: 'string' as const } },
+            drivers: { type: 'array' as const, items: { type: 'string' as const } },
+          },
+          required: ['questionType', 'answer', 'confidence', 'assumptions', 'drivers'],
+        },
         summary: { type: 'string' as const },
         factions: {
           type: 'array' as const,

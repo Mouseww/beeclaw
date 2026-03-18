@@ -28,6 +28,13 @@ const MOCK_RESULT = {
   scenario: 'hot-event' as const,
   scenarioLabel: '热点事件预测',
   event: '央行加息 25 个基点',
+  directAnswer: {
+    questionType: 'judgement' as const,
+    answer: '初步判断是：存在明显扰动，但仍要结合后续执行情况继续观察。',
+    confidence: 'medium' as const,
+    assumptions: ['政策信号延续', '市场没有出现额外黑天鹅'],
+    drivers: ['政策预期', '市场情绪'],
+  },
   summary: '多数 Agent 认为短期利空股市，长期提升储蓄收益。',
   factions: [
     { name: '看空派', share: 55, summary: '预计市场回调 3-5%' },
@@ -98,6 +105,14 @@ describe('ForecastPage', () => {
 
     // 等待结果
     expect(await screen.findByText('推演摘要')).toBeInTheDocument();
+    expect(screen.getByText('直接回答')).toBeInTheDocument();
+    expect(screen.getByText('判断预测')).toBeInTheDocument();
+    expect(screen.getByText('置信度：medium')).toBeInTheDocument();
+    expect(screen.getByText(MOCK_RESULT.directAnswer.answer)).toBeInTheDocument();
+    expect(screen.getByText('关键假设')).toBeInTheDocument();
+    expect(screen.getByText('政策信号延续')).toBeInTheDocument();
+    expect(screen.getByText('核心驱动因素')).toBeInTheDocument();
+    expect(screen.getByText('政策预期')).toBeInTheDocument();
     expect(screen.getByText(MOCK_RESULT.summary)).toBeInTheDocument();
     expect(screen.getAllByText('热点事件预测').length).toBeGreaterThanOrEqual(1);
 
@@ -125,24 +140,43 @@ describe('ForecastPage', () => {
     });
   });
 
-  it('提交中应该显示 "推演中..." 按钮文字', async () => {
-    let resolve: (v: typeof MOCK_RESULT) => void;
-    mockForecast.mockImplementationOnce(
-      () => new Promise((r) => { resolve = r; }),
-    );
+  it('应该按 questionType 显示 directAnswer 标签并展示区间', async () => {
+    mockForecast.mockResolvedValueOnce({
+      ...MOCK_RESULT,
+      directAnswer: {
+        questionType: 'numeric-forecast',
+        answer: '预计价格在区间内波动。',
+        confidence: 'high',
+        range: '¥620 ~ ¥780 / 克',
+        assumptions: ['国际金价维持高位'],
+        drivers: ['国际金价'],
+      },
+    });
     const user = userEvent.setup();
 
     renderPage();
 
-    await user.type(screen.getByPlaceholderText(/如果 BeeClaw/), '测试');
+    await user.type(screen.getByPlaceholderText(/如果 BeeClaw/), '2027 年黄金每克多少钱？');
     await user.click(screen.getByText('开始推演'));
 
-    expect(screen.getByText('推演中...')).toBeInTheDocument();
-
-    // 完成请求
-    resolve!(MOCK_RESULT);
-    await waitFor(() => expect(screen.queryByText('推演中...')).not.toBeInTheDocument());
+    expect(await screen.findByText('数值预测')).toBeInTheDocument();
+    expect(screen.getByText('置信度：high')).toBeInTheDocument();
+    expect(screen.getByText('区间：¥620 ~ ¥780 / 克')).toBeInTheDocument();
   });
+
+  it('没有 range 时不应显示区间标签', async () => {
+    mockForecast.mockResolvedValueOnce(MOCK_RESULT);
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.type(screen.getByPlaceholderText(/如果 BeeClaw/), '这项政策会不会导致房价下跌？');
+    await user.click(screen.getByText('开始推演'));
+
+    await screen.findByText('直接回答');
+    expect(screen.queryByText(/区间：/)).not.toBeInTheDocument();
+  });
+
 
   // ── 失败处理 ──
 

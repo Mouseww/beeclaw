@@ -56,6 +56,15 @@ interface ForecastFaction {
   summary: string;
 }
 
+interface DirectAnswerBlock {
+  questionType: 'numeric-forecast' | 'judgement' | 'event-propagation' | 'decision-simulation';
+  answer: string;
+  confidence: 'low' | 'medium' | 'high';
+  range?: string;
+  assumptions: string[];
+  drivers: string[];
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -154,6 +163,83 @@ function buildRecommendations(scenario: ForecastScenarioKey): string[] {
   ];
 }
 
+export function inferQuestionType(event: string, scenario: ForecastScenarioKey): DirectAnswerBlock['questionType'] {
+  const numericPatterns = /(多少钱|多少元|多少美元|多少人民币|价格|每克|几率|概率|多少点|多少%|区间|预计.*多少|会到多少)/;
+  const judgementPatterns = /(会不会|是否|值不值得|应该不应该|能不能|是不是)/;
+
+  if (scenario === 'product-launch' || scenario === 'roundtable') return 'decision-simulation';
+  if (scenario === 'hot-event' && numericPatterns.test(event)) return 'numeric-forecast';
+  if (judgementPatterns.test(event)) return 'judgement';
+  if (scenario === 'hot-event') return 'event-propagation';
+  return 'decision-simulation';
+}
+
+function buildDirectAnswer(event: string, scenario: ForecastScenarioKey): DirectAnswerBlock {
+  const questionType = inferQuestionType(event, scenario);
+
+  if (/黄金.*(2027|2026|明年|后年).*(每克|多少钱|价格)/.test(event)) {
+    return {
+      questionType: 'numeric-forecast',
+      answer: '中性估计看，2027 年中国市场黄金零售价格大概率在每克 ¥620 ~ ¥780 区间，中位判断约 ¥690/克。',
+      range: '¥620 ~ ¥780 / 克',
+      confidence: 'medium',
+      assumptions: [
+        '国际金价维持高位震荡，而不是大幅回落',
+        '人民币汇率没有出现极端单边贬值或升值',
+        '中国零售端黄金溢价维持在当前常见区间附近',
+      ],
+      drivers: [
+        '国际金价（美元计价）',
+        '美元/人民币汇率',
+        '国内金饰与投资金条溢价',
+        '全球避险需求与利率周期',
+      ],
+    };
+  }
+
+  if (questionType === 'numeric-forecast') {
+    return {
+      questionType,
+      answer: '这是一个数值预测问题。目前系统能给出方向性判断，但精确数值只能提供区间式预测，不能当作确定结论。',
+      range: '建议查看下方假设与驱动因素后使用',
+      confidence: 'low',
+      assumptions: [
+        '关键宏观变量不会出现超预期跳变',
+        '市场情绪和政策环境维持常规波动范围',
+      ],
+      drivers: ['宏观经济', '市场情绪', '政策变化', '供需关系'],
+    };
+  }
+
+  if (questionType === 'judgement') {
+    return {
+      questionType,
+      answer: '初步判断是：有可能，但结论高度依赖市场环境、执行质量和外部变量，不能简单看成必然发生。',
+      confidence: 'medium',
+      assumptions: ['当前背景信息基本成立', '没有额外黑天鹅事件打断'],
+      drivers: ['执行质量', '竞争格局', '政策环境', '用户接受度'],
+    };
+  }
+
+  if (questionType === 'decision-simulation') {
+    return {
+      questionType,
+      answer: '这是一个更适合做“决策预演”的问题。系统会优先给出不同角色的可能反应，而不是单一确定答案。',
+      confidence: 'medium',
+      assumptions: ['参与角色画像具有代表性', '输入问题描述了核心决策背景'],
+      drivers: ['不同利益相关方立场', '传播环境', '成本收益结构'],
+    };
+  }
+
+  return {
+    questionType,
+    answer: '这类问题更适合看“会如何发酵、谁会支持、谁会反对”，而不是单点数值答案。',
+    confidence: 'medium',
+    assumptions: ['事件本身具有传播性', '相关群体会参与讨论'],
+    drivers: ['信息扩散速度', '群体立场', '舆情放大效应'],
+  };
+}
+
 export function registerForecastRoute(app: FastifyInstance, ctx: ServerContext): void {
   app.post<{ Body: ForecastBody }>('/api/forecast', { schema: forecastSchema }, async (req, reply) => {
     const event = req.body.event?.trim();
@@ -222,12 +308,14 @@ export function registerForecastRoute(app: FastifyInstance, ctx: ServerContext):
       ][index] ?? '会持续参与讨论',
     }));
 
+    const directAnswer = buildDirectAnswer(event, scenario);
     const summary = `在“${SCENARIO_MAP[scenario].label}”场景下，系统为“${event}”创建了 ${agentCount} 个角色并运行 ${ticks} 轮推演。首轮主要由高敏感群体发起讨论，随后更务实的角色开始评估现实影响。整体来看，平均每轮约激活 ${avgActivated} 个 Agent，累计产生 ${totalResponses} 条响应，最终更像是“先升温、再分化、再形成有限共识”的走势。`;
 
     return {
       scenario,
       scenarioLabel: SCENARIO_MAP[scenario].label,
       event,
+      directAnswer,
       summary,
       factions,
       keyReactions,

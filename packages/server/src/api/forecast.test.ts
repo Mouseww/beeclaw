@@ -9,7 +9,7 @@ import {
   silenceConsole,
   type TestContext,
 } from './__test_helpers__.js';
-import { registerForecastRoute } from './forecast.js';
+import { registerForecastRoute, inferQuestionType } from './forecast.js';
 
 // ── 共享 setup ──
 
@@ -27,6 +27,25 @@ afterEach(async () => {
 // ════════════════════════════════════════
 // POST /api/forecast — 正常路径
 // ════════════════════════════════════════
+
+describe('inferQuestionType', () => {
+  it('应为热点事件中的价格问题返回 numeric-forecast', () => {
+    expect(inferQuestionType('黄金 2027 年每克多少钱？', 'hot-event')).toBe('numeric-forecast');
+  });
+
+  it('应为判断类问题返回 judgement', () => {
+    expect(inferQuestionType('这项政策会不会导致失业上升？', 'policy-impact')).toBe('judgement');
+  });
+
+  it('应为热点事件中的普通事件返回 event-propagation', () => {
+    expect(inferQuestionType('某平台突然大规模裁员，会如何发酵？', 'hot-event')).toBe('event-propagation');
+  });
+
+  it('应为 product-launch 与 roundtable 默认返回 decision-simulation', () => {
+    expect(inferQuestionType('新品上线后用户会怎么反应？', 'product-launch')).toBe('decision-simulation');
+    expect(inferQuestionType('AI 是否值得进入教育行业？', 'roundtable')).toBe('decision-simulation');
+  });
+});
 
 describe('POST /api/forecast', () => {
   let app: FastifyInstance;
@@ -50,6 +69,12 @@ describe('POST /api/forecast', () => {
     expect(body.scenario).toBe('hot-event');
     expect(body.scenarioLabel).toBe('热点事件预测');
     expect(body.event).toBe('央行宣布降息 25 个基点');
+    expect(body.directAnswer).toMatchObject({
+      questionType: 'event-propagation',
+      confidence: 'medium',
+    });
+    expect(body.directAnswer.assumptions).toBeInstanceOf(Array);
+    expect(body.directAnswer.drivers).toBeInstanceOf(Array);
     expect(body.summary).toBeDefined();
     expect(body.factions).toBeInstanceOf(Array);
     expect(body.keyReactions).toBeInstanceOf(Array);
@@ -132,40 +157,64 @@ describe('POST /api/forecast', () => {
     expect(body.metrics.ticks).toBe(2);
   });
 
-  it('metrics 应包含 agentCount、responsesCollected、finalTick 等', async () => {
+  it('应根据问题类型返回 numeric directAnswer', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/forecast',
       payload: {
-        event: '指标测试',
+        event: '黄金 2027 年每克多少钱？',
+        scenario: 'hot-event',
         ticks: 1,
       },
     });
+
+    expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.metrics).toHaveProperty('agentCount');
-    expect(body.metrics).toHaveProperty('ticks');
-    expect(body.metrics).toHaveProperty('responsesCollected');
-    expect(body.metrics).toHaveProperty('averageActivatedAgents');
-    expect(body.metrics).toHaveProperty('consensusSignals');
-    expect(body.metrics).toHaveProperty('finalTick');
+    expect(body.directAnswer).toMatchObject({
+      questionType: 'numeric-forecast',
+      confidence: 'medium',
+      range: '¥620 ~ ¥780 / 克',
+    });
+    expect(body.directAnswer.answer).toContain('2027 年');
+    expect(body.directAnswer.assumptions.length).toBeGreaterThan(0);
+    expect(body.directAnswer.drivers.length).toBeGreaterThan(0);
   });
 
-  it('factions 应包含 name、share、summary', async () => {
+  it('应根据判断类问题返回 judgement directAnswer', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/forecast',
       payload: {
-        event: '派系测试',
+        event: '这项政策会不会导致房价明显下跌？',
+        scenario: 'policy-impact',
         ticks: 1,
       },
     });
+
+    expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.factions.length).toBeGreaterThan(0);
-    const faction = body.factions[0];
-    expect(faction).toHaveProperty('name');
-    expect(faction).toHaveProperty('share');
-    expect(faction).toHaveProperty('summary');
+    expect(body.directAnswer.questionType).toBe('judgement');
+    expect(body.directAnswer.confidence).toBe('medium');
+    expect(body.directAnswer.range).toBeUndefined();
   });
+
+  it('应为产品发布场景返回 decision-simulation directAnswer', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: {
+        event: '如果 BeeClaw 对普通用户开放，市场会怎么反应？',
+        scenario: 'product-launch',
+        ticks: 1,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.directAnswer.questionType).toBe('decision-simulation');
+    expect(body.directAnswer.answer).toContain('决策预演');
+  });
+
 
   // ── 错误处理 ──
 
