@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.43] - 2026-03-19
+
+### 🧪 Tests
+
+- **consensus:** 补齐 `ConsensusEngine` 信号恢复历史路径测试，覆盖 restoration history 在信号汇总与回溯场景下的稳定性
+
+---
+
 ## [1.0.42] - 2026-03-19
 
 ### 🧹 Maintenance
