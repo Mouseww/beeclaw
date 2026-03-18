@@ -46,3 +46,5 @@ export type { TransportLayer } from './TransportLayer.js';
 export { InProcessTransport } from './TransportLayer.js';
 export { RedisTransportLayer } from './RedisTransportLayer.js';
 export type { RedisTransportConfig } from './RedisTransportLayer.js';
+export { NATSTransportLayer } from './NATSTransportLayer.js';
+export type { NATSTransportConfig } from './NATSTransportLayer.js';

@@ -208,7 +208,13 @@ interface TransportLayer {
   sendToLeader(message: WorkerMessage): Promise<void>;
 
   // 消息订阅
-  onMessage(handler: (message: CoordinatorMessage | WorkerMessage) => void): void;
+  onWorkerMessage(workerId: string, handler: (message: CoordinatorMessage) => void): void;
+  onLeaderMessage(handler: (message: WorkerMessage) => void): void;
+
+  // Worker 注册
+  registerWorker(workerId: string): void;
+  unregisterWorker(workerId: string): void;
+  getRegisteredWorkerIds(): string[];
 }
 ```
 
@@ -217,8 +223,8 @@ interface TransportLayer {
 | 阶段 | 实现 | 适用场景 |
 |------|------|---------|
 | v1 | InProcessTransport | 测试、单机多 Worker 模拟 |
-| v2 (当前) | RedisTransportLayer | 多节点部署，基于 Redis Pub/Sub |
-| v3 (可选) | NATSTransport | 高性能场景，基于 NATS JetStream |
+| v2 | RedisTransportLayer | 多节点部署，基于 Redis Pub/Sub |
+| v3 | NATSTransportLayer | 高性能场景，基于 NATS（更低延迟、更轻量） |
 
 `InProcessTransport` 使用同步回调在同一进程内模拟消息传递，接口与远程实现完全一致。
 
@@ -339,6 +345,133 @@ const transportB = new RedisTransportLayer({ prefix: 'beeclaw-staging' });
 - **Worker 发现**：`getRegisteredWorkerIds()` 返回本地 handler 集合；`getRegisteredWorkerIdsAsync()` 查询 Redis Set 获取全局列表。
 - **序列化**：消息以 JSON 格式序列化，确保所有消息字段可 JSON 序列化。
 
+### 7.4 NATSTransportLayer 使用指南
+
+#### 安装依赖
+
+`nats` 已包含在 `@beeclaw/coordinator` 包的依赖中，无需单独安装。
+
+#### 连接配置
+
+```typescript
+import { NATSTransportLayer } from '@beeclaw/coordinator';
+import type { NATSTransportConfig } from '@beeclaw/coordinator';
+
+const config: NATSTransportConfig = {
+  servers: 'nats://127.0.0.1:4222',  // NATS 服务器，默认 nats://127.0.0.1:4222
+  token: 'my-token',                  // 认证 token（可选）
+  prefix: 'beeclaw',                  // Subject 前缀，默认 'beeclaw'
+};
+
+const transport = new NATSTransportLayer(config);
+await transport.connect();
+```
+
+#### Subject 设计
+
+| Subject | 格式 | 用途 |
+|---------|------|------|
+| Worker 专属 | `{prefix}.worker.{workerId}` | Coordinator → 指定 Worker |
+| Leader | `{prefix}.leader` | Worker → Leader |
+| 广播 | `{prefix}.broadcast` | Coordinator → 所有 Worker |
+
+> 注意：NATS 使用 `.` 作为 subject 层级分隔符（Redis 使用 `:`），支持通配符订阅。
+
+#### 多进程启动示例
+
+**Leader 进程 (coordinator.ts):**
+
+```typescript
+import { TickCoordinator, NATSTransportLayer } from '@beeclaw/coordinator';
+
+const transport = new NATSTransportLayer({
+  servers: process.env.NATS_URL ?? 'nats://127.0.0.1:4222',
+  token: process.env.NATS_TOKEN,
+});
+
+await transport.connect();
+
+const coordinator = new TickCoordinator(transport, {
+  workerTimeoutMs: 30000,
+  unhealthyThreshold: 3,
+});
+
+// Leader 监听 Worker 消息
+transport.onLeaderMessage((message) => {
+  coordinator.handleWorkerMessage(message);
+});
+
+console.log('[Leader] Waiting for workers...');
+```
+
+**Worker 进程 (worker.ts):**
+
+```typescript
+import { Worker, NATSTransportLayer } from '@beeclaw/coordinator';
+
+const transport = new NATSTransportLayer({
+  servers: process.env.NATS_URL ?? 'nats://127.0.0.1:4222',
+  token: process.env.NATS_TOKEN,
+});
+
+await transport.connect();
+
+const worker = new Worker(
+  { id: `worker-${process.pid}` },
+  transport,
+  myAgentExecutor,
+);
+
+await worker.sendReady();
+console.log(`[Worker ${process.pid}] Ready`);
+```
+
+**启动命令:**
+
+```bash
+# 启动 NATS 服务器（Docker 方式）
+docker run -d --name nats -p 4222:4222 nats:latest
+
+# 终端 1 — Leader
+NATS_URL=nats://localhost:4222 node dist/coordinator.js
+
+# 终端 2 — Worker 1
+NATS_URL=nats://localhost:4222 node dist/worker.js
+
+# 终端 3 — Worker 2
+NATS_URL=nats://localhost:4222 node dist/worker.js
+```
+
+#### 多集群隔离
+
+通过 `prefix` 配置可在同一 NATS 服务器上运行多个独立集群：
+
+```typescript
+// 集群 A
+const transportA = new NATSTransportLayer({ prefix: 'beeclaw-prod' });
+
+// 集群 B
+const transportB = new NATSTransportLayer({ prefix: 'beeclaw-staging' });
+```
+
+#### NATS vs Redis 对比
+
+| 维度 | Redis Pub/Sub | NATS |
+|------|--------------|------|
+| 延迟 | 毫秒级 | 微秒级 |
+| 依赖 | 需要 Redis 实例 | 轻量级 NATS 服务端 |
+| 连接数 | 每客户端需 2 连接（pub + sub） | 单连接 |
+| 持久化 | 无（Pub/Sub 不持久化） | 可选 JetStream |
+| 集群 | Redis Cluster | 内置集群 + 超级集群 |
+| 适用场景 | 已有 Redis 基础设施 | 追求低延迟、高吞吐 |
+
+#### 注意事项
+
+- **单连接**：NATS 客户端只需一个连接即可同时发布和订阅，比 Redis 更简洁。
+- **连接生命周期**：必须先调用 `connect()` 再使用任何消息方法；退出前调用 `disconnect()` 清理资源（内部使用 `drain()` 确保消息完整发送）。
+- **序列化**：消息以 JSON 格式序列化，通过 `StringCodec` 编解码。
+- **Subject 命名**：使用 `.` 分隔层级，便于后续利用 NATS 通配符（`*` / `>`）进行灵活订阅。
+
 ---
 
 ## 8. 扩展性考虑
@@ -361,4 +494,4 @@ Worker 下线时，其负责的 Agent 需要迁移到其他 Worker：
 
 ---
 
-*BeeClaw v1.0.21 — 分布式 Tick 架构设计*
+*BeeClaw v1.0.33 — 分布式 Tick 架构设计*

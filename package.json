@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "clean": "find packages -maxdepth 3 -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; find packages -name '*.tsbuildinfo' -not -path '*/node_modules/*' -delete 2>/dev/null; echo 'Clean done'",
-    "build": "npm run build -w packages/shared && npm run build -w packages/agent-runtime -w packages/social-graph -w packages/consensus && npm run build -w packages/event-bus && npm run build -w packages/event-ingestion -w packages/world-engine && npm run build -w packages/cli -w packages/server && npm run build -w packages/dashboard",
+    "build": "npm run build -w packages/shared && npm run build -w packages/agent-runtime -w packages/social-graph -w packages/consensus && npm run build -w packages/event-bus -w packages/coordinator && npm run build -w packages/event-ingestion -w packages/world-engine && npm run build -w packages/cli -w packages/server && npm run build -w packages/dashboard",
     "test": "npm run test --workspaces --if-present",
     "test:coverage": "npm run test --workspaces --if-present -- --coverage",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",

@@ -50,9 +50,9 @@
 - InProcessTransport 进程内通信实现 ✅
 - RedisTransportLayer 跨进程通信实现（基于 Redis Pub/Sub） ✅
 - SocialGraphSync 跨节点同步方案（primary 写入广播 + replica 只读副本 + 远程查询） ✅
+- NATSTransportLayer 高性能传输层（基于 NATS，微秒级延迟） ✅
 
 **待完成：**
-- NATSTransport 高性能传输层（可选）
 - 生产级部署与监控
 
 **关键步骤：**
@@ -168,7 +168,7 @@ Phase 2.2 — 数据增强 ✅
 
 Phase 2.3 — 可视化与扩展
   ├── Dashboard 增强 ✅
-  └── 水平扩展 🔶 (Redis TransportLayer 已实现，NATSTransport 待定)
+  └── 水平扩展 🔶 (Redis + NATS TransportLayer 已实现，生产级部署与监控待定)
 ```
 
 ---
