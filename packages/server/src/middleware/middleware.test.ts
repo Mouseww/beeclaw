@@ -524,6 +524,34 @@ describe('Rate Limit Middleware', () => {
     const res = await app.inject({ method: 'GET', url: '/api/test' });
     expect(res.headers['x-ratelimit-limit']).toBe('5');
   });
+
+  it('BEECLAW_RATE_LIMIT=0 时应禁用限速', async () => {
+    app = await buildApp('0');
+
+    for (let i = 0; i < 105; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/test' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBeUndefined();
+    }
+  });
+
+  it('BEECLAW_RATE_LIMIT<0 时应禁用限速', async () => {
+    app = await buildApp('-1');
+
+    for (let i = 0; i < 105; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/test' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['x-ratelimit-limit']).toBeUndefined();
+    }
+  });
+
+  it('BEECLAW_RATE_LIMIT 非数字时应回退到默认值 100', async () => {
+    app = await buildApp('invalid');
+
+    const res = await app.inject({ method: 'GET', url: '/api/test' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-ratelimit-limit']).toBe('100');
+  });
 });
 
 // ════════════════════════════════════════

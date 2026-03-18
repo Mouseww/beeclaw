@@ -19,7 +19,12 @@ const EXEMPT_ROUTES = ['/health', '/metrics/prometheus'];
  * - /health 和 /metrics/prometheus 不限速
  */
 export async function registerRateLimitMiddleware(app: FastifyInstance): Promise<void> {
-  const maxRequests = parseInt(process.env['BEECLAW_RATE_LIMIT'] ?? '100', 10);
+  const rawRateLimit = process.env['BEECLAW_RATE_LIMIT'] ?? '100';
+  const parsedRateLimit = Number.parseInt(rawRateLimit, 10);
+  const maxRequests = Number.isNaN(parsedRateLimit) ? 100 : parsedRateLimit;
+
+  // BEECLAW_RATE_LIMIT<=0 → 禁用限速
+  if (maxRequests <= 0) return;
 
   await app.register(rateLimit, {
     max: maxRequests,

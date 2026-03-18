@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.30] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- **Server Rate Limit:** `BEECLAW_RATE_LIMIT<=0` 现在会显式禁用限速，避免生产环境中将 `0` 误解释为立即触发限流
+- **Server Rate Limit:** `BEECLAW_RATE_LIMIT` 非数字值现在会安全回退到默认值 `100 req/min`
+
+### 🧪 Tests
+
+- **Server Middleware:** 新增限速配置边界测试，覆盖 `0`、负数和非数字环境变量场景
+
+---
+
 ## [1.0.28] - 2026-03-18
 
 ### 🧪 Tests
