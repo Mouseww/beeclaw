@@ -42,7 +42,7 @@ async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Resp
     });
   } catch (error) {
     if (isAbortError(error)) {
-      throw new Error(`API Timeout: ${DEFAULT_TIMEOUT_MS}ms`);
+      throw new Error(`API Timeout: ${DEFAULT_TIMEOUT_MS}ms`, { cause: error });
     }
     throw error;
   }
