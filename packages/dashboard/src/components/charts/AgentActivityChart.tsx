@@ -30,7 +30,7 @@ interface AgentActivityChartProps {
 }
 
 /** 将 TickResult 列表转为面积图数据 */
-function toActivityData(history: TickResult[]): AgentActivityDataPoint[] {
+export function toActivityData(history: TickResult[]): AgentActivityDataPoint[] {
   return [...history]
     .sort((a, b) => a.tick - b.tick)
     .map((t) => ({
@@ -42,7 +42,7 @@ function toActivityData(history: TickResult[]): AgentActivityDataPoint[] {
 }
 
 /** 自定义 Tooltip */
-function CustomTooltip({
+export function CustomTooltip({
   active,
   payload,
   label,

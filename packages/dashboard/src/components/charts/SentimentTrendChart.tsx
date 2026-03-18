@@ -29,7 +29,7 @@ interface SentimentTrendChartProps {
 }
 
 /** 将 TickResult 列表转换为图表数据点 */
-function toChartData(history: TickResult[]): SentimentDataPoint[] {
+export function toChartData(history: TickResult[]): SentimentDataPoint[] {
   return [...history]
     .sort((a, b) => a.tick - b.tick)
     .map((t) => ({
@@ -41,7 +41,7 @@ function toChartData(history: TickResult[]): SentimentDataPoint[] {
 }
 
 /** 自定义 Tooltip 内容 */
-function CustomTooltip({
+export function CustomTooltip({
   active,
   payload,
   label,

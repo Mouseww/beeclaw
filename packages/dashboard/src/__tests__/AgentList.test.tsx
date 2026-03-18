@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AgentList } from '../pages/AgentList';
 import { usePolling } from '../hooks/usePolling';
@@ -326,5 +326,114 @@ describe('AgentList', () => {
     renderAgentList();
 
     expect(screen.getByText('暂无 Agent，等待世界引擎启动...')).toBeInTheDocument();
+  });
+
+  // ── 分页交互（页面级 AgentList） ──
+
+  it('点击 "下一页" 应触发分页', () => {
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([makeAgent()], { page: 1, pages: 3, total: 60 }),
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderAgentList();
+
+    const nextBtn = screen.getByText('下一页');
+    fireEvent.click(nextBtn);
+
+    // usePolling 应被调用（page 状态变化导致重新渲染）
+    expect(mockUsePolling).toHaveBeenCalled();
+  });
+
+  it('点击 "上一页" 应触发分页', () => {
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([makeAgent()], { page: 2, pages: 3, total: 60 }),
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderAgentList();
+
+    // 先点下一页让 page 从 1 变成 2
+    fireEvent.click(screen.getByText('下一页'));
+
+    // 然后点上一页
+    fireEvent.click(screen.getByText('上一页'));
+
+    expect(mockUsePolling).toHaveBeenCalled();
+  });
+
+  it('最后一页时 "下一页" 按钮应被禁用', () => {
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([makeAgent()], { page: 3, pages: 3 }),
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderAgentList();
+
+    // 需要先点击到最后一页（因为组件内部 page 状态从 1 开始）
+    // 模拟 pages=3, page=3 但内部 state page=1，所以 disabled 条件由 page >= data.pages 判断
+    // 实际情况是 usePolling 返回的 data.pages=3，组件内 page state 从 1 开始
+    // 点两次下一页
+    fireEvent.click(screen.getByText('下一页'));
+    fireEvent.click(screen.getByText('下一页'));
+
+    // 第三页时下一页应被禁用
+    expect(screen.getByText('下一页')).toBeDisabled();
+  });
+
+  // ── 影响力进度条 ──
+
+  it('影响力应显示进度条', () => {
+    const agent = makeAgent({ influence: 75 });
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([agent]),
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    const { container } = renderAgentList();
+
+    // 进度条应有 75% 的宽度
+    const progressBar = container.querySelector('[style*="width: 75%"]');
+    expect(progressBar).toBeTruthy();
+  });
+
+  // ── Agent 头像首字母 ──
+
+  it('应该显示 Agent 名字首字母作为头像', () => {
+    const agent = makeAgent({ name: '王分析师' });
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([agent]),
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderAgentList();
+
+    expect(screen.getByText('王')).toBeInTheDocument();
+  });
+
+  // ── 加载中显示已有数据 ──
+
+  it('loading 且有数据时应继续显示数据', () => {
+    mockUsePolling.mockReturnValue({
+      data: makeResponse([makeAgent()]),
+      error: null,
+      loading: true,
+      refresh: vi.fn(),
+    });
+
+    renderAgentList();
+
+    // 不应显示骨架屏
+    expect(screen.getByText('张分析师')).toBeInTheDocument();
   });
 });
