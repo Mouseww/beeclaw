@@ -377,6 +377,35 @@ describe('Worker — 快照功能', () => {
       expect(snapshotMsg!.workerId).toBe('w1');
     });
 
+    it('传入 agentIds 时应只上报指定 Agent 的快照', async () => {
+      executor.loadAgents([
+        createTestAgentData({ id: 'a1' }),
+        createTestAgentData({ id: 'a2' }),
+      ]);
+
+      for (const id of ['a1', 'a2']) {
+        const agent = executor.getAgent(id)!;
+        vi.spyOn(agent, 'react').mockResolvedValue({
+          opinion: `来自 ${id} 的观点`,
+          action: 'speak',
+          emotionalState: 0.3,
+        });
+      }
+
+      const worker = new Worker({ id: 'w1' }, transport, executor);
+      worker.setAssignedAgents(['a1', 'a2']);
+
+      const received: WorkerMessage[] = [];
+      transport.onLeaderMessage((msg) => received.push(msg));
+
+      await worker.processTick(1, [createTestEvent()]);
+      const report = await worker.reportSnapshots(1, ['a2']);
+
+      expect(report).not.toBeNull();
+      expect(report!.snapshots).toHaveLength(1);
+      expect(report!.snapshots[0]!.agentData.id).toBe('a2');
+    });
+
     it('无快照时不应发送消息', async () => {
       const mockExecutor = createMockExecutor();
       const worker = new Worker({ id: 'w1' }, transport, mockExecutor);
@@ -424,8 +453,49 @@ describe('Worker — 快照功能', () => {
 
       const snapshotMsg = received.find(
         (m) => m.type === 'worker_snapshot_report',
-      );
+      ) as WorkerSnapshotReportMessage | undefined;
       expect(snapshotMsg).toBeDefined();
+      expect(snapshotMsg!.snapshots).toHaveLength(1);
+      expect(snapshotMsg!.snapshots[0]!.agentData.id).toBe('a1');
+    });
+
+    it('传入指定 agentIds 时应只上报目标 Agent 快照', async () => {
+      executor.loadAgents([
+        createTestAgentData({ id: 'a1' }),
+        createTestAgentData({ id: 'a2' }),
+      ]);
+
+      for (const id of ['a1', 'a2']) {
+        const agent = executor.getAgent(id)!;
+        vi.spyOn(agent, 'react').mockResolvedValue({
+          opinion: `来自 ${id} 的观点`,
+          action: 'speak',
+          emotionalState: 0.3,
+        });
+      }
+
+      const worker = new Worker({ id: 'w1' }, transport, executor);
+      worker.setAssignedAgents(['a1', 'a2']);
+
+      await worker.processTick(1, [createTestEvent()]);
+
+      const received: WorkerMessage[] = [];
+      transport.onLeaderMessage((msg) => received.push(msg));
+
+      await transport.sendToWorker('w1', {
+        type: 'request_snapshots',
+        agentIds: ['a2'],
+        tick: 1,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const snapshotMsg = received.find(
+        (m) => m.type === 'worker_snapshot_report',
+      ) as WorkerSnapshotReportMessage | undefined;
+      expect(snapshotMsg).toBeDefined();
+      expect(snapshotMsg!.snapshots).toHaveLength(1);
+      expect(snapshotMsg!.snapshots[0]!.agentData.id).toBe('a2');
     });
   });
 

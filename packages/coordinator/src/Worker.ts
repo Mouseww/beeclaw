@@ -54,6 +54,18 @@ export interface SnapshotProvider {
    * @param tick 当前 tick 编号
    * @param workerId 来源 Worker ID
    */
+  createSnapshots(
+    agentIds: string[],
+    tick: number,
+    workerId: string,
+  ): AgentStateSnapshot[];
+
+  /**
+   * 为最近一次激活的 Agent 生成状态快照
+   * @param agentIds 需要快照的 Agent ID 列表
+   * @param tick 当前 tick 编号
+   * @param workerId 来源 Worker ID
+   */
   createSnapshotsForActivated(
     agentIds: string[],
     tick: number,
@@ -68,6 +80,7 @@ export function isSnapshotProvider(obj: unknown): obj is SnapshotProvider {
   return (
     typeof obj === 'object' &&
     obj !== null &&
+    typeof (obj as SnapshotProvider).createSnapshots === 'function' &&
     typeof (obj as SnapshotProvider).createSnapshotsForActivated === 'function'
   );
 }
@@ -202,25 +215,30 @@ export class Worker {
    * 为最近一次 tick 中激活的 Agent 生成状态快照。
    *
    * 需要 executor 同时实现 SnapshotProvider 接口才能工作。
+   * @param agentIds 指定需要快照的 Agent ID 列表；未传入时默认使用最近一次 tick 激活的 Agent
    * @returns 快照数组，如果 executor 不支持则返回空数组
    */
-  generateSnapshots(tick: number): AgentStateSnapshot[] {
+  generateSnapshots(tick: number, agentIds?: string[]): AgentStateSnapshot[] {
     if (!isSnapshotProvider(this.executor)) {
       return [];
     }
-    return this.executor.createSnapshotsForActivated(
-      this.lastActivatedAgentIds,
-      tick,
-      this.id,
-    );
+
+    if (agentIds !== undefined) {
+      return this.executor.createSnapshots(agentIds, tick, this.id);
+    }
+
+    return this.executor.createSnapshotsForActivated(this.lastActivatedAgentIds, tick, this.id);
   }
 
   /**
    * 生成快照并上报给 Coordinator（通过 transport 发送）
    */
-  async reportSnapshots(tick: number): Promise<WorkerSnapshotReportMessage | null> {
+  async reportSnapshots(
+    tick: number,
+    agentIds?: string[],
+  ): Promise<WorkerSnapshotReportMessage | null> {
     const startTime = Date.now();
-    const snapshots = this.generateSnapshots(tick);
+    const snapshots = this.generateSnapshots(tick, agentIds);
 
     if (snapshots.length === 0) {
       return null;
@@ -273,7 +291,7 @@ export class Worker {
         break;
       case 'request_snapshots':
         // Coordinator 请求上报快照
-        this.handleSnapshotRequest(message.tick);
+        this.handleSnapshotRequest(message.tick, message.agentIds);
         break;
     }
   }
@@ -306,9 +324,9 @@ export class Worker {
   /**
    * 处理 Coordinator 请求快照的消息
    */
-  private async handleSnapshotRequest(tick: number): Promise<void> {
+  private async handleSnapshotRequest(tick: number, agentIds: string[]): Promise<void> {
     try {
-      await this.reportSnapshots(tick);
+      await this.reportSnapshots(tick, agentIds);
     } catch (error) {
       await this.transport.sendToLeader({
         type: 'worker_error',
