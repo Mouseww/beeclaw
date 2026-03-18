@@ -35,6 +35,7 @@ import { registerWebhooksRoute } from './api/webhooks.js';
 import { registerIngestionRoute } from './api/ingestion.js';
 import { registerSignalsRoute } from './api/signals.js';
 import { registerCoordinatorRoute } from './api/coordinator.js';
+import { registerForecastRoute } from './api/forecast.js';
 import { WebhookDispatcher } from './webhook/dispatcher.js';
 import { EventIngestion } from '@beeclaw/event-ingestion';
 import {
@@ -383,6 +384,7 @@ async function main(): Promise<void> {
   registerIngestionRoute(app, ctx);
   registerSignalsRoute(app, ctx);
   registerCoordinatorRoute(app, ctx);
+  registerForecastRoute(app, ctx);
 
   // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
   app.setErrorHandler((error: FastifyError, _req, reply) => {

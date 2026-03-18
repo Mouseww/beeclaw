@@ -840,3 +840,71 @@ export const signalsAccuracySchema = {
     },
   },
 };
+
+// ── /api/forecast ──
+
+export const forecastSchema = {
+  tags: ['scenario'],
+  summary: '用户输入式推演（自动匹配场景模板）',
+  body: {
+    type: 'object' as const,
+    required: ['event'],
+    properties: {
+      event: { type: 'string' as const, minLength: 1, description: '要推演的事件描述' },
+      scenario: {
+        type: 'string' as const,
+        enum: ['hot-event', 'product-launch', 'policy-impact', 'roundtable'],
+        description: '场景类型（默认 hot-event）',
+      },
+      ticks: { type: 'integer' as const, minimum: 1, maximum: 8, description: '推演轮数（默认 4，最大 8）' },
+      importance: { type: 'number' as const, minimum: 0.1, maximum: 1, description: '事件重要性（默认由场景决定）' },
+    },
+  },
+  response: {
+    200: {
+      type: 'object' as const,
+      properties: {
+        scenario: { type: 'string' as const },
+        scenarioLabel: { type: 'string' as const },
+        event: { type: 'string' as const },
+        summary: { type: 'string' as const },
+        factions: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              name: { type: 'string' as const },
+              share: { type: 'integer' as const },
+              summary: { type: 'string' as const },
+            },
+          },
+        },
+        keyReactions: {
+          type: 'array' as const,
+          items: {
+            type: 'object' as const,
+            properties: {
+              actor: { type: 'string' as const },
+              reaction: { type: 'string' as const },
+            },
+          },
+        },
+        risks: { type: 'array' as const, items: { type: 'string' as const } },
+        recommendations: { type: 'array' as const, items: { type: 'string' as const } },
+        metrics: {
+          type: 'object' as const,
+          properties: {
+            agentCount: { type: 'integer' as const },
+            ticks: { type: 'integer' as const },
+            responsesCollected: { type: 'integer' as const },
+            averageActivatedAgents: { type: 'integer' as const },
+            consensusSignals: { type: 'integer' as const },
+            finalTick: { type: 'integer' as const },
+          },
+        },
+        raw: { type: 'object' as const, additionalProperties: true },
+      },
+    },
+    400: ErrorResponseSchema,
+  },
+};
