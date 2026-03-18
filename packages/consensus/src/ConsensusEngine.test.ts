@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { ConsensusEngine } from './ConsensusEngine.js';
 import type { AgentResponseRecord } from './SentimentAggregator.js';
-import type { WorldEvent } from '@beeclaw/shared';
+import type { TargetAnalysis, WorldEvent } from '@beeclaw/shared';
 
 function createTestEvent(overrides: Partial<WorldEvent> = {}): WorldEvent {
   return {
@@ -61,6 +61,36 @@ function createNeutralRecord(agentId: string, credibility: number = 0.5): AgentR
       action: 'silent',
       emotionalState: 0.0,
       reasoning: '等待更多信息',
+    },
+  };
+}
+
+function createTargetAnalysis(overrides: Partial<TargetAnalysis> = {}): TargetAnalysis {
+  return {
+    name: 'AAPL',
+    category: 'stock',
+    stance: 0.6,
+    confidence: 0.8,
+    reasoning: '基本面向好',
+    ...overrides,
+  };
+}
+
+function createTargetRecord(
+  agentId: string,
+  targets: TargetAnalysis[],
+  credibility: number = 0.5
+): AgentResponseRecord {
+  return {
+    agentId,
+    agentName: `Agent ${agentId}`,
+    credibility,
+    response: {
+      opinion: '给出标的判断',
+      action: 'predict',
+      emotionalState: 0.4,
+      reasoning: '综合分析后给出判断',
+      targets,
     },
   };
 }
@@ -244,6 +274,94 @@ describe('ConsensusEngine', () => {
         createNeutralRecord('a3'),
       ]);
       expect(signal3.trend).toBe('weakening');
+    });
+  });
+
+  // ── targetSentiments 聚合 ──
+
+  describe('targetSentiments', () => {
+    it('单个标的分析时应输出 targetSentiments', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createTargetRecord('a1', [createTargetAnalysis({ name: 'AAPL', stance: 0.8, confidence: 0.9 })], 0.7),
+      ];
+
+      const signal = engine.analyze(1, createTestEvent(), responses);
+
+      expect(signal.targetSentiments).toHaveLength(1);
+      expect(signal.targetSentiments?.[0]).toMatchObject({
+        name: 'AAPL',
+        category: 'stock',
+        bullish: 1,
+        bearish: 0,
+        neutral: 0,
+      });
+      expect(signal.targetSentiments?.[0]?.avgStance).toBeCloseTo(0.8);
+      expect(signal.targetSentiments?.[0]?.avgConfidence).toBeCloseTo(0.9);
+    });
+
+    it('应按 credibility 加权聚合同一标的的 stance', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createTargetRecord('a1', [createTargetAnalysis({ name: 'TSLA', stance: 1, confidence: 0.9 })], 1),
+        createTargetRecord('a2', [createTargetAnalysis({ name: 'TSLA', stance: -1, confidence: 0.4 })], 0),
+      ];
+
+      const signal = engine.analyze(1, createTestEvent(), responses);
+      const target = signal.targetSentiments?.[0];
+
+      expect(target).toBeDefined();
+      expect(target?.name).toBe('TSLA');
+      expect(target?.bullish).toBe(1);
+      expect(target?.bearish).toBe(1);
+      expect(target?.neutral).toBe(0);
+      expect(target?.avgStance).toBeCloseTo(1 / 3, 5);
+      expect(target?.avgConfidence).toBeCloseTo(0.65);
+    });
+
+    it('应合并不同大小写的同名标的', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createTargetRecord('a1', [createTargetAnalysis({ name: 'btc', category: 'crypto', stance: 0.7 })], 0.6),
+        createTargetRecord('a2', [createTargetAnalysis({ name: 'BTC', category: 'crypto', stance: 0.1 })], 0.4),
+      ];
+
+      const signal = engine.analyze(1, createTestEvent(), responses);
+
+      expect(signal.targetSentiments).toHaveLength(1);
+      expect(signal.targetSentiments?.[0]).toMatchObject({
+        name: 'BTC',
+        category: 'crypto',
+        bullish: 1,
+        bearish: 0,
+        neutral: 1,
+      });
+    });
+
+    it('多个标的时应按参与人数降序排序', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createTargetRecord('a1', [createTargetAnalysis({ name: 'AAPL', stance: 0.7 })]),
+        createTargetRecord('a2', [createTargetAnalysis({ name: 'AAPL', stance: 0.6 })]),
+        createTargetRecord('a3', [createTargetAnalysis({ name: 'MSFT', stance: -0.8 })]),
+      ];
+
+      const signal = engine.analyze(1, createTestEvent(), responses);
+
+      expect(signal.targetSentiments).toHaveLength(2);
+      expect(signal.targetSentiments?.map(target => target.name)).toEqual(['AAPL', 'MSFT']);
+    });
+
+    it('空 targets 或缺失 targets 时不应输出 targetSentiments', () => {
+      const engine = new ConsensusEngine();
+      const responses = [
+        createBullishRecord('a1'),
+        createTargetRecord('a2', []),
+      ];
+
+      const signal = engine.analyze(1, createTestEvent(), responses);
+
+      expect(signal.targetSentiments).toBeUndefined();
     });
   });
 
