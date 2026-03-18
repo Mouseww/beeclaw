@@ -16,9 +16,28 @@ import type {
 } from '../types';
 
 const BASE_URL = '/api';
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`API Timeout: ${DEFAULT_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  }
+}
 
 async function fetchJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`);
   if (!res.ok) {
     throw new Error(`API Error: ${res.status} ${res.statusText}`);
   }
@@ -59,7 +78,7 @@ export async function injectEvent(body: {
   importance?: number;
   tags?: string[];
 }): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE_URL}/events`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/events`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -84,7 +103,7 @@ export function fetchIngestionSource(sourceId: string): Promise<IngestionSourceS
 export async function addRssSource(source: {
   id: string; name: string; url: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
 }): Promise<{ ok: boolean; id: string }> {
-  const res = await fetch(`${BASE_URL}/ingestion/sources`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(source),
@@ -97,7 +116,7 @@ export async function addRssSource(source: {
 export async function updateRssSource(sourceId: string, updates: {
   name?: string; url?: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
 }): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE_URL}/ingestion/sources/${sourceId}`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources/${sourceId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
@@ -108,7 +127,7 @@ export async function updateRssSource(sourceId: string, updates: {
 
 /** 删除 RSS 数据源 */
 export async function deleteRssSource(sourceId: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE_URL}/ingestion/sources/${sourceId}`, { method: 'DELETE' });
+  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources/${sourceId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
   return res.json();
 }
@@ -128,7 +147,7 @@ export async function forecastScenario(body: {
   scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
   ticks?: number;
 }): Promise<ForecastResult> {
-  const res = await fetch(`${BASE_URL}/forecast`, {
+  const res = await fetchWithTimeout(`${BASE_URL}/forecast`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

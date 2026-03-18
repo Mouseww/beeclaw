@@ -20,12 +20,16 @@ import {
   forecastScenario,
 } from '../api/client';
 
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 // Mock 全局 fetch
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
 beforeEach(() => {
   mockFetch.mockReset();
+  vi.restoreAllMocks();
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
 });
 
 afterEach(() => {
@@ -59,7 +63,9 @@ describe('fetchStatus', () => {
 
     const result = await fetchStatus();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/status');
+    expect(mockFetch).toHaveBeenCalledWith('/api/status', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -67,6 +73,25 @@ describe('fetchStatus', () => {
     mockFetch.mockResolvedValueOnce(mockErrorResponse(500, 'Internal Server Error'));
 
     await expect(fetchStatus()).rejects.toThrow('API Error: 500 Internal Server Error');
+  });
+
+  it('应该为请求附加默认超时', async () => {
+    mockFetch.mockResolvedValueOnce(mockOkResponse({ tick: 10, agentCount: 50, running: true }));
+
+    await fetchStatus();
+
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(DEFAULT_TIMEOUT_MS);
+    expect(mockFetch).toHaveBeenCalledWith('/api/status', {
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('请求超时时应该抛出明确异常', async () => {
+    const timeoutError = new Error('The operation was aborted');
+    timeoutError.name = 'AbortError';
+    mockFetch.mockRejectedValueOnce(timeoutError);
+
+    await expect(fetchStatus()).rejects.toThrow(`API Timeout: ${DEFAULT_TIMEOUT_MS}ms`);
   });
 });
 
@@ -79,7 +104,9 @@ describe('fetchAgents', () => {
 
     const result = await fetchAgents(2, 10);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/agents?page=2&size=10');
+    expect(mockFetch).toHaveBeenCalledWith('/api/agents?page=2&size=10', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -88,7 +115,9 @@ describe('fetchAgents', () => {
 
     await fetchAgents();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/agents?page=1&size=20');
+    expect(mockFetch).toHaveBeenCalledWith('/api/agents?page=1&size=20', {
+      signal: expect.any(AbortSignal),
+    });
   });
 });
 
@@ -101,7 +130,9 @@ describe('fetchAgent', () => {
 
     const result = await fetchAgent('agent-1');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-1', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 });
@@ -114,7 +145,9 @@ describe('fetchConsensus', () => {
 
     await fetchConsensus();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/consensus');
+    expect(mockFetch).toHaveBeenCalledWith('/api/consensus', {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('有 topic 参数时应正确编码', async () => {
@@ -122,7 +155,9 @@ describe('fetchConsensus', () => {
 
     await fetchConsensus('BTC 行情');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/consensus?topic=BTC%20%E8%A1%8C%E6%83%85');
+    expect(mockFetch).toHaveBeenCalledWith('/api/consensus?topic=BTC%20%E8%A1%8C%E6%83%85', {
+      signal: expect.any(AbortSignal),
+    });
   });
 });
 
@@ -134,7 +169,9 @@ describe('fetchHistory', () => {
 
     await fetchHistory(30);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/history?limit=30');
+    expect(mockFetch).toHaveBeenCalledWith('/api/history?limit=30', {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('默认 limit 应为 50', async () => {
@@ -142,7 +179,9 @@ describe('fetchHistory', () => {
 
     await fetchHistory();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/history?limit=50');
+    expect(mockFetch).toHaveBeenCalledWith('/api/history?limit=50', {
+      signal: expect.any(AbortSignal),
+    });
   });
 });
 
@@ -165,6 +204,7 @@ describe('injectEvent', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual({ ok: true });
   });
@@ -190,6 +230,7 @@ describe('injectEvent', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: expect.any(AbortSignal),
     });
   });
 });
@@ -203,7 +244,9 @@ describe('fetchIngestionStatus', () => {
 
     const result = await fetchIngestionStatus();
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion');
+    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -223,7 +266,9 @@ describe('fetchIngestionSource', () => {
 
     const result = await fetchIngestionSource('rss-1');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion/rss-1');
+    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion/rss-1', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -257,6 +302,7 @@ describe('addRssSource', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(source),
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual(responseData);
   });
@@ -290,6 +336,7 @@ describe('updateRssSource', () => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual({ ok: true });
   });
@@ -310,6 +357,7 @@ describe('updateRssSource', () => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+      signal: expect.any(AbortSignal),
     });
   });
 });
@@ -322,7 +370,10 @@ describe('deleteRssSource', () => {
 
     const result = await deleteRssSource('rss-1');
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion/sources/rss-1', { method: 'DELETE' });
+    expect(mockFetch).toHaveBeenCalledWith('/api/ingestion/sources/rss-1', {
+      method: 'DELETE',
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual({ ok: true });
   });
 
@@ -342,7 +393,9 @@ describe('fetchTickEvents', () => {
 
     const result = await fetchTickEvents(42);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/ticks/42/events');
+    expect(mockFetch).toHaveBeenCalledWith('/api/ticks/42/events', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -362,7 +415,9 @@ describe('fetchTickResponses', () => {
 
     const result = await fetchTickResponses(42);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/ticks/42/responses');
+    expect(mockFetch).toHaveBeenCalledWith('/api/ticks/42/responses', {
+      signal: expect.any(AbortSignal),
+    });
     expect(result).toEqual(data);
   });
 
@@ -397,6 +452,7 @@ describe('forecastScenario', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: expect.any(AbortSignal),
     });
     expect(result).toEqual(responseData);
   });
@@ -419,6 +475,7 @@ describe('forecastScenario', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: expect.any(AbortSignal),
     });
   });
 });
