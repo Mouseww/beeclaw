@@ -6,7 +6,7 @@
 # ── 世界引擎配置 ──
 world:
   tickIntervalMs: 30000            # Tick 间隔（毫秒）
-  maxAgents: 200                   # 最大 Agent 数量
+  maxAgents: 100                   # 最大 Agent 数量上限（与 v1.0.31 默认语义一致）
   eventRetentionTicks: 100         # 事件保留的 Tick 数
   enableNaturalSelection: false    # 是否启用自然淘汰
 

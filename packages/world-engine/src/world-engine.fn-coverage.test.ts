@@ -217,12 +217,12 @@ describe('ScenarioRunner 函数覆盖率补充', () => {
       const router = createMockModelRouter();
       const runner = new ScenarioRunner({ modelRouter: router });
       runner.loadTemplate(createTestTemplate({
-        worldConfig: { tickIntervalMs: 5000, maxAgents: 200 },
+        worldConfig: { tickIntervalMs: 5000, maxAgents: 100 },
       }));
 
       const engine = runner.getEngine()!;
       expect(engine.config.tickIntervalMs).toBe(5000);
-      expect(engine.config.maxAgents).toBe(200);
+      expect(engine.config.maxAgents).toBe(100);
     });
   });
 

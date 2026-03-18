@@ -275,7 +275,7 @@ describe('ScenarioRunner', () => {
       const template = createTestTemplate({
         worldConfig: {
           tickIntervalMs: 5000,
-          maxAgents: 200,
+          maxAgents: 100,
         },
       });
 
@@ -283,7 +283,7 @@ describe('ScenarioRunner', () => {
 
       const engine = runner.getEngine()!;
       expect(engine.config.tickIntervalMs).toBe(5000);
-      expect(engine.config.maxAgents).toBe(200);
+      expect(engine.config.maxAgents).toBe(100);
     });
   });
 

@@ -12,7 +12,7 @@ import type { WorldConfig, SpawnRule } from '@beeclaw/shared';
 
 const DEFAULT_CONFIG: WorldConfig = {
   tickIntervalMs: 30_000,        // 30 秒一个 tick
-  maxAgents: 200,
+  maxAgents: 100,
   eventRetentionTicks: 100,
   enableNaturalSelection: false, // MVP 阶段关闭
 };

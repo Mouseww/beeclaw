@@ -134,7 +134,7 @@ async function main(): Promise<void> {
   // 创建引擎
   const config: WorldConfig = {
     tickIntervalMs: 10_000,
-    maxAgents: 200,
+    maxAgents: 100,
     eventRetentionTicks: 100,
     enableNaturalSelection: false,
   };

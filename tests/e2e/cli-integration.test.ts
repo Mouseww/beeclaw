@@ -4,17 +4,47 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { buildTestWorld, silenceConsole, createMockModelRouter } from './helpers.js';
 import { WorldEngine } from '@beeclaw/world-engine';
 import type { WorldConfig } from '@beeclaw/shared';
 
 describe('CLI 功能集成测试', () => {
+  const DEFAULT_MAX_AGENTS = 100;
+  const defaultConfigPath = resolve(process.cwd(), 'config/default.yaml');
+
   beforeEach(() => {
     silenceConsole();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('默认 maxAgents 对齐', () => {
+    it('CLI、inject 与默认配置文件应统一为 100', () => {
+      const cliConfig: WorldConfig = {
+        tickIntervalMs: 30_000,
+        maxAgents: DEFAULT_MAX_AGENTS,
+        eventRetentionTicks: 100,
+        enableNaturalSelection: false,
+      };
+
+      const injectConfig: WorldConfig = {
+        tickIntervalMs: 10_000,
+        maxAgents: DEFAULT_MAX_AGENTS,
+        eventRetentionTicks: 100,
+        enableNaturalSelection: false,
+      };
+
+      const defaultConfigContent = readFileSync(defaultConfigPath, 'utf8');
+      const maxAgentsMatch = defaultConfigContent.match(/maxAgents:\s*(\d+)/);
+
+      expect(maxAgentsMatch?.[1]).toBe(String(DEFAULT_MAX_AGENTS));
+      expect(cliConfig.maxAgents).toBe(DEFAULT_MAX_AGENTS);
+      expect(injectConfig.maxAgents).toBe(DEFAULT_MAX_AGENTS);
+    });
   });
 
   // ── 模拟 CLI 核心逻辑 ──
@@ -33,7 +63,7 @@ describe('CLI 功能集成测试', () => {
 
       const config: WorldConfig = {
         tickIntervalMs: opts.tickInterval,
-        maxAgents: 200,
+        maxAgents: 100,
         eventRetentionTicks: 100,
         enableNaturalSelection: false,
       };

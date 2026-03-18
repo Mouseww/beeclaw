@@ -248,7 +248,7 @@ export class ScenarioRunner {
   private buildWorldConfig(template: ScenarioTemplate): WorldConfig {
     const defaults: WorldConfig = {
       tickIntervalMs: 30_000,
-      maxAgents: 200,
+      maxAgents: 100,
       eventRetentionTicks: 100,
       enableNaturalSelection: false,
     };

@@ -351,7 +351,7 @@ interface AlertSignal {
 - **事件传播半径** — 小事件只影响附近 Agent
 - **兴趣匹配** — Agent 只对自己专业/关注领域的事件响应
 - **休眠机制** — 连续 N 个 tick 无事可做的 Agent 进入 dormant 状态
-- 典型比例：1000 个 Agent，每个 tick 实际激活 50-200 个
+- 典型比例：1000 个 Agent，每个 tick 实际激活 50-100 个
 
 ### 4.3 批量 & 异步
 
