@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.35] - 2026-03-18
+
+### ✨ Features
+
+- **server:** 新增 `POST /api/forecast` 端点，支持用户输入式推演，自动匹配场景模板（热点事件/产品发布/政策影响/AI圆桌），返回派系分析、风险预警与行动建议
+- **dashboard:** 新增 `ForecastPage` 推演页面，含场景选择、轮数滑块、结果展示（阵营/反应/风险/建议）
+
+### 🐛 Bug Fixes
+
+- **server:** forecast API 增加 `try/catch`，引擎运行时异常现在返回 `500` 而非 unhandled rejection
+- **dashboard:** `forecastScenario` 客户端改进错误消息，从服务端 JSON body 提取详细错误而非仅返回 HTTP 状态码
+
+### 📝 Documentation
+
+- **docs:** `API.md` 补充完整的 `POST /api/forecast` 端点文档（请求参数、响应结构、错误码）
+
+### 🧪 Tests
+
+- **server:** 新增 forecast API 测试 13 项，覆盖全部场景类型、参数默认值、边界验证与错误处理
+- **dashboard:** 新增 Forecast 页面与 API client 测试，覆盖页面渲染、交互、loading、错误处理与路由导航
+
+### 🔧 Types
+
+- **dashboard:** `ForecastResult` 类型补充缺失的 `raw` 字段（`ticks` + `consensus`），与服务端响应对齐
+
+---
+
 ## [1.0.34] - 2026-03-18
 
 ### ✨ Features
