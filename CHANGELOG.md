@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.37] - 2026-03-18
+
+### ✨ Features
+
+- **deploy:** 新增完整 Kubernetes 部署清单，覆盖 namespace、configmap、secret、RBAC、API/dashboard/coordinator/worker、ingress 与 PVC，支持更完整的生产环境落地
+- **distributed:** 新增独立 worker 入口、K8s probes 与生产监控接入，完善分布式部署运行模型
+- **dashboard:** 新增移动端响应式侧边栏、导航打磨，并优化 Forecast 页面体验
+
+### 📝 Documentation
+
+- **ops:** 补充 Alertmanager 配置、RUNBOOK 与 deployment verification，完善生产运维与发布检查文档
+
+---
+
+# Changelog
+
 ## [1.0.36] - 2026-03-18
 
 ### 📝 Documentation
