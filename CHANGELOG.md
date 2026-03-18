@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.33] - 2026-03-18
+
+### ✨ Features
+
+- **coordinator:** 新增 `NATSTransportLayer` 高性能传输层，支持基于 NATS 的跨节点消息发布/订阅、请求/响应与主题隔离
+- **distributed docs:** 补全 NATS 分布式部署与使用指南，明确 Redis / NATS 的选型对比与集群前缀配置
+
+### 🧪 Tests
+
+- **coordinator:** 新增 `NATSTransportLayer` 全面测试覆盖，验证连接、订阅、请求响应与错误处理场景
+
+---
+
 ## [1.0.32] - 2026-03-18
 
 ### 🐛 Bug Fixes
