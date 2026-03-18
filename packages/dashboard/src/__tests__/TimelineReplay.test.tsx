@@ -58,6 +58,21 @@ function renderTimeline() {
   );
 }
 
+/**
+ * 渲染组件并等待内部异步副作用 settle（loadTickDetail / setCurrentIndex）。
+ * 使用场景：mockPollingReturn.data 包含 tick 历史数据时，组件 mount 后
+ * 会触发 useEffect → fetchTickEvents/fetchTickResponses → setState，
+ * 需要等这些微任务跑完才不会产生 act() warning。
+ */
+async function renderTimelineAndSettle() {
+  const result = renderTimeline();
+  // 等待所有 pending 的微任务（Promise resolve → setState）flush
+  await act(async () => {
+    // 让 queued microtasks (Promise.resolve in mock) 执行完
+  });
+  return result;
+}
+
 // ── 测试分组 ──
 
 describe('TimelineReplay', () => {
@@ -86,11 +101,11 @@ describe('TimelineReplay', () => {
     expect(screen.getByText('暂无历史数据，等待世界运行...')).toBeInTheDocument();
   });
 
-  it('有历史数据时应显示帧数统计', () => {
+  it('有历史数据时应显示帧数统计', async () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 }), makeTick({ tick: 3 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     expect(screen.getByText(/共 3 帧/)).toBeInTheDocument();
     expect(screen.getByText(/Tick 1–3/)).toBeInTheDocument();
   });
@@ -103,9 +118,9 @@ describe('TimelineReplay', () => {
 
   // ── 播放控制 ──
 
-  it('应该渲染播放控制按钮', () => {
+  it('应该渲染播放控制按钮', async () => {
     mockPollingReturn.data = { history: [makeTick({ tick: 1 })] };
-    renderTimeline();
+    await renderTimelineAndSettle();
     expect(screen.getByTestId('btn-play')).toBeInTheDocument();
     expect(screen.getByTestId('btn-stop')).toBeInTheDocument();
     expect(screen.getByTestId('btn-step-backward')).toBeInTheDocument();
@@ -117,7 +132,7 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     const playBtn = screen.getByTestId('btn-play');
     await user.click(playBtn);
     expect(screen.getByTestId('btn-pause')).toBeInTheDocument();
@@ -129,15 +144,15 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     await user.click(screen.getByTestId('btn-play'));
     await user.click(screen.getByTestId('btn-pause'));
     expect(screen.getByTestId('btn-play')).toBeInTheDocument();
   });
 
-  it('单帧时前进按钮应被禁用', () => {
+  it('单帧时前进按钮应被禁用', async () => {
     mockPollingReturn.data = { history: [makeTick({ tick: 5 })] };
-    renderTimeline();
+    await renderTimelineAndSettle();
     const forwardBtn = screen.getByTestId('btn-step-forward');
     expect(forwardBtn).toBeDisabled();
   });
@@ -147,7 +162,7 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     // 点击停止回到第一帧
     await user.click(screen.getByTestId('btn-stop'));
     await waitFor(() => {
@@ -164,7 +179,7 @@ describe('TimelineReplay', () => {
       ],
     };
     // 先停止，确保在第 0 帧
-    renderTimeline();
+    await renderTimelineAndSettle();
     await user.click(screen.getByTestId('btn-stop'));
     await user.click(screen.getByTestId('btn-step-forward'));
     await waitFor(() => {
@@ -174,11 +189,11 @@ describe('TimelineReplay', () => {
 
   // ── 时间轴滑块 ──
 
-  it('应该渲染时间轴滑块', () => {
+  it('应该渲染时间轴滑块', async () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 }), makeTick({ tick: 3 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     expect(screen.getByTestId('timeline-slider')).toBeInTheDocument();
   });
 
@@ -186,7 +201,7 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 10 }), makeTick({ tick: 20 }), makeTick({ tick: 30 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     const slider = screen.getByTestId('timeline-slider');
     await act(async () => {
       fireEvent.change(slider, { target: { value: '1' } });
@@ -198,11 +213,11 @@ describe('TimelineReplay', () => {
 
   // ── Tick 缩略时间轴 ──
 
-  it('应该渲染 tick 块', () => {
+  it('应该渲染 tick 块', async () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 }), makeTick({ tick: 3 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     expect(screen.getByTestId('tick-block-1')).toBeInTheDocument();
     expect(screen.getByTestId('tick-block-2')).toBeInTheDocument();
     expect(screen.getByTestId('tick-block-3')).toBeInTheDocument();
@@ -213,7 +228,7 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 }), makeTick({ tick: 3 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     await user.click(screen.getByTestId('tick-block-1'));
     await waitFor(() => {
       expect(screen.getByText('当前：Tick #1')).toBeInTheDocument();
@@ -231,7 +246,7 @@ describe('TimelineReplay', () => {
       ],
       total: 2,
     });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByText('央行降息')).toBeInTheDocument();
       expect(screen.getByText('AI 突破')).toBeInTheDocument();
@@ -241,7 +256,7 @@ describe('TimelineReplay', () => {
   it('无事件时应显示空状态', async () => {
     mockPollingReturn.data = { history: [makeTick({ tick: 1 })] };
     mockFetchTickEvents.mockResolvedValue({ events: [], total: 0 });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByText('该 Tick 无事件')).toBeInTheDocument();
     });
@@ -254,7 +269,7 @@ describe('TimelineReplay', () => {
       events: [{ id: 'e1', title: '测试事件', category: 'finance', importance: 0.7 }],
       total: 1,
     });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByTestId('event-item-e1')).toBeInTheDocument();
     });
@@ -279,7 +294,7 @@ describe('TimelineReplay', () => {
       ],
       total: 2,
     });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByTestId('event-item-e1')).toBeInTheDocument();
       expect(screen.getByText('张分析师')).toBeInTheDocument();
@@ -306,7 +321,7 @@ describe('TimelineReplay', () => {
       ],
       total: 2,
     });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByText('张分析师')).toBeInTheDocument();
       expect(screen.getByText('李交易员')).toBeInTheDocument();
@@ -316,7 +331,7 @@ describe('TimelineReplay', () => {
   it('无响应时应显示空状态', async () => {
     mockPollingReturn.data = { history: [makeTick({ tick: 1 })] };
     mockFetchTickResponses.mockResolvedValue({ responses: [], total: 0 });
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByText('该 Tick 无 Agent 响应')).toBeInTheDocument();
     });
@@ -324,16 +339,16 @@ describe('TimelineReplay', () => {
 
   // ── 速度控制 ──
 
-  it('应该渲染速度选择器', () => {
+  it('应该渲染速度选择器', async () => {
     mockPollingReturn.data = { history: [makeTick({ tick: 1 })] };
-    renderTimeline();
+    await renderTimelineAndSettle();
     expect(screen.getByTestId('speed-select')).toBeInTheDocument();
   });
 
   it('改变速度选项应不报错', async () => {
     const user = userEvent.setup();
     mockPollingReturn.data = { history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })] };
-    renderTimeline();
+    await renderTimelineAndSettle();
     const select = screen.getByTestId('speed-select');
     await user.selectOptions(select, '500');
     expect((select as HTMLSelectElement).value).toBe('500');
@@ -345,7 +360,7 @@ describe('TimelineReplay', () => {
     mockPollingReturn.data = {
       history: [makeTick({ tick: 42, eventsProcessed: 3, responsesCollected: 12, durationMs: 567 })],
     };
-    renderTimeline();
+    await renderTimelineAndSettle();
     await waitFor(() => {
       expect(screen.getByText('#42')).toBeInTheDocument();
       expect(screen.getByText('3')).toBeInTheDocument();
