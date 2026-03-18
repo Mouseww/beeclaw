@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.39] - 2026-03-18
+
+### ✨ Features
+
+- **forecast:** 完善 direct answer 输出链路，统一 API schema、服务端返回与 Dashboard 展示，提升直接问答型推演结果可用性
+- **coordinator:** 新增 Agent 状态快照导出与聚合机制，Worker 执行后的 memory / opinions / credibility 等状态现在可以回传并持久化
+
+### 🐛 Bug Fixes
+
+- **dashboard:** 清理 TimelineReplay 测试中的 React `act()` warning，稳定异步渲染与断言时序
+
+### 🧪 Tests
+
+- **forecast:** 补充 direct answer 回归测试，覆盖 API 与前端展示一致性
+- **coordinator:** 新增 AgentStateSnapshot 测试，覆盖快照生成、收集、上报与集成路径
+
+---
+
 ## [1.0.38] - 2026-03-18
 
 ### ✨ Features

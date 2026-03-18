@@ -1,6 +1,6 @@
 {
   "name": "beeclaw",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "description": "BeeClaw (BeeWorld) - 群体智能仿真引擎，由完整 LLM Agent 组成的持续演化的平行世界",
   "private": true,
   "bin": {
