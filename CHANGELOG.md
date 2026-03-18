@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.40] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- **docker:** 调整多阶段构建顺序，确保 `@beeclaw/coordinator` 在 `@beeclaw/agent-runtime` 之后构建，匹配真实 workspace 依赖关系并避免 Docker 镜像构建阶段的依赖顺序问题
+
+---
+
 ## [1.0.39] - 2026-03-18
 
 ### ✨ Features
