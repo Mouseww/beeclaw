@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.48] - 2026-03-19
+
+### 🧪 Tests
+
+- **coordinator:** 补齐 `RuntimeAgentExecutor` 快照导出路径测试，覆盖默认 changedFields、缺失 Agent、批量导出与 activated-only 分支，继续加固分布式协调核心路径回归保护
+
+---
+
 ## [1.0.47] - 2026-03-19
 
 ### 🧪 Tests
