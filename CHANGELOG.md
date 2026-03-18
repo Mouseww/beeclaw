@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.47] - 2026-03-19
+
+### 🧪 Tests
+
+- **event-ingestion:** 补齐 RSS retry backoff 边界测试，覆盖退避时序与失败恢复路径，继续加固事件接入层稳定性
+
+### 🐛 Bug Fixes
+
+- **shared:** 修复 `truncate` 在边界长度下的处理，避免截断逻辑出现异常结果
+
+---
+
 ## [1.0.46] - 2026-03-19
 
 ### 🧪 Tests
