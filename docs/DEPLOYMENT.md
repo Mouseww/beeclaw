@@ -639,6 +639,9 @@ docker cp beeclaw-server:/app/data/beeclaw.db ./beeclaw-backup.db
 
 ### Nginx 反向代理示例
 
+> 项目提供了完整的生产级 Nginx 配置，参见 [`deploy/nginx/beeclaw.conf`](../deploy/nginx/beeclaw.conf)。
+> 以下为简化示例，完整的 TLS 加固、告警配置、日志轮转、备份策略等请参阅 **[生产运维手册](OPERATIONS.md)**。
+
 ```nginx
 server {
     listen 443 ssl;

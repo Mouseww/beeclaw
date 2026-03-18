@@ -1,0 +1,116 @@
+# ============================================================================
+# BeeClaw — Prometheus 告警规则
+#
+# 部署: 挂载到 Prometheus 容器 /etc/prometheus/alerting_rules.yml
+# 配合 deploy/monitoring/prometheus.yml 中的 rule_files 使用
+# ============================================================================
+
+groups:
+  - name: beeclaw_health
+    rules:
+      # ── 服务可用性 ──────────────────────────────────────────────────────────
+      - alert: BeeclawDown
+        expr: up{job="beeclaw"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BeeClaw 服务不可达"
+          description: "BeeClaw 实例 {{ $labels.instance }} 已离线超过 1 分钟。"
+
+      # ── Agent 健康 ─────────────────────────────────────────────────────────
+      - alert: NoActiveAgents
+        expr: beeclaw_agents_active == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "无活跃 Agent"
+          description: "BeeClaw 没有活跃的 Agent 已超过 2 分钟，世界引擎可能已停止。"
+
+      - alert: AgentCountDrop
+        expr: (beeclaw_agents_total - beeclaw_agents_total offset 5m) / beeclaw_agents_total offset 5m < -0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 数量骤降"
+          description: "Agent 总数在 5 分钟内下降超过 50%（当前: {{ $value | humanizePercentage }}）。"
+
+  - name: beeclaw_llm
+    rules:
+      # ── LLM 调用健康 ──────────────────────────────────────────────────────
+      - alert: HighLLMFailureRate
+        expr: |
+          (beeclaw_llm_calls_failed / beeclaw_llm_calls_total) > 0.1
+          and beeclaw_llm_calls_total > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM 调用失败率过高"
+          description: "LLM 调用失败率超过 10%（当前: {{ $value | humanizePercentage }}）。请检查 LLM 服务可用性。"
+
+      - alert: LLMCallsStalled
+        expr: |
+          increase(beeclaw_llm_calls_total[5m]) == 0
+          and beeclaw_agents_active > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM 调用停滞"
+          description: "过去 5 分钟没有任何 LLM 调用，但存在活跃 Agent。世界引擎可能卡死。"
+
+  - name: beeclaw_performance
+    rules:
+      # ── 性能 ────────────────────────────────────────────────────────────────
+      - alert: HighTickDuration
+        expr: beeclaw_tick_avg_duration_ms > 48000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tick 执行耗时过长"
+          description: "Tick 平均耗时 {{ $value }}ms，接近或超过 Tick 间隔的 80%。考虑增大间隔或减少 Agent。"
+
+      - alert: HighMemoryUsage
+        expr: beeclaw_memory_heap_used_bytes > 1.5e+9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "堆内存使用过高"
+          description: "Node.js 堆内存使用 {{ $value | humanize1024 }}B，超过 1.5 GB 警戒线。"
+
+      - alert: CriticalMemoryUsage
+        expr: beeclaw_memory_heap_used_bytes > 2e+9
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "堆内存使用危急"
+          description: "Node.js 堆内存使用 {{ $value | humanize1024 }}B，超过 2 GB 危急线。可能导致 OOM。"
+
+      - alert: LowCacheHitRate
+        expr: |
+          beeclaw_cache_hit_rate < 0.3
+          and (beeclaw_cache_hits_total + beeclaw_cache_misses_total) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "缓存命中率过低"
+          description: "缓存命中率 {{ $value | humanizePercentage }}，低于 30%。可能需要调整缓存策略。"
+
+      # ── WebSocket ────────────────────────────────────────────────────────────
+      - alert: HighWebSocketDisconnects
+        expr: |
+          (beeclaw_ws_connections - beeclaw_ws_connections offset 2m) < -5
+          and beeclaw_ws_connections offset 2m > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket 连接大量断开"
+          description: "WebSocket 连接数在 2 分钟内下降超过 5 个，可能存在网络问题。"

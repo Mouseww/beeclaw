@@ -232,6 +232,7 @@ npm test
 - [架构设计](docs/ARCHITECTURE.md)
 - [API 参考](docs/API.md)
 - [部署指南](docs/DEPLOYMENT.md)
+- [生产运维手册](docs/OPERATIONS.md) — TLS、告警、备份、日志轮转、资源调优
 - [开发者指南](docs/DEVELOPMENT.md)
 - [更新日志](CHANGELOG.md)
 
@@ -260,7 +261,8 @@ Grafana Dashboard 预置面板：
 | 缓存性能 | `beeclaw_cache_hits_total`, `beeclaw_cache_misses_total`, `beeclaw_cache_hit_rate` |
 
 配置文件位于 `deploy/monitoring/`：
-- `prometheus.yml` — Prometheus 抓取配置
+- `prometheus.yml` — Prometheus 抓取配置 + 告警规则引用
+- `alerting_rules.yml` — Prometheus 告警规则（服务可用性、LLM 失败率、内存、Tick 耗时等）
 - `grafana-dashboard.json` — Grafana Dashboard 模板
 - `docker-compose.monitoring.yml` — 监控服务编排
 - `provisioning/` — Grafana 自动配置（数据源 + Dashboard Provider）
@@ -318,13 +320,15 @@ curl http://localhost:3001/api/health
 
 ### 生产检查清单
 
-- [ ] 配置 TLS（反向代理或 Let's Encrypt）
-- [ ] 设置强密码（PostgreSQL / Grafana / API Key）
-- [ ] 配置 Prometheus 告警规则（`alerting_rules.yml`）
-- [ ] 配置 Grafana 告警通知渠道（Slack / Email / Webhook）
-- [ ] 调整 Agent 数量和 Tick 间隔适配服务器资源
-- [ ] 配置日志归档和轮转
-- [ ] 设置数据库备份策略
+- [ ] 配置 TLS（反向代理或 Let's Encrypt）→ 参考 [`deploy/nginx/beeclaw.conf`](deploy/nginx/beeclaw.conf)
+- [ ] 设置强密码（PostgreSQL / Grafana / API Key）→ 参考 [运维手册 §2](docs/OPERATIONS.md#2-强密码与密钥管理)
+- [ ] 配置 Prometheus 告警规则 → 已预置 [`deploy/monitoring/alerting_rules.yml`](deploy/monitoring/alerting_rules.yml)
+- [ ] 配置 Grafana 告警通知渠道（Slack / Email / Webhook）→ 参考 [运维手册 §4](docs/OPERATIONS.md#4-grafana-告警通知渠道)
+- [ ] 调整 Agent 数量和 Tick 间隔适配服务器资源 → 参考 [运维手册 §5](docs/OPERATIONS.md#5-资源调优)
+- [ ] 配置日志归档和轮转 → 已预置 [`deploy/logrotate/beeclaw`](deploy/logrotate/beeclaw)
+- [ ] 设置数据库备份策略 → 已预置 [`deploy/backup/backup.sh`](deploy/backup/backup.sh)
+
+> 详细生产运维指南请阅读 **[docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
 ## 许可证
 

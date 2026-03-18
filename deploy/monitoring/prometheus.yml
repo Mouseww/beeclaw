@@ -10,6 +10,10 @@ global:
   evaluation_interval: 15s
   scrape_timeout: 10s
 
+# ── 告警规则 ─────────────────────────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/alerting_rules.yml"
+
 scrape_configs:
   # ── BeeClaw Server ──────────────────────────────────────────────────────────
   - job_name: "beeclaw"

@@ -1,0 +1,62 @@
+# ============================================================================
+# BeeClaw — logrotate 配置
+#
+# 安装:
+#   cp deploy/logrotate/beeclaw /etc/logrotate.d/beeclaw
+#
+# 测试:
+#   logrotate -d /etc/logrotate.d/beeclaw
+#
+# 手动执行:
+#   logrotate -f /etc/logrotate.d/beeclaw
+# ============================================================================
+
+# PM2 日志文件
+/root/.pm2/logs/beeclaw-out.log
+/root/.pm2/logs/beeclaw-error.log
+{
+    # 按大小轮转（50 MB）
+    size 50M
+
+    # 保留 14 份归档
+    rotate 14
+
+    # 使用 gzip 压缩归档
+    compress
+
+    # 延迟压缩（跳过最近的一个归档）
+    delaycompress
+
+    # 日志缺失不报错
+    missingok
+
+    # 空日志不轮转
+    notifempty
+
+    # 归档文件使用日期后缀
+    dateext
+    dateformat -%Y%m%d-%H%M%S
+
+    # 轮转后通知 PM2 重新打开日志文件
+    postrotate
+        pm2 reloadLogs > /dev/null 2>&1 || true
+    endscript
+}
+
+# 自定义日志目录（如有）
+/var/log/beeclaw/*.log
+{
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    dateext
+    create 0640 root root
+    sharedscripts
+    postrotate
+        # 如果使用 systemd
+        systemctl reload beeclaw > /dev/null 2>&1 || true
+    endscript
+}
