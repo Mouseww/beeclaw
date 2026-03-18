@@ -460,4 +460,66 @@ describe('ConsensusEngine', () => {
       expect(topicATick?.tick).toBe(2);
     });
   });
+
+  describe('持久化恢复', () => {
+    it('restoreSignals 应按 tick 排序恢复历史', () => {
+      const engine = new ConsensusEngine();
+
+      engine.restoreSignals([
+        {
+          topic: '恢复话题',
+          tick: 3,
+          sentimentDistribution: { bullish: 1, bearish: 0, neutral: 0 },
+          intensity: 0.8,
+          consensus: 0.9,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+        {
+          topic: '恢复话题',
+          tick: 1,
+          sentimentDistribution: { bullish: 0, bearish: 1, neutral: 0 },
+          intensity: 0.8,
+          consensus: 0.9,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+        {
+          topic: '恢复话题',
+          tick: 2,
+          sentimentDistribution: { bullish: 0, bearish: 0, neutral: 1 },
+          intensity: 0,
+          consensus: 1,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+      ]);
+
+      expect(engine.getSignalHistory('恢复话题').map(signal => signal.tick)).toEqual([1, 2, 3]);
+    });
+
+    it('restoreSignals 应仅保留最近 50 条历史', () => {
+      const engine = new ConsensusEngine();
+      const signals = Array.from({ length: 55 }, (_, index) => ({
+        topic: '长历史话题',
+        tick: 55 - index,
+        sentimentDistribution: { bullish: 1, bearish: 0, neutral: 0 },
+        intensity: 0.5,
+        consensus: 0.8,
+        trend: 'forming' as const,
+        topArguments: [],
+        alerts: [],
+      }));
+
+      engine.restoreSignals(signals);
+
+      const history = engine.getSignalHistory('长历史话题');
+      expect(history).toHaveLength(50);
+      expect(history[0]?.tick).toBe(6);
+      expect(history.at(-1)?.tick).toBe(55);
+    });
+  });
 });
