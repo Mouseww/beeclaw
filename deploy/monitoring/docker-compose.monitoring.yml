@@ -1,5 +1,5 @@
 # ============================================================================
-# BeeClaw — Monitoring Stack (Prometheus + Grafana)
+# BeeClaw — Monitoring Stack (Prometheus + Grafana + Alertmanager)
 #
 # 与主 docker-compose.yml 配合使用:
 #   docker compose -f docker-compose.yml -f deploy/monitoring/docker-compose.monitoring.yml up -d
@@ -36,6 +36,30 @@ services:
     networks:
       - beeclaw-monitoring
 
+  # ── Alertmanager ──────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: beeclaw-alertmanager
+    restart: unless-stopped
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.listen-address=:9093"
+      - "--cluster.listen-address="
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - beeclaw-monitoring
+
   # ── Grafana ─────────────────────────────────────────────────────────────────
   grafana:
     image: grafana/grafana:10.4.0
@@ -65,6 +89,8 @@ services:
 
 volumes:
   prometheus-data:
+    driver: local
+  alertmanager-data:
     driver: local
   grafana-data:
     driver: local

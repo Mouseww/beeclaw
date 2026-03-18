@@ -1,0 +1,39 @@
+# ============================================================================
+# BeeClaw — Ingress (nginx-ingress-controller)
+# ============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beeclaw-ingress
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    # WebSocket 支持
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    # 限流 — 100 req/s burst 200
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: beeclaw.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beeclaw-coordinator
+                port:
+                  name: http
+  # 生产环境取消注释并配置 TLS
+  # tls:
+  #   - hosts:
+  #       - beeclaw.example.com
+  #     secretName: beeclaw-tls

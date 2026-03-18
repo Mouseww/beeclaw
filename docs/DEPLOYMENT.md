@@ -4,6 +4,7 @@
 
 - [快速开始](#快速开始)
 - [Docker 部署（推荐）](#docker-部署推荐)
+- [Kubernetes 部署](#kubernetes-部署)
 - [手动部署](#手动部署)
 - [环境变量配置](#环境变量配置)
 - [LLM 服务配置](#llm-服务配置)
@@ -684,6 +685,83 @@ server {
 
 ---
 
+## Kubernetes 部署
+
+适用于生产环境高可用分布式部署。项目提供 Kustomize 配置，支持 staging 和 production 两套 overlay。
+
+### 前置条件
+
+- Kubernetes 1.27+
+- kubectl 已配置集群访问
+- (可选) kube-prometheus-stack 已安装（用于 ServiceMonitor / PrometheusRule）
+- 容器镜像已推送至 registry
+
+### 目录结构
+
+```
+deploy/k8s/
+├── base/                          # 基础资源
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── secret.yaml                # 模板，需替换真实密码
+│   ├── coordinator-deployment.yaml
+│   ├── worker-deployment.yaml
+│   ├── services.yaml
+│   ├── ingress.yaml
+│   ├── postgres-statefulset.yaml
+│   ├── redis-statefulset.yaml
+│   ├── hpa.yaml                   # Worker 自动扩缩容
+│   ├── pdb.yaml                   # Pod 中断预算
+│   └── monitoring.yaml            # ServiceMonitor + PrometheusRule
+└── overlays/
+    ├── production/                # 生产环境 (更大资源, 更多 Worker)
+    │   └── kustomization.yaml
+    └── staging/                   # 预发布环境
+        └── kustomization.yaml
+```
+
+### 快速部署
+
+```bash
+# Staging 环境
+kubectl apply -k deploy/k8s/overlays/staging
+
+# Production 环境
+kubectl apply -k deploy/k8s/overlays/production
+
+# 查看状态
+kubectl get all -n beeclaw
+kubectl get hpa -n beeclaw
+```
+
+### 重要事项
+
+1. **Secrets 管理**：`base/secret.yaml` 仅为模板，生产环境请使用 sealed-secrets、external-secrets 或 CI/CD pipeline 注入敏感信息。
+2. **Coordinator 单副本**：Coordinator 持有分布式锁，必须单副本运行（Recreate 策略），PDB 禁止驱逐。
+3. **Worker 自动扩缩容**：HPA 基于 CPU/内存利用率自动调整 Worker 副本数（生产环境 3-20 个）。
+4. **存储**：PostgreSQL 和 Redis 使用 PVC 持久化；生产环境推荐使用托管数据库服务。
+5. **监控集成**：如已安装 kube-prometheus-stack，ServiceMonitor 会自动注册抓取目标。
+
+### 部署验证
+
+```bash
+# 基础验证
+./scripts/verify-deployment.sh --base-url http://beeclaw.example.com
+
+# 完整验证 (含 K8s + 分布式 + 监控)
+./scripts/verify-deployment.sh \
+  --base-url http://beeclaw.example.com \
+  --k8s --namespace beeclaw \
+  --distributed --monitoring
+```
+
+### 运维手册
+
+详见 [docs/RUNBOOK.md](RUNBOOK.md)，包含：告警响应流程、日常运维操作、灾难恢复、性能调优。
+
+---
+
 ## 监控
 
 ### 健康检查
@@ -727,6 +805,29 @@ scrape_configs:
 - `beeclaw_tick_avg_duration_ms` — Tick 平均耗时
 - `beeclaw_cache_hit_rate` — 缓存命中率
 - `beeclaw_memory_heap_used_bytes` — 堆内存使用
+
+### Prometheus + Grafana + Alertmanager 监控栈
+
+项目提供完整的监控栈 Docker Compose 配置：
+
+```bash
+# 启动完整监控栈 (需先启动 BeeClaw 主服务)
+docker compose \
+  -f docker-compose.yml \
+  -f deploy/monitoring/docker-compose.monitoring.yml \
+  up -d
+```
+
+包含：
+- **Prometheus** (:9090) — 指标采集，17 条告警规则，30 天数据保留
+- **Alertmanager** (:9093) — 告警路由与通知（邮件 / Webhook），分级处理 critical/warning
+- **Grafana** (:3001) — 18 个可视化面板，覆盖世界状态、LLM、事件、内存等
+
+配置文件位于 `deploy/monitoring/`：
+- `prometheus.yml` — Prometheus 抓取配置（含 Alertmanager 集成）
+- `alerting_rules.yml` — 告警规则（服务健康 / LLM / 性能 / 分布式 Worker）
+- `alertmanager.yml` — Alertmanager 路由、通知、抑制规则
+- `grafana-dashboard.json` — Grafana Dashboard 导入文件
 
 ### WebSocket 实时监控
 

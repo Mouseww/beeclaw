@@ -1,0 +1,62 @@
+# ============================================================================
+# BeeClaw — Kustomize overlay: Staging
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: beeclaw-staging
+
+resources:
+  - ../../base
+
+# Staging 使用更小的资源，更少的 Worker
+patches:
+  - target:
+      kind: Deployment
+      name: beeclaw-worker
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: beeclaw-worker-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+
+  - target:
+      kind: ConfigMap
+      name: beeclaw-config
+    patch: |
+      - op: replace
+        path: /data/BEECLAW_MAX_AGENTS
+        value: "50"
+      - op: replace
+        path: /data/BEECLAW_INITIAL_AGENTS
+        value: "5"
+      - op: replace
+        path: /data/BEECLAW_WORKER_COUNT
+        value: "2"
+      - op: replace
+        path: /data/BEECLAW_LOG_LEVEL
+        value: "debug"
+
+  # Staging Ingress host
+  - target:
+      kind: Ingress
+      name: beeclaw-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.beeclaw.example.com
+
+images:
+  - name: beeclaw
+    newName: ghcr.io/mouseww/beeclaw
+    newTag: latest

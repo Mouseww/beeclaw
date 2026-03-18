@@ -1,0 +1,30 @@
+# ============================================================================
+# BeeClaw — Kustomize base
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: beeclaw
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres-statefulset.yaml
+  - redis-statefulset.yaml
+  - coordinator-deployment.yaml
+  - worker-deployment.yaml
+  - services.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - monitoring.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/version: "2.0"
+
+images:
+  - name: beeclaw
+    newName: ghcr.io/mouseww/beeclaw
+    newTag: latest

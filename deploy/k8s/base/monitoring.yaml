@@ -1,0 +1,220 @@
+# ============================================================================
+# BeeClaw — Prometheus 监控 (K8s 部署)
+#
+# 包含: ServiceMonitor + Alertmanager 配置 + PrometheusRule
+# 要求集群已安装 kube-prometheus-stack (prometheus-operator)
+# ============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: beeclaw-coordinator
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: coordinator
+    release: kube-prometheus-stack   # 匹配 operator 的 label selector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beeclaw
+      app.kubernetes.io/component: coordinator
+  endpoints:
+    - port: http
+      path: /metrics/prometheus
+      interval: 15s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: beeclaw-worker
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: worker
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beeclaw
+      app.kubernetes.io/component: worker
+  endpoints:
+    - port: health
+      path: /metrics/prometheus
+      interval: 15s
+      scrapeTimeout: 10s
+---
+# ============================================================================
+# PrometheusRule — 将告警规则纳入 Prometheus Operator 管理
+# ============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: beeclaw-alerts
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: beeclaw_health
+      rules:
+        - alert: BeeclawDown
+          expr: up{job=~"beeclaw.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "BeeClaw 服务不可达"
+            description: "{{ $labels.job }} 实例 {{ $labels.instance }} 已离线超过 1 分钟。"
+
+        - alert: NoActiveAgents
+          expr: beeclaw_agents_active == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "无活跃 Agent"
+            description: "BeeClaw 没有活跃的 Agent 已超过 2 分钟。"
+
+        - alert: AgentCountDrop
+          expr: |
+            (beeclaw_agents_total - beeclaw_agents_total offset 5m)
+            / beeclaw_agents_total offset 5m < -0.5
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Agent 数量骤降"
+            description: "Agent 总数在 5 分钟内下降超过 50%。"
+
+    - name: beeclaw_llm
+      rules:
+        - alert: HighLLMFailureRate
+          expr: |
+            (beeclaw_llm_calls_failed / beeclaw_llm_calls_total) > 0.1
+            and beeclaw_llm_calls_total > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "LLM 调用失败率过高 (>10%)"
+            description: "当前失败率: {{ $value | humanizePercentage }}"
+
+        - alert: LLMCallsStalled
+          expr: |
+            increase(beeclaw_llm_calls_total[5m]) == 0
+            and beeclaw_agents_active > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "LLM 调用停滞"
+            description: "过去 5 分钟没有 LLM 调用，但存在活跃 Agent。"
+
+    - name: beeclaw_performance
+      rules:
+        - alert: HighTickDuration
+          expr: beeclaw_tick_avg_duration_ms > 48000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tick 执行耗时过长 (>48s)"
+            description: "平均耗时 {{ $value }}ms"
+
+        - alert: HighMemoryUsage
+          expr: beeclaw_memory_heap_used_bytes > 1.5e+9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "堆内存使用过高 (>1.5GB)"
+
+        - alert: CriticalMemoryUsage
+          expr: beeclaw_memory_heap_used_bytes > 2e+9
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "堆内存使用危急 (>2GB)"
+
+        - alert: LowCacheHitRate
+          expr: |
+            beeclaw_cache_hit_rate < 0.3
+            and (beeclaw_cache_hits_total + beeclaw_cache_misses_total) > 100
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "缓存命中率过低 (<30%)"
+
+    - name: beeclaw_distributed
+      rules:
+        - alert: WorkerDown
+          expr: up{job=~".*worker.*"} == 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Worker 节点不可达"
+            description: "Worker {{ $labels.instance }} 已离线超过 1 分钟。"
+
+        - alert: AllWorkersDown
+          expr: |
+            count(up{job=~".*worker.*"} == 1) == 0
+            or absent(up{job=~".*worker.*"})
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "所有 Worker 节点离线"
+
+        - alert: WorkerHighErrorRate
+          expr: rate(beeclaw_worker_errors_total[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Worker {{ $labels.worker }} 错误率过高"
+
+        - alert: CoordinatorDown
+          expr: up{job=~".*coordinator.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Coordinator 不可达"
+
+    - name: beeclaw_k8s
+      rules:
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="beeclaw"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.pod }} CrashLooping"
+            description: "容器 {{ $labels.container }} 在 15 分钟内重启了 {{ $value }} 次。"
+
+        - alert: PodNotReady
+          expr: |
+            kube_pod_status_ready{namespace="beeclaw", condition="true"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} 未就绪"
+            description: "Pod 已超过 5 分钟未达到 Ready 状态。"
+
+        - alert: PVCAlmostFull
+          expr: |
+            kubelet_volume_stats_used_bytes{namespace="beeclaw"}
+            / kubelet_volume_stats_capacity_bytes{namespace="beeclaw"} > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC 使用率超过 85%"
+            description: "{{ $labels.persistentvolumeclaim }} 使用率已达 {{ $value | humanizePercentage }}。"

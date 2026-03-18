@@ -171,6 +171,11 @@ command: redis-server --appendonly yes --requirepass your-strong-password --maxm
 | `NoActiveAgents` | critical | 活跃 Agent 数为 0 |
 | `AgentCountDrop` | warning | Agent 数量 5 分钟内下降 > 50% |
 | `HighWebSocketDisconnects` | warning | WebSocket 连接数突降 |
+| `WorkerDown` | warning | 分布式 Worker 节点不可达超过 1 分钟 |
+| `AllWorkersDown` | critical | 所有 Worker 节点离线 |
+| `WorkerHighErrorRate` | warning | Worker 错误率过高 |
+| `WorkerTickDurationHigh` | warning | Worker Tick 执行耗时 > 25s |
+| `CoordinatorDown` | critical | 分布式 Coordinator 不可达 |
 
 ### 3.2 启用告警
 
@@ -206,60 +211,26 @@ curl http://localhost:9090/api/v1/rules | python3 -m json.tool
 curl http://localhost:9090/api/v1/alerts
 ```
 
-### 3.4 Alertmanager 集成（可选）
+### 3.4 Alertmanager 集成
 
-如果需要将告警发送到 Slack/Email/Webhook，部署 Alertmanager：
+Alertmanager 已集成到监控栈中（`deploy/monitoring/docker-compose.monitoring.yml`），
+配置文件为 `deploy/monitoring/alertmanager.yml`。启动监控栈时会自动部署。
 
-```yaml
-# 在 docker-compose.monitoring.yml 中添加
-alertmanager:
-  image: prom/alertmanager:v0.27.0
-  container_name: beeclaw-alertmanager
-  restart: unless-stopped
-  ports:
-    - "9093:9093"
-  volumes:
-    - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-  networks:
-    - beeclaw-monitoring
+**默认配置（需修改）：** 默认配置中的 SMTP 和 Webhook 地址为占位符，生产环境需替换为真实值。
+
+```bash
+# 修改 Alertmanager 配置
+vim deploy/monitoring/alertmanager.yml
+
+# 重新加载配置（无需重启）
+curl -X POST http://localhost:9093/-/reload
 ```
 
-Alertmanager 基本配置示例：
-
-```yaml
-# deploy/monitoring/alertmanager.yml
-global:
-  resolve_timeout: 5m
-
-route:
-  group_by: ['alertname', 'severity']
-  group_wait: 10s
-  group_interval: 10s
-  repeat_interval: 1h
-  receiver: 'default'
-  routes:
-    - match:
-        severity: critical
-      receiver: 'critical'
-
-receivers:
-  - name: 'default'
-    webhook_configs:
-      - url: 'https://your-webhook-endpoint.example.com/alerts'
-
-  - name: 'critical'
-    slack_configs:
-      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
-        channel: '#beeclaw-alerts'
-        title: '{{ .GroupLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
-    # email_configs:
-    #   - to: 'ops@example.com'
-    #     from: 'beeclaw-alerts@example.com'
-    #     smarthost: 'smtp.example.com:587'
-    #     auth_username: 'beeclaw-alerts@example.com'
-    #     auth_password: 'your-smtp-password'
-```
+关键配置项：
+- `global.smtp_smarthost` — 邮件 SMTP 服务器
+- `global.smtp_auth_password` — SMTP 认证密码
+- `receivers[].email_configs[].to` — 告警接收邮箱
+- `receivers[].webhook_configs[].url` — Webhook 端点（Slack / 钉钉 / 企业微信）
 
 ---
 

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beeclaw-config
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+data:
+  # Server
+  BEECLAW_PORT: "3000"
+  BEECLAW_HOST: "0.0.0.0"
+  BEECLAW_TICK_INTERVAL: "60000"
+  BEECLAW_INITIAL_AGENTS: "10"
+  BEECLAW_MAX_AGENTS: "100"
+  BEECLAW_SAVE_INTERVAL: "5"
+  BEECLAW_LOG_LEVEL: "info"
+  BEECLAW_RATE_LIMIT: "100"
+  NODE_ENV: "production"
+  # Database
+  BEECLAW_DB_DRIVER: "postgres"
+  # Distributed
+  BEECLAW_DISTRIBUTED: "true"
+  BEECLAW_WORKER_COUNT: "3"
+  BEECLAW_WORKER_HEALTH_PORT: "3001"
+  # Models (defaults - override in secrets or per-env configmap)
+  BEECLAW_LOCAL_MODEL: "qwen2.5:7b"
+  BEECLAW_CHEAP_MODEL: "qwen2.5:7b"
+  BEECLAW_STRONG_MODEL: "qwen2.5:72b"

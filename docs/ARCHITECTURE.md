@@ -518,7 +518,7 @@ Agent.react(event):
 - [x] 金融数据源接入（Yahoo Finance + 加密货币 + 市场情绪推断）
 - [x] 多场景模板（金融、舆论、产品测试）
 - [x] 性能优化（batch inference、缓存）— BatchInference、ResponseCache、AgentActivationPool 已实现
-- [x] 生产部署 + 监控 — Health check、Prometheus metrics、结构化日志已实现
+- [x] 生产部署 + 监控 — Health check、Prometheus metrics、结构化日志、K8s 部署清单、Alertmanager、运维手册已完成
 
 ---
 

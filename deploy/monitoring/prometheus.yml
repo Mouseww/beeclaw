@@ -10,6 +10,12 @@ global:
   evaluation_interval: 15s
   scrape_timeout: 10s
 
+# ── Alertmanager 配置 ──────────────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["beeclaw-alertmanager:9093"]
+
 # ── 告警规则 ─────────────────────────────────────────────────────────────────
 rule_files:
   - "/etc/prometheus/alerting_rules.yml"

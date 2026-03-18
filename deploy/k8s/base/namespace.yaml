@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/part-of: beeclaw

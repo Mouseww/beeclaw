@@ -1,0 +1,100 @@
+# ============================================================================
+# BeeClaw — PostgreSQL StatefulSet
+# 生产环境建议使用托管数据库服务 (RDS/CloudSQL)，此配置用于自托管场景
+# ============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: beeclaw-postgres
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: beeclaw-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beeclaw
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: beeclaw
+        app.kubernetes.io/component: postgres
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: beeclaw-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: beeclaw-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: beeclaw-secrets
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "beeclaw", "-d", "beeclaw"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "beeclaw", "-d", "beeclaw"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: beeclaw-postgres
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+  selector:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: postgres

@@ -1,0 +1,47 @@
+# ============================================================================
+# BeeClaw — HPA (Horizontal Pod Autoscaler) for Workers
+#
+# Worker 基于 CPU 利用率自动扩缩容
+# Coordinator 始终 1 副本，不需要 HPA
+# ============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: beeclaw-worker-hpa
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: beeclaw-worker
+  minReplicas: 2
+  maxReplicas: 10
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

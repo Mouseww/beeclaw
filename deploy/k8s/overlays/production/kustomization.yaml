@@ -1,0 +1,104 @@
+# ============================================================================
+# BeeClaw — Kustomize overlay: Production
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: beeclaw
+
+resources:
+  - ../../base
+
+# 生产环境 patch：更大的资源、更多 Worker、调优参数
+patches:
+  # Coordinator: 增大资源限制
+  - target:
+      kind: Deployment
+      name: beeclaw-coordinator
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+
+  # Worker: 增大资源限制
+  - target:
+      kind: Deployment
+      name: beeclaw-worker
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 5
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "1000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "4000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "4Gi"
+
+  # HPA: 生产环境 min=3, max=20
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: beeclaw-worker-hpa
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+
+  # PostgreSQL: 生产环境更大存储
+  - target:
+      kind: StatefulSet
+      name: beeclaw-postgres
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+
+  # ConfigMap: 生产环境参数
+  - target:
+      kind: ConfigMap
+      name: beeclaw-config
+    patch: |
+      - op: replace
+        path: /data/BEECLAW_MAX_AGENTS
+        value: "1000"
+      - op: replace
+        path: /data/BEECLAW_INITIAL_AGENTS
+        value: "50"
+      - op: replace
+        path: /data/BEECLAW_WORKER_COUNT
+        value: "5"
+      - op: replace
+        path: /data/BEECLAW_TICK_INTERVAL
+        value: "60000"
+
+images:
+  - name: beeclaw
+    newName: ghcr.io/mouseww/beeclaw
+    newTag: v2.0.0

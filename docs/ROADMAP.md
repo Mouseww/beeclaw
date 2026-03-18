@@ -41,7 +41,7 @@
 
 ---
 
-## 3. 水平扩展（分布式 Tick） 🔶
+## 3. 水平扩展（分布式 Tick） ✅
 
 **目标：** 单节点 Agent 容量有限（受 LLM 并发限制），需要支持多节点分布式 tick 执行。
 
@@ -51,9 +51,15 @@
 - RedisTransportLayer 跨进程通信实现（基于 Redis Pub/Sub） ✅
 - SocialGraphSync 跨节点同步方案（primary 写入广播 + replica 只读副本 + 远程查询） ✅
 - NATSTransportLayer 高性能传输层（基于 NATS，微秒级延迟） ✅
-
-**待完成：**
-- 生产级部署与监控
+- 生产级部署与监控 ✅
+  - Kubernetes 完整部署清单 (Kustomize base + staging/production overlays)
+  - Coordinator Deployment (单副本 Recreate 策略) + Worker Deployment (HPA 自动扩缩容)
+  - PostgreSQL / Redis StatefulSet + PVC 持久化
+  - ServiceMonitor + PrometheusRule (prometheus-operator 集成)
+  - Alertmanager 配置 (分级路由, 抑制规则)
+  - HPA (CPU/内存双维度, 缩容保护) + PDB (Coordinator 禁驱逐, Worker 50%最小可用)
+  - 部署验证脚本 (`scripts/verify-deployment.sh`)
+  - 运维手册 (`docs/RUNBOOK.md`)
 
 **关键步骤：**
 1. Tick 协调器：基于 Redis 的分布式锁 + tick 编号分发
@@ -166,11 +172,11 @@ Phase 2.2 — 数据增强 ✅
   ├── 实时事件采集增强 ✅
   └── 预测信号 API ✅
 
-Phase 2.3 — 可视化与扩展
+Phase 2.3 — 可视化与扩展 ✅
   ├── Dashboard 增强 ✅
-  └── 水平扩展 🔶 (Redis + NATS TransportLayer 已实现，生产级部署与监控待定)
+  └── 水平扩展 ✅ (分布式核心 + K8s 部署 + 监控告警 + 运维手册)
 ```
 
 ---
 
-*BeeClaw v2.0 — 从 MVP 到生产级群体智能平台*
+*BeeClaw v2.0 — Phase 2 全部完成！从 MVP 到生产级群体智能平台*

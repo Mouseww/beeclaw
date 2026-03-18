@@ -1,0 +1,86 @@
+# ============================================================================
+# BeeClaw — Alertmanager 配置
+#
+# 独立 Alertmanager 配置，适用于 Docker Compose 部署场景
+# K8s 场景使用 PrometheusRule + kube-prometheus-stack 内置 Alertmanager
+# ============================================================================
+
+global:
+  resolve_timeout: 5m
+  smtp_from: 'beeclaw-alerts@example.com'
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_auth_username: 'alerts@example.com'
+  smtp_auth_password: 'CHANGE_ME'
+  smtp_require_tls: true
+
+# 通知模板
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# 路由树
+route:
+  receiver: 'default-receiver'
+  group_by: ['alertname', 'severity', 'job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Critical 告警立即通知
+    - receiver: 'critical-receiver'
+      match:
+        severity: critical
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning 告警合并后通知
+    - receiver: 'warning-receiver'
+      match:
+        severity: warning
+      group_wait: 1m
+      repeat_interval: 8h
+
+# 通知抑制规则
+inhibit_rules:
+  # 如果 critical 已触发，抑制同名 warning
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['alertname']
+
+  # 如果整个服务 down，抑制子告警
+  - source_match:
+      alertname: BeeclawDown
+    target_match_re:
+      alertname: '(NoActiveAgents|LLMCallsStalled|HighTickDuration)'
+
+  # 所有 Worker down 时抑制单个 Worker 告警
+  - source_match:
+      alertname: AllWorkersDown
+    target_match:
+      alertname: WorkerDown
+
+receivers:
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://localhost:9094/webhook'
+        send_resolved: true
+
+  - name: 'critical-receiver'
+    # 邮件通知
+    email_configs:
+      - to: 'ops-team@example.com'
+        send_resolved: true
+        headers:
+          subject: '[CRITICAL] BeeClaw Alert: {{ .GroupLabels.alertname }}'
+    # Webhook (Slack / DingTalk / 企业微信)
+    webhook_configs:
+      - url: 'http://localhost:9094/webhook'
+        send_resolved: true
+
+  - name: 'warning-receiver'
+    email_configs:
+      - to: 'dev-team@example.com'
+        send_resolved: true
+        headers:
+          subject: '[WARNING] BeeClaw Alert: {{ .GroupLabels.alertname }}'

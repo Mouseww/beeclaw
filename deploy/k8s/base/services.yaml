@@ -1,0 +1,45 @@
+# ============================================================================
+# BeeClaw — Services
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: beeclaw-coordinator
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: coordinator
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: coordinator
+---
+# Worker headless service — 用于 Prometheus service discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: beeclaw-worker
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: worker
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3001"
+    prometheus.io/path: "/metrics/prometheus"
+spec:
+  clusterIP: None   # Headless — 每个 Pod 独立被 Prometheus discover
+  ports:
+    - name: health
+      port: 3001
+      targetPort: health
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: worker

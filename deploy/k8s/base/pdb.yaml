@@ -1,0 +1,36 @@
+# ============================================================================
+# BeeClaw — PodDisruptionBudget
+#
+# 保证滚动升级和节点维护期间的最小可用性
+# ============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: beeclaw-coordinator-pdb
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: coordinator
+spec:
+  # Coordinator 只有 1 副本，禁止在维护期间驱逐
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beeclaw
+      app.kubernetes.io/component: coordinator
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: beeclaw-worker-pdb
+  namespace: beeclaw
+  labels:
+    app.kubernetes.io/name: beeclaw
+    app.kubernetes.io/component: worker
+spec:
+  # 至少保持 50% Worker 可用
+  minAvailable: "50%"
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beeclaw
+      app.kubernetes.io/component: worker
