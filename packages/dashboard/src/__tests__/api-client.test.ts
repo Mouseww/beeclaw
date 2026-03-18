@@ -45,6 +45,15 @@ function mockOkResponse(data: unknown) {
   };
 }
 
+function mockInvalidJsonResponse() {
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON')),
+  };
+}
+
 function mockErrorResponse(status: number, statusText: string) {
   return {
     ok: false,
@@ -92,6 +101,12 @@ describe('fetchStatus', () => {
     mockFetch.mockRejectedValueOnce(timeoutError);
 
     await expect(fetchStatus()).rejects.toThrow(`API Timeout: ${DEFAULT_TIMEOUT_MS}ms`);
+  });
+
+  it('响应 JSON 无法解析时应该抛出明确异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockInvalidJsonResponse());
+
+    await expect(fetchStatus()).rejects.toThrow('API Error: Invalid JSON response from /status');
   });
 });
 
@@ -215,6 +230,12 @@ describe('injectEvent', () => {
     await expect(injectEvent({ title: 'x', content: 'y' })).rejects.toThrow('API Error: 400');
   });
 
+  it('成功响应 JSON 无法解析时应该抛出明确异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockInvalidJsonResponse());
+
+    await expect(injectEvent({ title: 'x', content: 'y' })).rejects.toThrow('API Error: Invalid JSON response from /events');
+  });
+
   it('应该包含 tags 字段', async () => {
     mockFetch.mockResolvedValueOnce(mockOkResponse({ ok: true }));
 
@@ -313,6 +334,14 @@ describe('addRssSource', () => {
     await expect(addRssSource({ id: 'dup', name: 'Dup', url: 'http://x.com' })).rejects.toThrow('API Error: 409');
   });
 
+  it('成功响应 JSON 无法解析时应该抛出明确异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockInvalidJsonResponse());
+
+    await expect(addRssSource({ id: 'dup', name: 'Dup', url: 'http://x.com' })).rejects.toThrow(
+      'API Error: Invalid JSON response from /ingestion/sources',
+    );
+  });
+
   it('最小字段也应正常工作', async () => {
     mockFetch.mockResolvedValueOnce(mockOkResponse({ ok: true, id: 'min' }));
 
@@ -345,6 +374,14 @@ describe('updateRssSource', () => {
     mockFetch.mockResolvedValueOnce(mockErrorResponse(404, 'Not Found'));
 
     await expect(updateRssSource('nonexistent', { name: 'x' })).rejects.toThrow('API Error: 404');
+  });
+
+  it('成功响应 JSON 无法解析时应该抛出明确异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockInvalidJsonResponse());
+
+    await expect(updateRssSource('rss-1', { name: 'x' })).rejects.toThrow(
+      'API Error: Invalid JSON response from /ingestion/sources/rss-1',
+    );
   });
 
   it('部分字段更新应正常工作', async () => {
@@ -381,6 +418,14 @@ describe('deleteRssSource', () => {
     mockFetch.mockResolvedValueOnce(mockErrorResponse(404, 'Not Found'));
 
     await expect(deleteRssSource('nonexistent')).rejects.toThrow('API Error: 404');
+  });
+
+  it('成功响应 JSON 无法解析时应该抛出明确异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockInvalidJsonResponse());
+
+    await expect(deleteRssSource('rss-1')).rejects.toThrow(
+      'API Error: Invalid JSON response from /ingestion/sources/rss-1',
+    );
   });
 });
 

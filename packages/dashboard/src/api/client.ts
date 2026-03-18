@@ -22,6 +22,18 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function formatInvalidJSONError(path: string): Error {
+  return new Error(`API Error: Invalid JSON response from ${path}`);
+}
+
+async function parseJSON<T>(res: Response, path: string): Promise<T> {
+  try {
+    return await res.json() as T;
+  } catch {
+    throw formatInvalidJSONError(path);
+  }
+}
+
 async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(input, {
@@ -41,7 +53,7 @@ async function fetchJSON<T>(path: string): Promise<T> {
   if (!res.ok) {
     throw new Error(`API Error: ${res.status} ${res.statusText}`);
   }
-  return res.json() as Promise<T>;
+  return parseJSON<T>(res, path);
 }
 
 /** 获取服务器状态 */
@@ -78,7 +90,8 @@ export async function injectEvent(body: {
   importance?: number;
   tags?: string[];
 }): Promise<{ ok: boolean }> {
-  const res = await fetchWithTimeout(`${BASE_URL}/events`, {
+  const path = '/events';
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -86,7 +99,7 @@ export async function injectEvent(body: {
   if (!res.ok) {
     throw new Error(`API Error: ${res.status}`);
   }
-  return res.json() as Promise<{ ok: boolean }>;
+  return parseJSON<{ ok: boolean }>(res, path);
 }
 
 /** 获取 Ingestion 状态 */
@@ -103,33 +116,36 @@ export function fetchIngestionSource(sourceId: string): Promise<IngestionSourceS
 export async function addRssSource(source: {
   id: string; name: string; url: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
 }): Promise<{ ok: boolean; id: string }> {
-  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources`, {
+  const path = '/ingestion/sources';
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(source),
   });
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
-  return res.json();
+  return parseJSON<{ ok: boolean; id: string }>(res, path);
 }
 
 /** 更新 RSS 数据源 */
 export async function updateRssSource(sourceId: string, updates: {
   name?: string; url?: string; category?: string; tags?: string[]; pollIntervalMs?: number; enabled?: boolean;
 }): Promise<{ ok: boolean }> {
-  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources/${sourceId}`, {
+  const path = `/ingestion/sources/${sourceId}`;
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   });
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
-  return res.json();
+  return parseJSON<{ ok: boolean }>(res, path);
 }
 
 /** 删除 RSS 数据源 */
 export async function deleteRssSource(sourceId: string): Promise<{ ok: boolean }> {
-  const res = await fetchWithTimeout(`${BASE_URL}/ingestion/sources/${sourceId}`, { method: 'DELETE' });
+  const path = `/ingestion/sources/${sourceId}`;
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`API Error: ${res.status}`);
-  return res.json();
+  return parseJSON<{ ok: boolean }>(res, path);
 }
 
 /** 获取 Tick 的事件 */

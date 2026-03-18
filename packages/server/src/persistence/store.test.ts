@@ -209,6 +209,26 @@ describe('Store', () => {
       expect(page4.rows.length).toBe(1);
     });
 
+    it('getAgentRows 超出最后一页时应返回空结果但 total 保持正确', async () => {
+      for (let i = 1; i <= 10; i++) {
+        await store.saveAgent(createMockAgent(`a${i}`, `Agent${i}`));
+      }
+
+      const page5 = await store.getAgentRows(5, 3);
+      expect(page5.total).toBe(10);
+      expect(page5.rows).toEqual([]);
+    });
+
+    it('getAgentRows 最后一页不足 size 时应仅返回剩余记录', async () => {
+      for (let i = 1; i <= 10; i++) {
+        await store.saveAgent(createMockAgent(`a${i}`, `Agent${i}`));
+      }
+
+      const lastPage = await store.getAgentRows(3, 4);
+      expect(lastPage.total).toBe(10);
+      expect(lastPage.rows).toHaveLength(2);
+    });
+
     it('saveAgent 应支持更新（INSERT OR REPLACE）', async () => {
       const agent = createMockAgent('a1', 'Agent1');
       await store.saveAgent(agent);
@@ -273,6 +293,14 @@ describe('Store', () => {
       }
       const history = await store.getTickHistory();
       expect(history.length).toBe(50);
+    });
+
+    it('getTickHistory limit 为 0 时应返回空数组', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await store.saveTickResult(makeTickResult(i));
+      }
+
+      expect(await store.getTickHistory(0)).toEqual([]);
     });
 
     it('saveTickResult 相同 tick 应覆盖', async () => {
