@@ -66,6 +66,7 @@ export interface TickResponse {
   opinion: string;
   action: string;
   emotionalState: number;
+  eventId?: string;
 }
 
 /** Agent 列表项（/api/agents 分页响应中的单项） */

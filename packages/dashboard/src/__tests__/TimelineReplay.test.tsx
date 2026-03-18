@@ -265,6 +265,36 @@ describe('TimelineReplay', () => {
     });
   });
 
+  it('点击事件应只显示关联的 Agent 响应', async () => {
+    const user = userEvent.setup();
+    mockPollingReturn.data = { history: [makeTick({ tick: 1, responsesCollected: 2 })] };
+    mockFetchTickEvents.mockResolvedValue({
+      events: [{ id: 'e1', title: '测试事件', category: 'finance', importance: 0.7 }],
+      total: 1,
+    });
+    mockFetchTickResponses.mockResolvedValue({
+      responses: [
+        { agentId: 'a1', agentName: '张分析师', opinion: '看涨', action: 'buy', emotionalState: 0.5, eventId: 'e1' },
+        { agentId: 'a2', agentName: '李交易员', opinion: '观望', action: 'hold', emotionalState: 0, eventId: 'e2' },
+      ],
+      total: 2,
+    });
+    renderTimeline();
+    await waitFor(() => {
+      expect(screen.getByTestId('event-item-e1')).toBeInTheDocument();
+      expect(screen.getByText('张分析师')).toBeInTheDocument();
+      expect(screen.getByText('李交易员')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('event-item-e1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('张分析师')).toBeInTheDocument();
+      expect(screen.queryByText('李交易员')).not.toBeInTheDocument();
+      expect(screen.getByText('Agent 响应（1）')).toBeInTheDocument();
+    });
+  });
+
   // ── Agent 响应列表 ──
 
   it('有响应数据时应渲染 Agent 响应', async () => {

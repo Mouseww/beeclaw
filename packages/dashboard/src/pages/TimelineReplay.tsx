@@ -120,7 +120,7 @@ export function TimelineReplay() {
 
   // 根据选中事件过滤响应
   const filteredResponses = selectedEventId
-    ? tickResponses.filter((r) => r.opinion?.includes(selectedEventId) || true)
+    ? tickResponses.filter((r) => r.eventId === selectedEventId)
     : tickResponses;
 
   if (error) return <ErrorState message={error} onRetry={refresh} />;
