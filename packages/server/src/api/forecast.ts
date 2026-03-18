@@ -195,8 +195,13 @@ export function registerForecastRoute(app: FastifyInstance, ctx: ServerContext):
     engine.injectEvent(scenarioEvent);
 
     const tickResults = [];
-    for (let i = 0; i < ticks; i++) {
-      tickResults.push(await engine.step());
+    try {
+      for (let i = 0; i < ticks; i++) {
+        tickResults.push(await engine.step());
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown engine error';
+      return reply.status(500).send({ error: `forecast engine failed at tick ${tickResults.length + 1}: ${message}` });
     }
 
     const lastTick = tickResults.at(-1);

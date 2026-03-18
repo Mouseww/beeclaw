@@ -284,4 +284,8 @@ export interface ForecastResult {
     consensusSignals: number;
     finalTick: number;
   };
+  raw?: {
+    ticks: unknown[];
+    consensus: unknown[];
+  };
 }

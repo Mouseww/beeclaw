@@ -2,7 +2,7 @@
 // @beeclaw/server — /api/forecast 路由测试
 // ============================================================================
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import {
   buildTestContext,
@@ -223,5 +223,65 @@ describe('POST /api/forecast', () => {
       },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('仅含空白字符的 event 应返回 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: { event: '   \n\t  ' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error).toBe('event required');
+  });
+
+  it('importance 低于 0.1 应返回 400（schema minimum=0.1）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: { event: 'importance 下界', importance: 0.01 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('importance 超过 1 应返回 400（schema maximum=1）', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: { event: 'importance 上界', importance: 1.5 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('引擎 step 抛出异常时应返回 500 并携带详细消息', async () => {
+    // 在路由注册之后 mock WorldEngine.prototype.step
+    const { WorldEngine } = await import('@beeclaw/world-engine');
+    vi.spyOn(WorldEngine.prototype, 'step').mockRejectedValueOnce(new Error('LLM 服务不可用'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: { event: '引擎异常测试', ticks: 1 },
+    });
+    expect(res.statusCode).toBe(500);
+    const body = res.json();
+    expect(body.error).toContain('forecast engine failed');
+    expect(body.error).toContain('LLM 服务不可用');
+
+    vi.restoreAllMocks();
+  });
+
+  it('raw 字段应包含 ticks 和 consensus 数组', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/forecast',
+      payload: { event: 'raw 字段测试', ticks: 1 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.raw).toBeDefined();
+    expect(body.raw.ticks).toBeInstanceOf(Array);
+    expect(body.raw.consensus).toBeInstanceOf(Array);
   });
 });

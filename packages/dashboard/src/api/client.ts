@@ -134,7 +134,11 @@ export async function forecastScenario(body: {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`API Error: ${res.status}`);
+    const detail = await res.json().catch(() => null);
+    const msg = (detail && typeof detail === 'object' && 'error' in detail)
+      ? (detail as { error: string }).error
+      : `${res.status} ${res.statusText}`;
+    throw new Error(`API Error: ${msg}`);
   }
   return res.json() as Promise<ForecastResult>;
 }

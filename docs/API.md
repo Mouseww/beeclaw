@@ -13,6 +13,7 @@
 - [共识引擎](#共识引擎)
 - [Tick 历史](#tick-历史)
 - [场景推演](#场景推演)
+- [用户推演（Forecast）](#用户推演forecast)
 - [LLM 配置管理](#llm-配置管理)
 - [Webhook 管理](#webhook-管理)
 - [数据源管理（Ingestion）](#数据源管理ingestion)
@@ -441,6 +442,99 @@ wscat -c "ws://localhost:3000/ws?token=bk_abc123..."
 
 ```json
 { "error": "max 20 ticks per scenario" }
+```
+
+---
+
+## 用户推演（Forecast）
+
+### `POST /api/forecast`
+
+**源码**: `packages/server/src/api/forecast.ts`
+
+用户输入式推演端点。输入一段事件/问题描述，系统自动匹配场景模板，创建隔离的 WorldEngine 实例执行多轮推演，返回派系分析、风险点和行动建议。
+
+**请求体**:
+
+```json
+{
+  "event": "央行宣布降息 25 个基点",
+  "scenario": "hot-event",
+  "ticks": 4,
+  "importance": 0.85
+}
+```
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `event` | `string` | ✅ | — | 要推演的事件描述（`minLength: 1`） |
+| `scenario` | `ForecastScenarioKey` | ❌ | `"hot-event"` | 场景类型 |
+| `ticks` | `integer` | ❌ | `4` | 推演轮数（1–8） |
+| `importance` | `number` | ❌ | 由场景决定 | 事件重要性（0.1–1） |
+
+**ForecastScenarioKey 枚举**:
+
+| 值 | 说明 |
+|----|------|
+| `hot-event` | 热点事件预测 |
+| `product-launch` | 产品发布预演 |
+| `policy-impact` | 政策影响评估 |
+| `roundtable` | AI 圆桌讨论 |
+
+**成功响应**: 200
+
+```json
+{
+  "scenario": "hot-event",
+  "scenarioLabel": "热点事件预测",
+  "event": "央行宣布降息 25 个基点",
+  "summary": "在"热点事件预测"场景下，系统为…创建了 25 个角色并运行 4 轮推演…",
+  "factions": [
+    { "name": "散户投资者", "share": 40, "summary": "散户投资者（约 10 个 Agent）会率先放大讨论热度…" }
+  ],
+  "keyReactions": [
+    { "actor": "散户投资者", "reaction": "会先表达态度，并影响同类群体的初始判断" }
+  ],
+  "risks": ["围绕"央行宣布降息"的情绪会先于事实校验扩散", "..."],
+  "recommendations": ["优先跟踪最先扩散观点的群体", "..."],
+  "metrics": {
+    "agentCount": 25,
+    "ticks": 4,
+    "responsesCollected": 80,
+    "averageActivatedAgents": 20,
+    "consensusSignals": 3,
+    "finalTick": 4
+  },
+  "raw": {
+    "ticks": [ ... ],
+    "consensus": [ ... ]
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `scenario` | `string` | 场景 key |
+| `scenarioLabel` | `string` | 场景中文名 |
+| `event` | `string` | 原始事件文本 |
+| `summary` | `string` | 自然语言推演摘要 |
+| `factions` | `Faction[]` | 主要阵营分析 |
+| `keyReactions` | `Reaction[]` | 关键反应描述 |
+| `risks` | `string[]` | 风险预警 |
+| `recommendations` | `string[]` | 行动建议 |
+| `metrics` | `object` | 执行指标 |
+| `raw` | `object` | 原始 tick 和共识数据 |
+
+**错误响应**: 400 — 缺少 `event`、无效 `scenario`、`ticks` 超范围
+
+```json
+{ "error": "event required" }
+```
+
+**错误响应**: 500 — 推演引擎运行时错误
+
+```json
+{ "error": "forecast engine failed at tick 2: ..." }
 ```
 
 ---
