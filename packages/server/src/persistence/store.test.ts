@@ -152,6 +152,25 @@ describe('Store', () => {
       expect(rows.length).toBe(3);
     });
 
+    it('saveAgents 空数组应不报错且不写入数据', async () => {
+      await store.saveAgents([]);
+      expect(await store.loadAgentRows()).toEqual([]);
+    });
+
+    it('saveAgents 应在批量写入中覆盖已存在的 Agent', async () => {
+      await store.saveAgent(createMockAgent('a1', 'OldAgent'));
+
+      await store.saveAgents([
+        createMockAgent('a1', 'UpdatedAgent'),
+        createMockAgent('a2', 'NewAgent'),
+      ]);
+
+      const rows = await store.loadAgentRows();
+      expect(rows.length).toBe(2);
+      expect(rows.find(row => row.id === 'a1')?.name).toBe('UpdatedAgent');
+      expect(rows.find(row => row.id === 'a2')?.name).toBe('NewAgent');
+    });
+
     it('getAgentRow 应按 ID 查找单个 Agent', async () => {
       const agent = createMockAgent('a1', 'Agent1');
       await store.saveAgent(agent);
@@ -1191,6 +1210,21 @@ describe('Store', () => {
       expect(signals).toEqual([]);
     });
 
+    it('getSignalsByTickRange 起止 tick 相同时应包含边界值', async () => {
+      await store.saveConsensusSignal(makeSignal(4, '股市'));
+      await store.saveConsensusSignal(makeSignal(5, '股市'));
+      await store.saveConsensusSignal(makeSignal(6, '股市'));
+
+      const signals = await store.getSignalsByTickRange('股市', 5, 5);
+      expect(signals.map(signal => signal.tick)).toEqual([5]);
+    });
+
+    it('getSignalsByTickRange 起始 tick 大于结束 tick 时应返回空数组', async () => {
+      await store.saveConsensusSignal(makeSignal(5, '股市'));
+      const signals = await store.getSignalsByTickRange('股市', 6, 4);
+      expect(signals).toEqual([]);
+    });
+
     it('getLatestSignalPerTopic 应每个 topic 只返回最新信号', async () => {
       await store.saveConsensusSignal(makeSignal(1, '股市'));
       await store.saveConsensusSignal(makeSignal(5, '股市'));
@@ -1208,6 +1242,16 @@ describe('Store', () => {
 
     it('getLatestSignalPerTopic 无信号时应返回空数组', async () => {
       expect(await store.getLatestSignalPerTopic()).toEqual([]);
+    });
+
+    it('getLatestSignalPerTopic 应基于最新插入记录而不是最大 tick 返回结果', async () => {
+      await store.saveConsensusSignal(makeSignal(10, '股市'));
+      await store.saveConsensusSignal(makeSignal(8, '股市'));
+
+      const signals = await store.getLatestSignalPerTopic();
+      expect(signals).toHaveLength(1);
+      expect(signals[0]?.topic).toBe('股市');
+      expect(signals[0]?.tick).toBe(8);
     });
   });
 
