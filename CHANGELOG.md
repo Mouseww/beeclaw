@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.50] - 2026-03-19
+
+### 🐛 Bug Fixes
+
+- **dashboard:** 保留 API 请求超时的原始 abort error 作为 `cause`，在满足 lint 约束的同时保住调试上下文，便于定位前端请求失败根因
+
+---
+
 ## [1.0.49] - 2026-03-19
 
 ### 🐛 Bug Fixes
@@ -46,6 +54,10 @@
 
 - **server:** 继续加固 persistence store 的批量保存与信号查询边界测试，覆盖空批次、覆盖写入、tick 单点范围、反向区间与 latest-per-topic 语义
 - **dashboard:** 补齐 API client 超时与异常恢复测试，并同步收敛客户端超时处理逻辑，提升前端请求失败场景稳定性
+
+### 🐛 Bug Fixes
+
+- **dashboard:** 保留 API 请求超时的原始 abort error 作为 `cause`，在满足 lint 约束的同时保住调试上下文，便于定位前端请求失败根因
 
 ---
 
