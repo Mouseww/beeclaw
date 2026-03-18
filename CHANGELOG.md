@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.49] - 2026-03-19
+
+### 🐛 Bug Fixes
+
+- **coordinator:** 修复 `request_snapshots` 消息中的 `agentIds` 在 Worker 侧被忽略的问题，定向快照请求现在会真正只导出并上报目标 Agent 状态，避免分布式快照协议语义漂移
+
+### 🧪 Tests
+
+- **coordinator:** 新增定向快照回归测试，覆盖直接调用与消息驱动 `request_snapshots` 两条路径，确保目标 Agent 过滤行为稳定
+
+---
+
 ## [1.0.48] - 2026-03-19
 
 ### 🧪 Tests
