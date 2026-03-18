@@ -294,13 +294,49 @@ describe('RssAdapter', () => {
       expect(health.lastErrorTime).toBeInstanceOf(Date);
     });
 
-    it('HTTP 错误应重试', async () => {
-      const fn = vi.fn().mockRejectedValue(new Error('HTTP 503'));
-      adapter.fetchFn = fn;
+    it('前几次失败后成功时应停止重试并返回事件', async () => {
+      const fetchFn = vi.fn()
+        .mockRejectedValueOnce(new Error('temporary failure 1'))
+        .mockRejectedValueOnce(new Error('temporary failure 2'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          text: () => Promise.resolve(SAMPLE_RSS),
+        } as Response);
+      const delaySpy = vi.fn().mockResolvedValue(undefined);
+      adapter.fetchFn = fetchFn;
+      adapter.delayFn = delaySpy;
+
+      const events = await adapter.poll();
+
+      expect(events).toHaveLength(2);
+      expect(fetchFn).toHaveBeenCalledTimes(3);
+      expect(delaySpy).toHaveBeenNthCalledWith(1, 1000);
+      expect(delaySpy).toHaveBeenNthCalledWith(2, 2000);
+      expect(delaySpy).toHaveBeenCalledTimes(2);
+      expect(adapter.getHealthMetrics().totalErrors).toBe(0);
+      expect(adapter.getHealthMetrics().totalSuccesses).toBe(1);
+    });
+
+    it('HTTP 错误应按指数退避重试', async () => {
+      const fetchFn = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        text: () => Promise.resolve(''),
+      } as Response);
+      const delaySpy = vi.fn().mockResolvedValue(undefined);
+      adapter.fetchFn = fetchFn;
+      adapter.delayFn = delaySpy;
 
       await adapter.poll();
-      // fetchFeed 默认重试 3 次
-      expect(fn).toHaveBeenCalledTimes(3);
+
+      expect(fetchFn).toHaveBeenCalledTimes(3);
+      expect(delaySpy).toHaveBeenNthCalledWith(1, 1000);
+      expect(delaySpy).toHaveBeenNthCalledWith(2, 2000);
+      expect(delaySpy).toHaveBeenCalledTimes(2);
+      expect(adapter.getHealthMetrics().lastErrorMessage).toBe('HTTP 503 Service Unavailable');
     });
 
     it('连续成功应重置错误计数', async () => {
