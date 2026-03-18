@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.45] - 2026-03-19
+
+### 🧪 Tests
+
+- **server:** 继续加固 persistence store 的批量保存与信号查询边界测试，覆盖空批次、覆盖写入、tick 单点范围、反向区间与 latest-per-topic 语义
+- **dashboard:** 补齐 API client 超时与异常恢复测试，并同步收敛客户端超时处理逻辑，提升前端请求失败场景稳定性
+
+---
+
 ## [1.0.44] - 2026-03-19
 
 ### 🧪 Tests
