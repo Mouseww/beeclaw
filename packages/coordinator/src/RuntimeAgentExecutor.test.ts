@@ -224,6 +224,84 @@ describe('RuntimeAgentExecutor', () => {
     });
   });
 
+  describe('快照导出', () => {
+    it('应为指定 Agent 生成默认字段快照', () => {
+      executor.loadAgent(createTestAgentData({ id: 'a1', credibility: 0.8, lastActiveTick: 12 }));
+
+      const snapshot = executor.createSnapshot('a1', 42, 'worker-1');
+
+      expect(snapshot).not.toBeNull();
+      expect(snapshot!.agentData.id).toBe('a1');
+      expect(snapshot!.tick).toBe(42);
+      expect(snapshot!.workerId).toBe('worker-1');
+      expect(snapshot!.timestamp).toBeTypeOf('number');
+      expect(snapshot!.changedFields).toEqual([
+        'memory.shortTerm',
+        'memory.opinions',
+        'lastActiveTick',
+        'credibility',
+      ]);
+    });
+
+    it('不存在的 Agent 创建快照应返回 null', () => {
+      expect(executor.createSnapshot('missing', 1, 'worker-1')).toBeNull();
+    });
+
+    it('应支持自定义 changedFields', () => {
+      executor.loadAgent(createTestAgentData({ id: 'a1' }));
+
+      const snapshot = executor.createSnapshot('a1', 3, 'worker-1', [
+        'status',
+        'followers',
+      ]);
+
+      expect(snapshot).not.toBeNull();
+      expect(snapshot!.changedFields).toEqual(['status', 'followers']);
+    });
+
+    it('空 Agent 列表应导出全部已加载 Agent 的快照', () => {
+      executor.loadAgents([
+        createTestAgentData({ id: 'a1' }),
+        createTestAgentData({ id: 'a2' }),
+      ]);
+
+      const snapshots = executor.createSnapshots([], 5, 'worker-1');
+
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots.map((snapshot) => snapshot.agentData.id)).toEqual(
+        expect.arrayContaining(['a1', 'a2']),
+      );
+    });
+
+    it('应忽略不存在的 Agent 并仅返回可导出的快照', () => {
+      executor.loadAgent(createTestAgentData({ id: 'a1' }));
+
+      const snapshots = executor.createSnapshots(['a1', 'missing'], 5, 'worker-1');
+
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]!.agentData.id).toBe('a1');
+    });
+
+    it('createSnapshotsForActivated 在空激活列表时应返回空数组', () => {
+      executor.loadAgent(createTestAgentData({ id: 'a1' }));
+
+      expect(executor.createSnapshotsForActivated([], 5, 'worker-1')).toEqual([]);
+    });
+
+    it('createSnapshotsForActivated 应仅导出已激活 Agent', () => {
+      executor.loadAgents([
+        createTestAgentData({ id: 'a1' }),
+        createTestAgentData({ id: 'a2' }),
+      ]);
+
+      const snapshots = executor.createSnapshotsForActivated(['a2'], 9, 'worker-1');
+
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]!.agentData.id).toBe('a2');
+      expect(snapshots[0]!.tick).toBe(9);
+    });
+  });
+
   describe('executeAgent', () => {
     it('未加载 Agent 应返回 null', async () => {
       const result = await executor.executeAgent('nonexistent', createTestEvent(), 1);
