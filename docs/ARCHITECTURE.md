@@ -530,5 +530,70 @@ Agent.react(event):
 
 ---
 
+## 10. 分布式 Worker 架构现状
+
+### 10.1 架构概览
+
+```
+┌─────────────────────────────────────────────────────┐
+│           TickCoordinator (Leader)                   │
+│  - Worker 注册/注销/健康检查                           │
+│  - Agent 分片 (AgentPartitioner)                     │
+│  - Tick 三阶段: Prepare → Execute → Aggregate        │
+│  - EventRelay 跨 Worker 事件中继                      │
+└────────────┬────────────┬────────────┬──────────────┘
+             │            │            │
+     ┌───────┴───┐ ┌──────┴────┐ ┌────┴──────┐
+     │  Worker 0 │ │  Worker 1 │ │  Worker N │
+     │  Agent[]  │ │  Agent[]  │ │  Agent[]  │
+     │  ↓ react  │ │  ↓ react  │ │  ↓ react  │
+     │  LLM Call │ │  LLM Call │ │  LLM Call │
+     └───────────┘ └───────────┘ └───────────┘
+```
+
+### 10.2 已实现
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| **TickCoordinator** | ✅ 完成 | Leader 节点，管理 Worker、协调 Tick 生命周期 |
+| **Worker** | ✅ 完成 | Agent 执行容器，支持 in-process 和消息驱动两种模式 |
+| **AgentPartitioner** | ✅ 完成 | Range Partitioning + 增量分片 + 移除分片 |
+| **EventRelay** | ✅ 完成 | 跨 Worker 事件中继 |
+| **InProcessTransport** | ✅ 完成 | 单进程内的通信层（开发/测试用） |
+| **RedisTransportLayer** | ✅ 完成 | Redis Pub/Sub 分布式通信 |
+| **NATSTransportLayer** | ✅ 完成 | NATS 分布式通信 |
+| **SocialGraphSync** | ✅ 完成 | Social Graph 跨节点同步 |
+| **RuntimeAgentExecutor** | ✅ 完成 | 真实 AgentExecutor — 加载 Agent、调用 LLM、返回结构化响应 |
+| **worker-entry.ts** | ✅ 完成 | 独立 Worker 进程入口，集成 RuntimeAgentExecutor |
+
+### 10.3 RuntimeAgentExecutor 设计
+
+`RuntimeAgentExecutor` 是连接 `coordinator` 和 `agent-runtime` 的桥梁：
+
+- **Agent 加载**：通过 `loadAgent(BeeAgent)` / `loadAgents(BeeAgent[])` 从序列化数据恢复 Agent 实例
+- **真实执行**：调用 `Agent.react(event, modelRouter, tick)` → LLM 调用 → 结构化响应
+- **事件产生**：Agent 选择 speak/forward 时自动生成内部 WorldEvent
+- **超时控制**：每个 Agent 执行有独立超时（默认 30s），避免单个 LLM 调用阻塞整个 Tick
+- **容错**：单个 Agent 执行失败不影响同 Worker 内其他 Agent
+
+### 10.4 worker-entry.ts Agent 加载方式
+
+| 方式 | 环境变量 | 说明 |
+|------|---------|------|
+| HTTP 远端加载 | `BEECLAW_AGENT_DATA_URL` | Worker 启动时通过 HTTP GET 获取 `BeeAgent[]` JSON |
+| 空池启动 | （不配置） | Worker 以空 Agent 池启动，等待 Coordinator 后续下发 |
+
+### 10.5 当前限制与后续计划
+
+| 限制 | 优先级 | 计划 |
+|------|--------|------|
+| Agent 数据仅在启动时加载，运行中不支持动态热加载 | 高 | 通过 Redis/NATS 消息实现 `load_agents` 指令 |
+| Agent 状态变更（记忆更新等）不回写持久层 | 高 | Worker 定期上报 Agent 快照或增量更新 |
+| 缺少 Agent 数据从 SQLite 直接加载的能力 | 中 | Worker 可选直连数据库模式 |
+| Social Graph 操作在 Worker 侧是只读的 | 中 | 通过 SocialGraphSync 实现读写 |
+| 分布式模式下 Agent 孵化仅在 Coordinator 侧进行 | 低 | 保持当前设计，由 Leader 统一管理 |
+
+---
+
 *BeeQueen 集团出品 🐝*
 *Alex (CTO) | 2026-03-12*

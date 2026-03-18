@@ -8,9 +8,8 @@
 
 import { Worker } from './Worker.js';
 import { RedisTransportLayer } from './RedisTransportLayer.js';
-import type { AgentExecutor } from './Worker.js';
-import type { WorldEvent } from '@beeclaw/shared';
-import type { AgentResponseRecord } from '@beeclaw/consensus';
+import { RuntimeAgentExecutor } from './RuntimeAgentExecutor.js';
+import type { BeeAgent } from '@beeclaw/shared';
 
 // ── 环境变量 ──
 
@@ -18,6 +17,8 @@ const REDIS_URL = process.env['BEECLAW_REDIS_URL'] ?? 'redis://127.0.0.1:6379';
 const WORKER_ID = process.env['BEECLAW_WORKER_ID'] ?? `worker-${process.pid}`;
 const LOG_LEVEL = process.env['BEECLAW_LOG_LEVEL'] ?? 'info';
 const NODE_ROLE = process.env['BEECLAW_NODE_ROLE'];
+const AGENT_DATA_URL = process.env['BEECLAW_AGENT_DATA_URL'];
+const AGENT_TIMEOUT_MS = parseInt(process.env['BEECLAW_AGENT_TIMEOUT_MS'] ?? '30000', 10);
 
 // ── 结构化日志 ──
 
@@ -71,30 +72,52 @@ function getMetrics(): WorkerMetrics {
   };
 }
 
-// ── 桩 AgentExecutor（Worker 进程内需要远端协调器下发 Agent 定义） ──
+// ── 真实 AgentExecutor（基于 agent-runtime） ──
 // 分布式模式下，Worker 接收 Coordinator 的 tick_begin 消息后执行分配的 Agent。
-// 当前实现为占位：Worker 报告 0 响应。后续需要集成 Agent 加载逻辑。
-// 这确保了通信链路、进程管理、健康检查的端到端验证。
+// RuntimeAgentExecutor 加载真实 Agent 实例，通过 LLM 调用生成结构化响应。
+// Agent 数据可通过以下方式加载：
+//   1. BEECLAW_AGENT_DATA_URL 环境变量指向一个 JSON 数据源（HTTP GET 返回 BeeAgent[]）
+//   2. Coordinator 通过 Redis 消息下发（未来扩展）
 
-const stubExecutor: AgentExecutor = {
-  async executeAgent(
-    _agentId: string,
-    _event: WorldEvent,
-    _tick: number,
-  ): Promise<{ record: AgentResponseRecord; newEvents: WorldEvent[] } | null> {
-    // 占位实现：实际部署时将加载真实 Agent 并调用 LLM
-    return null;
-  },
+const executor = new RuntimeAgentExecutor({
+  agentTimeoutMs: AGENT_TIMEOUT_MS,
+  enableLogging: LOG_LEVEL === 'debug',
+});
 
-  isAgentInterested(_agentId: string, _event: WorldEvent): boolean {
-    // 占位实现：默认所有分配的 Agent 都感兴趣
-    return true;
-  },
+/**
+ * 从远端数据源加载 Agent 数据到 executor。
+ * 如果 BEECLAW_AGENT_DATA_URL 已配置，则通过 HTTP GET 获取 BeeAgent[] JSON。
+ * 否则 Worker 将从空 Agent 池启动，等待 Coordinator 后续下发。
+ */
+async function loadAgentsFromRemote(): Promise<void> {
+  if (!AGENT_DATA_URL) {
+    log('info', 'BEECLAW_AGENT_DATA_URL 未配置，Worker 将以空 Agent 池启动');
+    return;
+  }
 
-  isAgentActive(_agentId: string): boolean {
-    return true;
-  },
-};
+  try {
+    log('info', '正在从远端加载 Agent 数据...', { url: AGENT_DATA_URL });
+    const response = await fetch(AGENT_DATA_URL, {
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const agents = (await response.json()) as BeeAgent[];
+    if (!Array.isArray(agents)) {
+      throw new Error('Agent 数据格式错误: 期望 BeeAgent[]');
+    }
+
+    executor.loadAgents(agents);
+    log('info', `从远端加载了 ${agents.length} 个 Agent`);
+  } catch (error) {
+    log('error', '加载远端 Agent 数据失败，Worker 将以空 Agent 池启动', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 // ── 解析 Redis URL ──
 
@@ -122,6 +145,9 @@ async function main(): Promise<void> {
 
   log('info', 'Worker 进程启动', { pid: process.pid, redisUrl: REDIS_URL });
 
+  // 加载 Agent 数据
+  await loadAgentsFromRemote();
+
   const redisConfig = parseRedisUrl(REDIS_URL);
   const transport = new RedisTransportLayer({
     host: redisConfig.host,
@@ -134,7 +160,7 @@ async function main(): Promise<void> {
   await transport.connect();
   log('info', 'Redis 连接已建立');
 
-  const worker = new Worker({ id: WORKER_ID }, transport, stubExecutor);
+  const worker = new Worker({ id: WORKER_ID }, transport, executor);
 
   // 包装 processTick 以收集指标
   const originalProcessTick = worker.processTick.bind(worker);
@@ -193,7 +219,11 @@ async function main(): Promise<void> {
 
     if (req.url === '/metrics') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(getMetrics()));
+      res.end(JSON.stringify({
+        ...getMetrics(),
+        loadedAgents: executor.getLoadedAgentCount(),
+        loadedAgentIds: executor.getLoadedAgentIds(),
+      }));
       return;
     }
 

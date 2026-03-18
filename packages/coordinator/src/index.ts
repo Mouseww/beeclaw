@@ -36,6 +36,8 @@ export { AgentPartitioner } from './AgentPartitioner.js';
 export { EventRelay } from './EventRelay.js';
 export { Worker } from './Worker.js';
 export type { AgentExecutor } from './Worker.js';
+export { RuntimeAgentExecutor } from './RuntimeAgentExecutor.js';
+export type { RuntimeAgentExecutorConfig } from './RuntimeAgentExecutor.js';
 
 // Social Graph 跨节点同步
 export { SocialGraphSync } from './SocialGraphSync.js';

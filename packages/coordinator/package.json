@@ -11,6 +11,7 @@
   "dependencies": {
     "@beeclaw/shared": "*",
     "@beeclaw/consensus": "*",
+    "@beeclaw/agent-runtime": "*",
     "ioredis": "^5.6.1",
     "nats": "^2.29.0"
   },
