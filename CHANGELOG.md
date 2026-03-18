@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.31] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- **world-engine:** 在注册边界强制执行 `maxAgents` 上限，避免超配导致世界规模突破配置限制
+
+### 🧪 Tests
+
+- **server:** 提升路由测试稳定性，提前 hoist WebSocket handler mock，消除时序抖动
+
+---
+
 ## [1.0.30] - 2026-03-18
 
 ### 🐛 Bug Fixes
