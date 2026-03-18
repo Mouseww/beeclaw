@@ -565,6 +565,7 @@ Agent.react(event):
 | **SocialGraphSync** | ✅ 完成 | Social Graph 跨节点同步 |
 | **RuntimeAgentExecutor** | ✅ 完成 | 真实 AgentExecutor — 加载 Agent、调用 LLM、返回结构化响应 |
 | **worker-entry.ts** | ✅ 完成 | 独立 Worker 进程入口，集成 RuntimeAgentExecutor |
+| **AgentStateSnapshot** | ✅ 完成 | Agent 状态快照导出、Worker→Coordinator 上报、持久层回调 |
 
 ### 10.3 RuntimeAgentExecutor 设计
 
@@ -583,15 +584,88 @@ Agent.react(event):
 | HTTP 远端加载 | `BEECLAW_AGENT_DATA_URL` | Worker 启动时通过 HTTP GET 获取 `BeeAgent[]` JSON |
 | 空池启动 | （不配置） | Worker 以空 Agent 池启动，等待 Coordinator 后续下发 |
 
-### 10.5 当前限制与后续计划
+### 10.5 Agent 状态快照与回写机制
+
+Agent 在 Worker 中执行 `react()` 后，其内存、观点、信誉等运行时状态会发生变化，
+但这些变化仅存在于 Worker 进程内存中。**AgentStateSnapshot** 机制解决了状态回写持久层的问题。
+
+#### 数据流
+
+```
+Worker
+  Agent.react() → 状态变化（memory, opinions, credibility...）
+  ↓
+  RuntimeAgentExecutor.createSnapshotsForActivated()
+  ↓                                    ↓
+  Agent.toData() → BeeAgent 序列化     构建 AgentStateSnapshot
+  ↓                                    （agentData + tick + workerId + changedFields）
+  ↓
+  Worker.generateSnapshots(tick)
+  ↓
+  两种上报路径:
+  ├─ In-Process: TickCoordinator.collectSnapshots() 直接从 Worker 拉取
+  └─ 消息驱动: Worker.reportSnapshots() → transport → WorkerSnapshotReportMessage
+  ↓
+  TickCoordinator.aggregateResults() 收集汇总
+  ↓
+  coordinator.onSnapshots(handler) → 持久层写入回调
+```
+
+#### 核心类型
+
+```typescript
+/** Agent 状态快照 */
+interface AgentStateSnapshot {
+  agentData: BeeAgent;              // 完整序列化数据
+  tick: number;                      // 快照产生的 tick
+  timestamp: number;                 // 快照时间戳
+  workerId: string;                  // 来源 Worker
+  changedFields: AgentChangedField[]; // 本 tick 变化的字段
+}
+
+/** 消息类型扩展 */
+// Coordinator → Worker
+RequestSnapshotsMessage   // 请求上报快照
+// Worker → Coordinator
+WorkerSnapshotReportMessage // 快照上报
+
+/** DistributedTickResult 扩展 */
+agentSnapshots: AgentStateSnapshot[] // tick 结果中包含快照
+```
+
+#### 使用方式
+
+```typescript
+// 注册持久层回调
+coordinator.onSnapshots(async (snapshots) => {
+  for (const s of snapshots) {
+    await db.upsertAgent(s.agentData);
+    console.log(`Agent ${s.agentData.id} 状态已落盘 (tick ${s.tick})`);
+  }
+});
+
+// Worker 侧也暴露 /snapshots HTTP 端点供运维调试
+// GET http://worker:port/snapshots?tick=5
+```
+
+#### 设计决策
+
+- **全量快照 vs 增量更新**：当前采用全量快照（`Agent.toData()`），通过 `changedFields` 标记变化字段，后续可按需优化为增量
+- **In-Process 拉取 vs 消息推送**：两种模式并存。In-Process 模式下 Coordinator 直接从 Worker 拉取；消息驱动模式下 Worker 主动上报
+- **自动 vs 手动**：Worker 默认在每个 tick 结束后自动上报快照（`enableAutoSnapshot: true`），也可通过 `request_snapshots` 消息按需拉取
+- **容错**：快照处理器（`onSnapshots`）抛错不影响 Tick 正常完成
+
+### 10.6 当前限制与后续计划
 
 | 限制 | 优先级 | 计划 |
 |------|--------|------|
 | Agent 数据仅在启动时加载，运行中不支持动态热加载 | 高 | 通过 Redis/NATS 消息实现 `load_agents` 指令 |
-| Agent 状态变更（记忆更新等）不回写持久层 | 高 | Worker 定期上报 Agent 快照或增量更新 |
+| ~~Agent 状态变更（记忆更新等）不回写持久层~~ | ~~高~~ | ✅ **已解决** — AgentStateSnapshot 机制已实现状态导出+上报链路 |
+| 快照持久层写入需外部实现（onSnapshots 回调） | 中 | 在 server 或 world-engine 层实现 SQLite/PostgreSQL 落盘 |
 | 缺少 Agent 数据从 SQLite 直接加载的能力 | 中 | Worker 可选直连数据库模式 |
 | Social Graph 操作在 Worker 侧是只读的 | 中 | 通过 SocialGraphSync 实现读写 |
 | 分布式模式下 Agent 孵化仅在 Coordinator 侧进行 | 低 | 保持当前设计，由 Leader 统一管理 |
+| 快照目前仅支持全量导出，大量 Agent 时可能较重 | 低 | changedFields 已预留增量支持，后续实现 diff 机制 |
 
 ---
 

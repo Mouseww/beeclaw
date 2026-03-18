@@ -16,6 +16,7 @@ import { Agent, ModelRouter } from '@beeclaw/agent-runtime';
 import type { WorldEvent, BeeAgent, ModelRouterConfig } from '@beeclaw/shared';
 import type { AgentResponseRecord } from '@beeclaw/consensus';
 import type { AgentExecutor } from './Worker.js';
+import type { AgentStateSnapshot, AgentChangedField } from './types.js';
 
 export interface RuntimeAgentExecutorConfig {
   /** ModelRouter 配置，不传则使用环境变量默认配置 */
@@ -127,6 +128,76 @@ export class RuntimeAgentExecutor implements AgentExecutor {
    */
   getModelRouter(): ModelRouter {
     return this.modelRouter;
+  }
+
+  // ── Agent 状态快照 ──
+
+  /**
+   * 为指定 Agent 生成状态快照。
+   *
+   * 快照基于 Agent.toData() 序列化，附带元信息。
+   * changedFields 目前标记所有可能变化的字段（全量快照），
+   * 后续可通过 diff 机制优化为增量。
+   */
+  createSnapshot(
+    agentId: string,
+    tick: number,
+    workerId: string,
+    changedFields?: AgentChangedField[],
+  ): AgentStateSnapshot | null {
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+
+    return {
+      agentData: agent.toData(),
+      tick,
+      timestamp: Date.now(),
+      workerId,
+      changedFields: changedFields ?? [
+        'memory.shortTerm',
+        'memory.opinions',
+        'lastActiveTick',
+        'credibility',
+      ],
+    };
+  }
+
+  /**
+   * 为一组 Agent 批量生成状态快照。
+   * 如果 agentIds 为空数组，则导出所有已加载 Agent 的快照。
+   */
+  createSnapshots(
+    agentIds: string[],
+    tick: number,
+    workerId: string,
+  ): AgentStateSnapshot[] {
+    const ids = agentIds.length > 0 ? agentIds : this.getLoadedAgentIds();
+    const snapshots: AgentStateSnapshot[] = [];
+
+    for (const id of ids) {
+      const snapshot = this.createSnapshot(id, tick, workerId);
+      if (snapshot) {
+        snapshots.push(snapshot);
+      }
+    }
+
+    return snapshots;
+  }
+
+  /**
+   * 仅为已激活的（本 tick 中参与执行的）Agent 生成快照。
+   * activatedIds 来自 Worker.processTick 中筛选出的参与执行的 Agent。
+   * 注意：空数组表示没有 Agent 被激活，返回空结果（与 createSnapshots 不同）。
+   */
+  createSnapshotsForActivated(
+    activatedIds: string[],
+    tick: number,
+    workerId: string,
+  ): AgentStateSnapshot[] {
+    if (activatedIds.length === 0) {
+      return [];
+    }
+    return this.createSnapshots(activatedIds, tick, workerId);
   }
 
   // ── AgentExecutor 接口实现 ──

@@ -11,6 +11,8 @@ import type {
   DistributedTickResult,
   WorkerMessage,
   PartitionAssignment,
+  AgentStateSnapshot,
+  WorkerSnapshotReportMessage,
 } from './types.js';
 import type { TransportLayer } from './TransportLayer.js';
 import { AgentPartitioner } from './AgentPartitioner.js';
@@ -32,6 +34,7 @@ const DEFAULT_CONFIG: CoordinatorConfig = {
  * - Worker 超时检测与不健康标记
  * - 通过 EventRelay 进行跨 Worker 事件同步
  * - 通过 AgentPartitioner 进行 Agent 分片
+ * - 收集 Worker 上报的 Agent 状态快照
  */
 export class TickCoordinator {
   private config: CoordinatorConfig;
@@ -51,6 +54,11 @@ export class TickCoordinator {
   private tickInProgress = false;
   /** 待处理的外部事件队列 */
   private externalEventQueue: WorldEvent[] = [];
+
+  /** 最近一次 tick 收集到的 Agent 状态快照 */
+  private lastTickSnapshots: AgentStateSnapshot[] = [];
+  /** 快照回调：每次收集到新快照时调用 */
+  private snapshotHandler: ((snapshots: AgentStateSnapshot[]) => void) | null = null;
 
   constructor(
     transport: TransportLayer,
@@ -189,6 +197,45 @@ export class TickCoordinator {
     return this.eventRelay;
   }
 
+  // ── Agent 状态快照 ──────────────────────────────────────────────────
+
+  /**
+   * 注册快照处理器。每当 Coordinator 在 tick 结束后收集到快照时回调。
+   *
+   * 典型用途：将快照写入持久层（SQLite/PostgreSQL）。
+   *
+   * @example
+   * coordinator.onSnapshots(async (snapshots) => {
+   *   await db.upsertAgents(snapshots.map(s => s.agentData));
+   * });
+   */
+  onSnapshots(handler: (snapshots: AgentStateSnapshot[]) => void): void {
+    this.snapshotHandler = handler;
+  }
+
+  /**
+   * 获取最近一次 tick 收集到的 Agent 状态快照
+   */
+  getLastTickSnapshots(): AgentStateSnapshot[] {
+    return [...this.lastTickSnapshots];
+  }
+
+  /**
+   * 在 in-process 模式下，主动收集所有 Worker 的 Agent 快照。
+   * 通常在 executeTick() 内部的 Aggregate 阶段自动调用。
+   * 也可在 tick 之外手动调用以获取某个时间点的全量快照。
+   */
+  collectSnapshots(tick: number): AgentStateSnapshot[] {
+    const allSnapshots: AgentStateSnapshot[] = [];
+
+    for (const [, worker] of this.workerInstances) {
+      const workerSnapshots = worker.generateSnapshots(tick);
+      allSnapshots.push(...workerSnapshots);
+    }
+
+    return allSnapshots;
+  }
+
   // ── Tick 生命周期 ──────────────────────────────────────────────────
 
   /**
@@ -196,7 +243,7 @@ export class TickCoordinator {
    *
    * Phase 1: Prepare — 推进 tick 编号，收集事件
    * Phase 2: Execute — Worker 并行处理
-   * Phase 3: Aggregate — 收集结果、汇总信号、事件中继
+   * Phase 3: Aggregate — 收集结果、汇总信号、事件中继、收集快照
    */
   async executeTick(): Promise<DistributedTickResult> {
     if (this.tickInProgress) {
@@ -311,7 +358,7 @@ export class TickCoordinator {
   }
 
   /**
-   * Phase 3: 汇总所有 Worker 的结果
+   * Phase 3: 汇总所有 Worker 的结果，收集 Agent 状态快照
    */
   private aggregateResults(
     tick: number,
@@ -335,6 +382,22 @@ export class TickCoordinator {
       }
     }
 
+    // ── 收集 Agent 状态快照 ──
+    const agentSnapshots = this.collectSnapshots(tick);
+    this.lastTickSnapshots = agentSnapshots;
+
+    // 通知快照处理器
+    if (this.snapshotHandler && agentSnapshots.length > 0) {
+      try {
+        this.snapshotHandler(agentSnapshots);
+      } catch (error) {
+        console.error(
+          '[TickCoordinator] 快照处理器错误:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
     return {
       tick,
       eventsProcessed,
@@ -345,6 +408,7 @@ export class TickCoordinator {
       collectedNewEvents: allNewEvents,
       durationMs: Date.now() - startTime,
       timedOutWorkers,
+      agentSnapshots,
     };
   }
 
@@ -405,6 +469,31 @@ export class TickCoordinator {
         }
         break;
       }
+      case 'worker_snapshot_report': {
+        // 消息驱动模式下接收 Worker 上报的快照
+        this.handleSnapshotReport(message as WorkerSnapshotReportMessage);
+        break;
+      }
+    }
+  }
+
+  /**
+   * 处理 Worker 上报的快照消息
+   */
+  private handleSnapshotReport(message: WorkerSnapshotReportMessage): void {
+    // 合并到最近的快照集合
+    this.lastTickSnapshots.push(...message.snapshots);
+
+    // 通知快照处理器
+    if (this.snapshotHandler && message.snapshots.length > 0) {
+      try {
+        this.snapshotHandler(message.snapshots);
+      } catch (error) {
+        console.error(
+          '[TickCoordinator] 快照处理器错误:',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
   }
 
@@ -422,5 +511,7 @@ export class TickCoordinator {
     this.currentTick = 0;
     this.externalEventQueue = [];
     this.eventRelay.reset();
+    this.lastTickSnapshots = [];
+    this.snapshotHandler = null;
   }
 }

@@ -56,6 +56,8 @@ let totalResponsesCollected = 0;
 let totalErrors = 0;
 let lastTickDurationMs = 0;
 let tickDurationSum = 0;
+let lastSnapshotTick = 0;
+let lastSnapshotCount = 0;
 const startedAt = Date.now();
 
 function getMetrics(): WorkerMetrics {
@@ -176,10 +178,16 @@ async function main(): Promise<void> {
       lastTickDurationMs = duration;
       tickDurationSum += duration;
 
+      // 在 tick 完成后生成快照
+      const snapshots = worker.generateSnapshots(tick);
+      lastSnapshotTick = tick;
+      lastSnapshotCount = snapshots.length;
+
       log('info', `Tick ${tick} 完成`, {
         agentsActivated: result.agentsActivated,
         responses: result.responses.length,
         newEvents: result.newEvents.length,
+        snapshots: snapshots.length,
         durationMs: duration,
       });
 
@@ -223,7 +231,31 @@ async function main(): Promise<void> {
         ...getMetrics(),
         loadedAgents: executor.getLoadedAgentCount(),
         loadedAgentIds: executor.getLoadedAgentIds(),
+        lastSnapshotTick,
+        lastSnapshotCount,
       }));
+      return;
+    }
+
+    // 获取 Agent 状态快照（供 Coordinator 拉取或运维调试）
+    if (req.url === '/snapshots' || req.url?.startsWith('/snapshots?')) {
+      try {
+        const url = new URL(req.url, `http://localhost:${HEALTH_PORT}`);
+        const tick = parseInt(url.searchParams.get('tick') ?? String(lastSnapshotTick), 10);
+        const snapshots = executor.createSnapshots([], tick, WORKER_ID);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          workerId: WORKER_ID,
+          tick,
+          count: snapshots.length,
+          snapshots,
+        }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
       return;
     }
 
