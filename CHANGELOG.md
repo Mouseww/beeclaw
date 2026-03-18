@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.32] - 2026-03-18
+
+### 🐛 Bug Fixes
+
+- **dashboard:** 修复 Timeline Replay 中事件响应筛选失效问题，按 `eventId` 精确过滤响应列表
+- **config:** 对齐默认 `maxAgents` 配置语义，保持与 `v1.0.31` 的上限行为一致
+
+### 🧪 Tests
+
+- **dashboard:** 稳定前端交互测试，修复 `SocialGraphView` / `TimelineReplay` 的交互时序抖动与回归覆盖
+
+---
+
 ## [1.0.31] - 2026-03-18
 
 ### 🐛 Bug Fixes
