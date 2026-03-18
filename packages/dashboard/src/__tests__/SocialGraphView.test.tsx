@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -869,12 +869,12 @@ describe('SocialGraphView', () => {
     const enterFn = d3Callbacks['node.mouseenter']?.[0];
     expect(enterFn).toBeDefined();
     if (enterFn) {
-      // 调用回调，触发内部逻辑（connectedNodeIds 计算、tooltip 等）
-      enterFn(
-        { pageX: 100, pageY: 200 },
-        { id: 'agent_000', name: '测试', community: 'community_0', status: 'active', role: 'leader', influence: 50, credibility: 50 },
-      );
-      // 不报错即视为通过 — 内部逻辑已被执行
+      act(() => {
+        enterFn(
+          { pageX: 100, pageY: 200 },
+          { id: 'agent_000', name: '测试', community: 'community_0', status: 'active', role: 'leader', influence: 50, credibility: 50 },
+        );
+      });
     }
   });
 
@@ -883,7 +883,9 @@ describe('SocialGraphView', () => {
     const moveFn = d3Callbacks['node.mousemove']?.[0];
     expect(moveFn).toBeDefined();
     if (moveFn) {
-      moveFn({ pageX: 120, pageY: 220 });
+      act(() => {
+        moveFn({ pageX: 120, pageY: 220 });
+      });
     }
   });
 
@@ -892,7 +894,9 @@ describe('SocialGraphView', () => {
     const leaveFn = d3Callbacks['node.mouseleave']?.[0];
     expect(leaveFn).toBeDefined();
     if (leaveFn) {
-      leaveFn();
+      act(() => {
+        leaveFn();
+      });
     }
   });
 
@@ -901,10 +905,12 @@ describe('SocialGraphView', () => {
     const clickFn = d3Callbacks['node.click']?.[0];
     expect(clickFn).toBeDefined();
     if (clickFn) {
-      clickFn(
-        {},
-        { id: 'agent_000', name: '测试节点', community: 'community_0', status: 'active', role: 'leader', influence: 80, credibility: 60, profession: '测试', followers: 5, following: 3 },
-      );
+      act(() => {
+        clickFn(
+          {},
+          { id: 'agent_000', name: '测试节点', community: 'community_0', status: 'active', role: 'leader', influence: 80, credibility: 60, profession: '测试', followers: 5, following: 3 },
+        );
+      });
     }
   });
 
@@ -913,7 +919,9 @@ describe('SocialGraphView', () => {
     const tickFn = simulationCallbacks['tick'];
     expect(tickFn).toBeDefined();
     if (tickFn) {
-      tickFn();
+      act(() => {
+        tickFn();
+      });
     }
   });
 
@@ -922,7 +930,9 @@ describe('SocialGraphView', () => {
   it('resize 事件应触发 SVG 尺寸更新', () => {
     renderSocialGraphView();
     // 触发 window resize 事件
-    window.dispatchEvent(new Event('resize'));
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
     // 不报错即通过
   });
 });

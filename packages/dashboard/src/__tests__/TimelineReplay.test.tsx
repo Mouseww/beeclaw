@@ -3,7 +3,8 @@
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { TimelineReplay } from '../pages/TimelineReplay';
 import type { TickResult } from '../types';
@@ -111,24 +112,26 @@ describe('TimelineReplay', () => {
     expect(screen.getByTestId('btn-step-forward')).toBeInTheDocument();
   });
 
-  it('点击播放后应显示暂停按钮', () => {
+  it('点击播放后应显示暂停按钮', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
     renderTimeline();
     const playBtn = screen.getByTestId('btn-play');
-    fireEvent.click(playBtn);
+    await user.click(playBtn);
     expect(screen.getByTestId('btn-pause')).toBeInTheDocument();
     expect(screen.queryByTestId('btn-play')).not.toBeInTheDocument();
   });
 
-  it('点击暂停后应恢复播放按钮', () => {
+  it('点击暂停后应恢复播放按钮', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
     renderTimeline();
-    fireEvent.click(screen.getByTestId('btn-play'));
-    fireEvent.click(screen.getByTestId('btn-pause'));
+    await user.click(screen.getByTestId('btn-play'));
+    await user.click(screen.getByTestId('btn-pause'));
     expect(screen.getByTestId('btn-play')).toBeInTheDocument();
   });
 
@@ -140,18 +143,20 @@ describe('TimelineReplay', () => {
   });
 
   it('第一帧时后退按钮应被禁用', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })],
     };
     renderTimeline();
     // 点击停止回到第一帧
-    fireEvent.click(screen.getByTestId('btn-stop'));
+    await user.click(screen.getByTestId('btn-stop'));
     await waitFor(() => {
       expect(screen.getByTestId('btn-step-backward')).toBeDisabled();
     });
   });
 
   it('点击前进应切换到下一帧', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = {
       history: [
         makeTick({ tick: 1, eventsProcessed: 1 }),
@@ -160,8 +165,8 @@ describe('TimelineReplay', () => {
     };
     // 先停止，确保在第 0 帧
     renderTimeline();
-    fireEvent.click(screen.getByTestId('btn-stop'));
-    fireEvent.click(screen.getByTestId('btn-step-forward'));
+    await user.click(screen.getByTestId('btn-stop'));
+    await user.click(screen.getByTestId('btn-step-forward'));
     await waitFor(() => {
       expect(screen.getByText('当前：Tick #2')).toBeInTheDocument();
     });
@@ -183,7 +188,9 @@ describe('TimelineReplay', () => {
     };
     renderTimeline();
     const slider = screen.getByTestId('timeline-slider');
-    fireEvent.change(slider, { target: { value: '1' } });
+    await act(async () => {
+      fireEvent.change(slider, { target: { value: '1' } });
+    });
     await waitFor(() => {
       expect(screen.getByText('当前：Tick #20')).toBeInTheDocument();
     });
@@ -202,11 +209,12 @@ describe('TimelineReplay', () => {
   });
 
   it('点击 tick 块应切换当前帧', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = {
       history: [makeTick({ tick: 1 }), makeTick({ tick: 2 }), makeTick({ tick: 3 })],
     };
     renderTimeline();
-    fireEvent.click(screen.getByTestId('tick-block-1'));
+    await user.click(screen.getByTestId('tick-block-1'));
     await waitFor(() => {
       expect(screen.getByText('当前：Tick #1')).toBeInTheDocument();
     });
@@ -240,6 +248,7 @@ describe('TimelineReplay', () => {
   });
 
   it('点击事件应高亮选中状态', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = { history: [makeTick({ tick: 1 })] };
     mockFetchTickEvents.mockResolvedValue({
       events: [{ id: 'e1', title: '测试事件', category: 'finance', importance: 0.7 }],
@@ -249,7 +258,7 @@ describe('TimelineReplay', () => {
     await waitFor(() => {
       expect(screen.getByTestId('event-item-e1')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByTestId('event-item-e1'));
+    await user.click(screen.getByTestId('event-item-e1'));
     // 点击后应显示事件详情
     await waitFor(() => {
       expect(screen.getByText(/ID: e1/)).toBeInTheDocument();
@@ -291,11 +300,13 @@ describe('TimelineReplay', () => {
     expect(screen.getByTestId('speed-select')).toBeInTheDocument();
   });
 
-  it('改变速度选项应不报错', () => {
+  it('改变速度选项应不报错', async () => {
+    const user = userEvent.setup();
     mockPollingReturn.data = { history: [makeTick({ tick: 1 }), makeTick({ tick: 2 })] };
     renderTimeline();
     const select = screen.getByTestId('speed-select');
-    expect(() => fireEvent.change(select, { target: { value: '500' } })).not.toThrow();
+    await user.selectOptions(select, '500');
+    expect((select as HTMLSelectElement).value).toBe('500');
   });
 
   // ── Tick 概要信息 ──
