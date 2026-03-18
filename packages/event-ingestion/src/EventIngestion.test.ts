@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventIngestion } from './EventIngestion.js';
-import type { FeedSource, EventIngestionConfig } from './types.js';
+import type { FeedSource, EventIngestionConfig, DataSourceAdapter, IngestedEvent, SourceHealthMetrics } from './types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -55,6 +55,61 @@ function createSource(overrides?: Partial<FeedSource>): FeedSource {
     category: 'finance',
     enabled: true,
     tags: ['test-tag'],
+    ...overrides,
+  };
+}
+
+function createMockAdapter(options?: {
+  id?: string;
+  name?: string;
+  type?: DataSourceAdapter['type'];
+  pollResult?: IngestedEvent[];
+  pollError?: Error;
+  healthMetrics?: Partial<SourceHealthMetrics>;
+}) {
+  const healthMetrics: SourceHealthMetrics = {
+    sourceId: options?.id ?? 'adapter-1',
+    connected: true,
+    consecutiveErrors: 0,
+    totalErrors: 0,
+    totalSuccesses: 1,
+    errorRate: 0,
+    lastLatencyMs: 10,
+    averageLatencyMs: 10,
+    lastSuccessTime: new Date('2024-01-01T00:00:00.000Z'),
+    lastErrorTime: null,
+    lastErrorMessage: null,
+    eventsEmitted: 0,
+    uptimeMs: 1000,
+    ...options?.healthMetrics,
+  };
+
+  const adapter: DataSourceAdapter = {
+    id: options?.id ?? 'adapter-1',
+    name: options?.name ?? 'Test Adapter',
+    type: options?.type ?? 'custom',
+    start: vi.fn(),
+    stop: vi.fn(),
+    poll: options?.pollError
+      ? vi.fn().mockRejectedValue(options.pollError)
+      : vi.fn().mockResolvedValue(options?.pollResult ?? []),
+    getHealthMetrics: vi.fn().mockReturnValue(healthMetrics),
+    setCurrentTick: vi.fn(),
+  };
+
+  return adapter;
+}
+
+function createAdapterEvent(overrides?: Partial<IngestedEvent>): IngestedEvent {
+  return {
+    title: 'Adapter Event',
+    content: 'Adapter content',
+    category: 'finance',
+    source: 'adapter:test',
+    importance: 0.8,
+    propagationRadius: 0.6,
+    tags: ['adapter'],
+    deduplicationId: 'adapter-event-1',
     ...overrides,
   };
 }
@@ -741,6 +796,174 @@ describe('EventIngestion', () => {
 
       ingestion.stop();
       fetchSpy.mockRestore();
+    });
+  });
+
+  describe('适配器 API', () => {
+    it('registerAdapter 应注册适配器并同步当前 tick', () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({ id: 'adapter-register' });
+
+      ingestion.setCurrentTick(7);
+      ingestion.registerAdapter(adapter);
+
+      expect(ingestion.getAdapter('adapter-register')).toBe(adapter);
+      expect(adapter.setCurrentTick).toHaveBeenCalledWith(7);
+    });
+
+    it('运行中注册适配器应立即启动', () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({ id: 'adapter-live' });
+
+      ingestion.start();
+      ingestion.registerAdapter(adapter);
+
+      expect(adapter.start).toHaveBeenCalledTimes(1);
+      ingestion.stop();
+    });
+
+    it('removeAdapter 应停止并移除适配器', () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({ id: 'adapter-remove' });
+
+      ingestion.registerAdapter(adapter);
+      ingestion.removeAdapter('adapter-remove');
+
+      expect(adapter.stop).toHaveBeenCalledTimes(1);
+      expect(ingestion.getAdapter('adapter-remove')).toBeUndefined();
+    });
+
+    it('pollAdapter 应注入非重复事件并返回计数', async () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({
+        id: 'adapter-poll',
+        pollResult: [createAdapterEvent({ deduplicationId: 'adapter-poll-1', tags: ['alpha', 'beta'] })],
+      });
+
+      ingestion.setCurrentTick(12);
+      ingestion.registerAdapter(adapter);
+
+      const count = await ingestion.pollAdapter('adapter-poll');
+
+      expect(count).toBe(1);
+      expect(adapter.poll).toHaveBeenCalledTimes(1);
+      expect(bus.injectEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Adapter Event',
+          source: 'adapter:test',
+          tick: 12,
+          tags: ['alpha', 'beta'],
+          type: 'external',
+        }),
+      );
+    });
+
+    it('pollAdapter 应对重复事件去重', async () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({
+        id: 'adapter-dedup',
+        pollResult: [createAdapterEvent({ deduplicationId: 'same-event-id' })],
+      });
+
+      ingestion.registerAdapter(adapter);
+
+      await expect(ingestion.pollAdapter('adapter-dedup')).resolves.toBe(1);
+      await expect(ingestion.pollAdapter('adapter-dedup')).resolves.toBe(0);
+      expect(bus.injectEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('pollAdapter 不存在的适配器应抛错', async () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+
+      await expect(ingestion.pollAdapter('ghost-adapter')).rejects.toThrow('不存在');
+    });
+
+    it('pollAdapter 失败时应记录错误并返回 0', async () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({
+        id: 'adapter-fail',
+        name: 'Broken Adapter',
+        pollError: new Error('adapter failed'),
+      });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      ingestion.registerAdapter(adapter);
+
+      await expect(ingestion.pollAdapter('adapter-fail')).resolves.toBe(0);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[EventIngestion] 适配器 "Broken Adapter" 轮询注入失败:',
+        expect.any(Error),
+      );
+      expect(bus.injectEvent).not.toHaveBeenCalled();
+    });
+
+    it('pollAllAdapters 应汇总多个适配器的注入数量', async () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapterA = createMockAdapter({
+        id: 'adapter-a',
+        pollResult: [createAdapterEvent({ deduplicationId: 'adapter-a-1', source: 'adapter:a' })],
+      });
+      const adapterB = createMockAdapter({
+        id: 'adapter-b',
+        pollResult: [
+          createAdapterEvent({
+            deduplicationId: 'adapter-b-1',
+            source: 'adapter:b',
+            title: 'Adapter Event B',
+            content: 'Adapter content B',
+          }),
+        ],
+      });
+
+      ingestion.registerAdapter(adapterA);
+      ingestion.registerAdapter(adapterB);
+
+      const total = await ingestion.pollAllAdapters();
+
+      expect(total).toBe(2);
+      expect(bus.injectEvent).toHaveBeenCalledTimes(2);
+    });
+
+    it('getAdapterHealthMetrics 应返回所有适配器健康状态', () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapterA = createMockAdapter({
+        id: 'adapter-health-a',
+        healthMetrics: { connected: true, totalSuccesses: 3 },
+      });
+      const adapterB = createMockAdapter({
+        id: 'adapter-health-b',
+        healthMetrics: { connected: false, totalErrors: 2, errorRate: 1 },
+      });
+
+      ingestion.registerAdapter(adapterA);
+      ingestion.registerAdapter(adapterB);
+
+      expect(ingestion.getAdapterHealthMetrics()).toEqual([
+        expect.objectContaining({ sourceId: 'adapter-health-a', connected: true, totalSuccesses: 3 }),
+        expect.objectContaining({ sourceId: 'adapter-health-b', connected: false, totalErrors: 2, errorRate: 1 }),
+      ]);
+    });
+
+    it('start/stop 应传播到已注册适配器', () => {
+      const bus = createMockEventBus();
+      const ingestion = new EventIngestion(bus as any);
+      const adapter = createMockAdapter({ id: 'adapter-lifecycle' });
+
+      ingestion.registerAdapter(adapter);
+      ingestion.start();
+      ingestion.stop();
+
+      expect(adapter.start).toHaveBeenCalledTimes(1);
+      expect(adapter.stop).toHaveBeenCalledTimes(1);
     });
   });
 
