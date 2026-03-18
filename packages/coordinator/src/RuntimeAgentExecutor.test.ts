@@ -2,7 +2,7 @@
 // RuntimeAgentExecutor 单元测试
 // ============================================================================
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RuntimeAgentExecutor } from './RuntimeAgentExecutor.js';
 import type { WorldEvent, BeeAgent, AgentPersona, AgentMemoryState } from '@beeclaw/shared';
 

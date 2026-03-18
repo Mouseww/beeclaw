@@ -12,7 +12,7 @@ import { TickCoordinator } from './TickCoordinator.js';
 import { InProcessTransport } from './TransportLayer.js';
 import { AgentPartitioner } from './AgentPartitioner.js';
 import { EventRelay } from './EventRelay.js';
-import type { AgentExecutor, SnapshotProvider } from './Worker.js';
+import type { AgentExecutor } from './Worker.js';
 import type {
   WorldEvent,
   BeeAgent,
@@ -472,7 +472,7 @@ describe('TickCoordinator — 快照收集', () => {
 
   describe('collectSnapshots', () => {
     it('应在 executeTick 后自动收集快照', async () => {
-      const { coordinator, executors, workers } = createSnapshotTestSetup(1);
+      const { coordinator, executors } = createSnapshotTestSetup(1);
 
       // 加载 Agent
       executors[0]!.loadAgent(createTestAgentData({ id: 'a1' }));
