@@ -1,6 +1,19 @@
 # Changelog
 
-## [1.0.37] - 2026-03-18
+## [1.0.38] - 2026-03-18
+
+### ✨ Features
+
+- **coordinator:** 用 `RuntimeAgentExecutor` 替换分布式 worker 中的 stub executor，让 worker 真正执行 Agent 任务而不再只是占位实现
+- **coordinator:** 导出 `RuntimeAgentExecutor` 并更新 worker entry，完善分布式运行时的可用性与可测试性
+
+### 🧪 Tests
+
+- **coordinator:** 新增 `RuntimeAgentExecutor` 测试，覆盖真实执行路径与 worker 集成入口
+
+---
+
+# Changelog
 
 ### ✨ Features
 
