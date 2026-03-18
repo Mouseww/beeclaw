@@ -245,6 +245,12 @@ export class WorldEngine {
    * 注册一个 Agent 到世界中
    */
   addAgent(agent: Agent): void {
+    const maxAgents = this.config.maxAgents ?? 100;
+    if (this.agents.size >= maxAgents) {
+      this.log.warn(`Agent 上限已达 ${maxAgents}，跳过注册 ${agent.id}`);
+      return;
+    }
+
     this.agents.set(agent.id, agent);
     this.socialGraph.addNode(agent.id, agent.influence);
     this.worldState.setAgentCount(this.agents.size);
@@ -260,12 +266,26 @@ export class WorldEngine {
    * 批量注册 Agent
    */
   addAgents(agents: Agent[]): void {
+    const addedAgentIds: string[] = [];
+
     for (const agent of agents) {
+      const previousSize = this.agents.size;
       this.addAgent(agent);
+      if (this.agents.size > previousSize) {
+        addedAgentIds.push(agent.id);
+      }
     }
+
+    if (addedAgentIds.length <= 1) {
+      return;
+    }
+
     // 初始化随机社交关系
-    const agentIds = agents.map(a => a.id);
-    this.socialGraph.initializeRandomRelations(agentIds, Math.min(5, agents.length - 1), this.scheduler.getCurrentTick());
+    this.socialGraph.initializeRandomRelations(
+      addedAgentIds,
+      Math.min(5, addedAgentIds.length - 1),
+      this.scheduler.getCurrentTick(),
+    );
   }
 
   /**
@@ -428,7 +448,7 @@ export class WorldEngine {
 
     // 5. Agent 孵化检查
     let newAgentsSpawned = 0;
-    const maxAgents = this.config.maxAgents ?? 500;
+    const maxAgents = this.config.maxAgents ?? 100;
     for (const event of events) {
       if (this.agents.size >= maxAgents) break;
       const newAgents = this.spawner.checkEventTriggers(event, this.agents.size, tick);

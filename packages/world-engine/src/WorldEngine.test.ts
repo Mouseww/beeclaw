@@ -523,6 +523,38 @@ describe('WorldEngine', () => {
   // ── maxAgents 限制 ──
 
   describe('maxAgents 限制', () => {
+    it('直接注册单个 Agent 时也应受 maxAgents 限制', () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 2,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      engine.addAgent(new Agent({ id: 'direct-1' }));
+      engine.addAgent(new Agent({ id: 'direct-2' }));
+      engine.addAgent(new Agent({ id: 'direct-3' }));
+
+      expect(engine.getAgents()).toHaveLength(2);
+      expect(engine.getAgent('direct-3')).toBeUndefined();
+    });
+
+    it('批量注册 Agent 时也应截断到 maxAgents 上限', () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 3,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      const agents = Array.from({ length: 5 }, (_, i) => new Agent({ id: `batch-${i}` }));
+      engine.addAgents(agents);
+
+      expect(engine.getAgents()).toHaveLength(3);
+      expect(engine.getAgent('batch-3')).toBeUndefined();
+      expect(engine.getAgent('batch-4')).toBeUndefined();
+    });
+
     it('Agent 数量达到 maxAgents 时不应再孵化', async () => {
       const router = createMockModelRouter();
       const smallConfig: WorldConfig = {
@@ -704,7 +736,7 @@ describe('WorldEngine', () => {
   // ── 覆盖率补充：maxAgents 默认值分支 ──
 
   describe('maxAgents 默认值', () => {
-    it('config 未设置 maxAgents 时应使用默认值 500', async () => {
+    it('config 未设置 maxAgents 时应使用默认值 100', async () => {
       const router = createMockModelRouter();
       const configNoMax: WorldConfig = {
         tickIntervalMs: 1000,

@@ -67,6 +67,7 @@ BEECLAW_STRONG_MODEL=qwen2.5:72b
 # Server 配置（可选）
 BEECLAW_TICK_INTERVAL=30000
 BEECLAW_INITIAL_AGENTS=10
+BEECLAW_MAX_AGENTS=100
 ```
 
 > **注意**: 容器内访问宿主机上的 Ollama 时，使用 `host.docker.internal` 代替 `localhost`。
@@ -407,6 +408,7 @@ pm2 startup
 | `BEECLAW_HOST` | `0.0.0.0` | 监听地址 |
 | `BEECLAW_TICK_INTERVAL` | `30000` | Tick 间隔（毫秒），生产建议 30000+ |
 | `BEECLAW_INITIAL_AGENTS` | `10` | 初始 Agent 数量 |
+| `BEECLAW_MAX_AGENTS` | `100` | 世界内允许注册的 Agent 总上限，恢复、初始化和运行时孵化都会受此限制 |
 | `BEECLAW_DB_PATH` | _(空=内存)_ | SQLite 数据库文件路径 |
 | `BEECLAW_SEED_EVENT` | _(空)_ | 启动时注入的种子事件内容 |
 | `BEECLAW_SAVE_INTERVAL` | `5` | 每 N 个 tick 保存一次状态到数据库 |
