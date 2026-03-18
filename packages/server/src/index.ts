@@ -36,6 +36,7 @@ import { registerIngestionRoute } from './api/ingestion.js';
 import { registerSignalsRoute } from './api/signals.js';
 import { registerCoordinatorRoute } from './api/coordinator.js';
 import { registerForecastRoute } from './api/forecast.js';
+import { registerProbesRoute } from './api/probes.js';
 import { WebhookDispatcher } from './webhook/dispatcher.js';
 import { EventIngestion } from '@beeclaw/event-ingestion';
 import {
@@ -385,6 +386,7 @@ async function main(): Promise<void> {
   registerSignalsRoute(app, ctx);
   registerCoordinatorRoute(app, ctx);
   registerForecastRoute(app, ctx);
+  registerProbesRoute(app, ctx);
 
   // 将 schema validation 错误统一为 { error: "字段: 消息" } 格式
   app.setErrorHandler((error: FastifyError, _req, reply) => {
@@ -408,7 +410,7 @@ async function main(): Promise<void> {
 
     // SPA fallback: 非 API/WS 路径返回 index.html
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/api/') || req.url.startsWith('/ws') || req.url === '/health' || req.url === '/metrics') {
+      if (req.url.startsWith('/api/') || req.url.startsWith('/ws') || req.url === '/health' || req.url === '/metrics' || req.url.startsWith('/healthz/')) {
         reply.code(404).send({ error: 'Not Found' });
       } else {
         reply.sendFile('index.html');

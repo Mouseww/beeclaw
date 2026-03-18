@@ -114,3 +114,52 @@ groups:
         annotations:
           summary: "WebSocket 连接大量断开"
           description: "WebSocket 连接数在 2 分钟内下降超过 5 个，可能存在网络问题。"
+
+  # ── 分布式 Worker 健康 ────────────────────────────────────────────────────
+  - name: beeclaw_distributed
+    rules:
+      - alert: WorkerDown
+        expr: up{job="beeclaw-workers"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker 节点不可达"
+          description: "Worker 实例 {{ $labels.instance }} 已离线超过 1 分钟。"
+
+      - alert: AllWorkersDown
+        expr: count(up{job="beeclaw-workers"} == 1) == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "所有 Worker 节点离线"
+          description: "分布式模式下所有 Worker 节点都已离线，Tick 执行将停滞。"
+
+      - alert: WorkerHighErrorRate
+        expr: |
+          rate(beeclaw_worker_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker 错误率过高"
+          description: "Worker {{ $labels.worker }} 在过去 5 分钟内错误率较高（{{ $value }}/s）。"
+
+      - alert: WorkerTickDurationHigh
+        expr: beeclaw_worker_avg_tick_duration_ms > 25000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker Tick 执行耗时过长"
+          description: "Worker {{ $labels.worker }} 平均 Tick 耗时 {{ $value }}ms，可能需要扩容或调优。"
+
+      - alert: CoordinatorDown
+        expr: up{job="beeclaw-coordinator"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Coordinator 不可达"
+          description: "分布式协调器已离线超过 1 分钟，所有 Worker 将无法接收新任务。"

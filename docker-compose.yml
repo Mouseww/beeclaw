@@ -193,9 +193,16 @@ services:
       - BEECLAW_STRONG_MODEL=${BEECLAW_STRONG_MODEL:-qwen2.5:72b}
       # ── 日志 ──
       - BEECLAW_LOG_LEVEL=${BEECLAW_LOG_LEVEL:-info}
+      - BEECLAW_WORKER_HEALTH_PORT=3001
     volumes:
       - beeclaw-data:/app/data
-    command: ["node", "packages/coordinator/dist/worker.js"]
+    command: ["node", "packages/coordinator/dist/worker-entry.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/healthz/live').then(r=>{if(!r.ok)throw 1})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   beeclaw-data:

@@ -25,3 +25,34 @@ scrape_configs:
           environment: "production"
     # 自定义 text format 解析（BeeClaw 输出标准 Prometheus text exposition）
     honor_labels: true
+
+  # ── BeeClaw Coordinator (分布式模式) ─────────────────────────────────────────
+  # 分布式模式下 Coordinator 复用 server 端口
+  - job_name: "beeclaw-coordinator"
+    metrics_path: "/metrics/prometheus"
+    static_configs:
+      - targets: ["beeclaw-server-distributed:3000"]
+        labels:
+          instance: "beeclaw-coordinator"
+          environment: "production"
+          role: "coordinator"
+    honor_labels: true
+
+  # ── BeeClaw Workers (分布式模式) ─────────────────────────────────────────────
+  # Worker 节点通过独立健康端口暴露 Prometheus 指标
+  # 注意：使用 Docker service discovery 或手动添加 worker 实例
+  - job_name: "beeclaw-workers"
+    metrics_path: "/metrics/prometheus"
+    # DNS-based service discovery: Docker Compose scale 的 worker 容器
+    dns_sd_configs:
+      - names: ["worker"]
+        type: "A"
+        port: 3001
+    static_configs:
+      - targets: []   # 留空，由 dns_sd_configs 自动发现
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: "(.+)"
+        replacement: "worker-$1"
+    honor_labels: true
