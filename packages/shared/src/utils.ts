@@ -102,6 +102,7 @@ export function weightedAverage(oldValue: number, newValue: number, weight: numb
  */
 export function truncate(str: string, maxLen: number): string {
   if (str.length <= maxLen) return str;
+  if (maxLen <= 3) return str.slice(0, Math.max(maxLen, 0));
   return str.slice(0, maxLen - 3) + '...';
 }
 

@@ -205,4 +205,10 @@ describe('truncate 边界条件', () => {
   it('超过 maxLen 应截断并添加省略号', () => {
     expect(truncate('hello world', 8)).toBe('hello...');
   });
+
+  it('maxLen 小于等于 3 时应只返回裁切结果', () => {
+    expect(truncate('hello', 3)).toBe('hel');
+    expect(truncate('hello', 1)).toBe('h');
+    expect(truncate('hello', 0)).toBe('');
+  });
 });

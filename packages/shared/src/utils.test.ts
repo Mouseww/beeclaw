@@ -247,6 +247,12 @@ describe('truncate', () => {
     expect(truncate('hello world', 8)).toBe('hello...');
   });
 
+  it('maxLen 小于等于 3 时应直接裁切而不附加省略号', () => {
+    expect(truncate('hello', 3)).toBe('hel');
+    expect(truncate('hello', 2)).toBe('he');
+    expect(truncate('hello', 0)).toBe('');
+  });
+
   it('截断后长度不应超过 maxLen', () => {
     const result = truncate('a very long string that goes on and on', 15);
     expect(result.length).toBeLessThanOrEqual(15);
