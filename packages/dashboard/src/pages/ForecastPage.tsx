@@ -48,9 +48,9 @@ export function ForecastPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h2 className="text-2xl font-bold theme-text-heading" style={{ color: 'var(--text-heading)' }}>推演预测</h2>
+        <h2 className="text-xl sm:text-2xl font-bold theme-text-heading" style={{ color: 'var(--text-heading)' }}>推演预测</h2>
         <p className="text-sm theme-text-muted mt-1" style={{ color: 'var(--text-muted)' }}>
           输入一个事件、问题或决策，让 BeeClaw 世界替你跑一轮多角色推演。
         </p>
@@ -144,7 +144,7 @@ export function ForecastPage() {
             <Card title="主要阵营">
               <div className="space-y-3">
                 {result.factions.map((faction) => (
-                  <div key={faction.name} className="rounded-xl p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+                  <div key={faction.name} className="rounded-xl p-3 sm:p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{faction.name}</span>
                       <span className="text-sm text-bee-400">{faction.share}%</span>
@@ -158,7 +158,7 @@ export function ForecastPage() {
             <Card title="关键反应">
               <div className="space-y-3">
                 {result.keyReactions.map((item) => (
-                  <div key={item.actor} className="rounded-xl p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+                  <div key={item.actor} className="rounded-xl p-3 sm:p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
                     <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-heading)' }}>{item.actor}</p>
                     <p className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{item.reaction}</p>
                   </div>

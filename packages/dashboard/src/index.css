@@ -175,6 +175,9 @@
   .theme-text-heading {
     color: var(--text-heading);
   }
+  .theme-text-faint {
+    color: var(--text-faint);
+  }
   .theme-input {
     background-color: var(--input-bg);
     border-color: var(--input-border);

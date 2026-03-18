@@ -2,8 +2,8 @@
 // BeeClaw Dashboard — 主应用组件 + 路由配置
 // ============================================================================
 
-import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useTheme } from './hooks/useTheme';
 import { Header } from './components/Header';
@@ -33,18 +33,40 @@ function PageLoader() {
 export function App() {
   const { state: wsState, lastTick } = useWebSocket();
   const { theme, cycleTheme } = useTheme();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  // 路由变化时自动关闭移动端侧边栏
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [sidebarOpen]);
+
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
 
   return (
     <div className="min-h-screen flex flex-col theme-bg-primary theme-text-primary">
-      {/* 顶部导航 */}
-      <Header wsState={wsState} tick={lastTick?.tick ?? 0} theme={theme} onThemeCycle={cycleTheme} />
+      <Header
+        wsState={wsState}
+        tick={lastTick?.tick ?? 0}
+        theme={theme}
+        onThemeCycle={cycleTheme}
+        onToggleSidebar={toggleSidebar}
+      />
 
       <div className="flex flex-1 min-h-0">
-        {/* 侧边栏 */}
-        <Sidebar />
+        <Sidebar mobileOpen={sidebarOpen} onClose={closeSidebar} />
 
-        {/* 主内容区 */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 lg:ml-0">
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<WorldOverview />} />

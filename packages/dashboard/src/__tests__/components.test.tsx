@@ -212,7 +212,7 @@ describe('Header', () => {
   it('应该渲染 logo 和 Tick 信息', () => {
     render(
       <MemoryRouter>
-        <Header wsState="connected" tick={42} theme="system" onThemeCycle={() => {}} />
+        <Header wsState="connected" tick={42} theme="system" onThemeCycle={() => {}} onToggleSidebar={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('Bee')).toBeInTheDocument();
@@ -224,11 +224,31 @@ describe('Header', () => {
   it('断开连接时应显示对应状态', () => {
     render(
       <MemoryRouter>
-        <Header wsState="disconnected" tick={0} theme="system" onThemeCycle={() => {}} />
+        <Header wsState="disconnected" tick={0} theme="system" onThemeCycle={() => {}} onToggleSidebar={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('已断开')).toBeInTheDocument();
     expect(screen.getByText('Tick #0')).toBeInTheDocument();
+  });
+
+  it('应该渲染移动端汉堡菜单按钮', () => {
+    render(
+      <MemoryRouter>
+        <Header wsState="connected" tick={0} theme="system" onThemeCycle={() => {}} onToggleSidebar={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText('打开导航菜单')).toBeInTheDocument();
+  });
+
+  it('点击汉堡菜单按钮应调用 onToggleSidebar', () => {
+    const onToggle = vi.fn();
+    render(
+      <MemoryRouter>
+        <Header wsState="connected" tick={0} theme="system" onThemeCycle={() => {}} onToggleSidebar={onToggle} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByLabelText('打开导航菜单'));
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -238,22 +258,46 @@ describe('Sidebar', () => {
   it('应该渲染全部导航链接', () => {
     render(
       <MemoryRouter>
-        <Sidebar />
+        <Sidebar mobileOpen={false} onClose={() => {}} />
       </MemoryRouter>,
     );
     expect(screen.getByText('世界总览')).toBeInTheDocument();
+    expect(screen.getByText('Agent 列表')).toBeInTheDocument();
     expect(screen.getByText('推演预测')).toBeInTheDocument();
     expect(screen.getByText('事件流')).toBeInTheDocument();
     expect(screen.getByText('共识引擎')).toBeInTheDocument();
     expect(screen.getByText('社交网络')).toBeInTheDocument();
   });
 
-  it('应该显示版本号', () => {
+  it('应该显示 Mobile Ready 标识', () => {
     render(
       <MemoryRouter>
-        <Sidebar />
+        <Sidebar mobileOpen={false} onClose={() => {}} />
       </MemoryRouter>,
     );
-    expect(screen.getByText('BeeClaw v1.0.0')).toBeInTheDocument();
+    expect(screen.getByText('BeeClaw Mobile Ready')).toBeInTheDocument();
+  });
+
+  it('移动端打开时应显示关闭按钮', () => {
+    render(
+      <MemoryRouter>
+        <Sidebar mobileOpen={true} onClose={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText('关闭导航菜单')).toBeInTheDocument();
+  });
+
+  it('点击遮罩层应调用 onClose', () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar mobileOpen={true} onClose={onClose} />
+      </MemoryRouter>,
+    );
+    // 遮罩层是第一个 div（aria-hidden="true"）
+    const overlay = container.querySelector('[aria-hidden="true"]');
+    expect(overlay).toBeInTheDocument();
+    fireEvent.click(overlay!);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
