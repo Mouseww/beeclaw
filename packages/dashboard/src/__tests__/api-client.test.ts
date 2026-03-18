@@ -17,6 +17,7 @@ import {
   deleteRssSource,
   fetchTickEvents,
   fetchTickResponses,
+  forecastScenario,
 } from '../api/client';
 
 // Mock 全局 fetch
@@ -369,5 +370,55 @@ describe('fetchTickResponses', () => {
     mockFetch.mockResolvedValueOnce(mockErrorResponse(500, 'Internal Server Error'));
 
     await expect(fetchTickResponses(0)).rejects.toThrow('API Error: 500 Internal Server Error');
+  });
+});
+
+// ── forecastScenario ──
+
+describe('forecastScenario', () => {
+  it('应该发送 POST 请求到 /api/forecast 并返回结果', async () => {
+    const responseData = {
+      scenario: 'hot-event',
+      scenarioLabel: '热点事件预测',
+      event: '央行加息',
+      summary: '多数 Agent 认为利空...',
+      factions: [],
+      keyReactions: [],
+      risks: [],
+      recommendations: [],
+      metrics: { agentCount: 50, ticks: 4, responsesCollected: 120, averageActivatedAgents: 30, consensusSignals: 3, finalTick: 4 },
+    };
+    mockFetch.mockResolvedValueOnce(mockOkResponse(responseData));
+
+    const body = { event: '央行加息', scenario: 'hot-event' as const, ticks: 4 };
+    const result = await forecastScenario(body);
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect(result).toEqual(responseData);
+  });
+
+  it('API 错误时应该抛出异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockErrorResponse(422, 'Unprocessable Entity'));
+
+    await expect(
+      forecastScenario({ event: '', scenario: 'hot-event', ticks: 4 }),
+    ).rejects.toThrow('API Error: 422');
+  });
+
+  it('应该支持不同场景类型', async () => {
+    mockFetch.mockResolvedValueOnce(mockOkResponse({ scenario: 'roundtable' }));
+
+    const body = { event: 'AI 监管政策', scenario: 'roundtable' as const };
+    await forecastScenario(body);
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
   });
 });

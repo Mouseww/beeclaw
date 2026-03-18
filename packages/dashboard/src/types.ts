@@ -259,3 +259,29 @@ export interface IngestionStatus {
   sources: IngestionSourceStatus[];
   financeSources: IngestionFinanceSourceStatus[];
 }
+
+export interface ForecastResult {
+  scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
+  scenarioLabel: string;
+  event: string;
+  summary: string;
+  factions: {
+    name: string;
+    share: number;
+    summary: string;
+  }[];
+  keyReactions: {
+    actor: string;
+    reaction: string;
+  }[];
+  risks: string[];
+  recommendations: string[];
+  metrics: {
+    agentCount: number;
+    ticks: number;
+    responsesCollected: number;
+    averageActivatedAgents: number;
+    consensusSignals: number;
+    finalTick: number;
+  };
+}

@@ -12,6 +12,7 @@ import type {
   IngestionSourceStatus,
   TickEventsResponse,
   TickResponsesResponse,
+  ForecastResult,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -120,4 +121,20 @@ export function fetchTickEvents(tick: number): Promise<TickEventsResponse> {
 /** 获取 Tick 的响应 */
 export function fetchTickResponses(tick: number): Promise<TickResponsesResponse> {
   return fetchJSON<TickResponsesResponse>(`/ticks/${tick}/responses`);
+}
+
+export async function forecastScenario(body: {
+  event: string;
+  scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
+  ticks?: number;
+}): Promise<ForecastResult> {
+  const res = await fetch(`${BASE_URL}/forecast`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`API Error: ${res.status}`);
+  }
+  return res.json() as Promise<ForecastResult>;
 }

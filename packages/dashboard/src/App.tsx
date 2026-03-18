@@ -18,6 +18,7 @@ const ConsensusView = lazy(() => import('./pages/ConsensusView').then(m => ({ de
 const SocialGraphView = lazy(() => import('./pages/SocialGraphView').then(m => ({ default: m.SocialGraphView })));
 const IngestionView = lazy(() => import('./pages/IngestionView').then(m => ({ default: m.IngestionView })));
 const TimelineReplay = lazy(() => import('./pages/TimelineReplay').then(m => ({ default: m.TimelineReplay })));
+const ForecastPage = lazy(() => import('./pages/ForecastPage').then(m => ({ default: m.ForecastPage })));
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 
 // 加载中占位
@@ -54,6 +55,7 @@ export function App() {
               <Route path="/social-graph" element={<SocialGraphView />} />
               <Route path="/ingestion" element={<IngestionView />} />
               <Route path="/timeline" element={<TimelineReplay />} />
+              <Route path="/forecast" element={<ForecastPage />} />
               <Route path="/settings" element={<Settings />} />
               {/* 未匹配路由重定向到首页 */}
               <Route path="*" element={<Navigate to="/" replace />} />

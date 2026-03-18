@@ -235,14 +235,14 @@ describe('Header', () => {
 // ── Sidebar ──
 
 describe('Sidebar', () => {
-  it('应该渲染全部 5 个导航链接', () => {
+  it('应该渲染全部导航链接', () => {
     render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>,
     );
     expect(screen.getByText('世界总览')).toBeInTheDocument();
-    expect(screen.getByText('Agent 列表')).toBeInTheDocument();
+    expect(screen.getByText('推演预测')).toBeInTheDocument();
     expect(screen.getByText('事件流')).toBeInTheDocument();
     expect(screen.getByText('共识引擎')).toBeInTheDocument();
     expect(screen.getByText('社交网络')).toBeInTheDocument();

@@ -118,7 +118,7 @@ describe('App', () => {
     // Sidebar 应包含导航链接（使用 getAllByText 因为页面标题可能重复）
     const sidebar = document.querySelector('aside')!;
     expect(within(sidebar).getByText('世界总览')).toBeInTheDocument();
-    expect(within(sidebar).getByText('Agent 列表')).toBeInTheDocument();
+    expect(within(sidebar).getByText('推演预测')).toBeInTheDocument();
     expect(within(sidebar).getByText('事件流')).toBeInTheDocument();
     expect(within(sidebar).getByText('共识引擎')).toBeInTheDocument();
     expect(within(sidebar).getByText('社交网络')).toBeInTheDocument();
@@ -136,9 +136,9 @@ describe('App', () => {
     expect(await screen.findByText('暂无 Agent，等待世界引擎启动...')).toBeInTheDocument();
   });
 
-  it('"/events" 路由应该显示事件流页面', async () => {
-    renderWithRouter('/events');
-    expect(await screen.findByText(/实时事件和 Agent 响应/)).toBeInTheDocument();
+  it('"/forecast" 路由应该显示推演预测页面', async () => {
+    renderWithRouter('/forecast');
+    expect(await screen.findByText('输入一个你想预测的事情')).toBeInTheDocument();
   });
 
   it('"/consensus" 路由应该显示共识引擎页面', async () => {
