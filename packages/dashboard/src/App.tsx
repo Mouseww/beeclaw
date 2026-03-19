@@ -10,6 +10,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 
 // 页面组件懒加载 —— 每个页面独立 chunk，减少首屏体积
+const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
 const WorldOverview = lazy(() => import('./pages/WorldOverview').then(m => ({ default: m.WorldOverview })));
 const AgentList = lazy(() => import('./pages/AgentList').then(m => ({ default: m.AgentList })));
 const AgentDetail = lazy(() => import('./pages/AgentDetail').then(m => ({ default: m.AgentDetail })));
@@ -35,6 +36,7 @@ export function App() {
   const { theme, cycleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const isLandingPage = location.pathname === '/';
 
   // 路由变化时自动关闭移动端侧边栏
   useEffect(() => {
@@ -53,6 +55,17 @@ export function App() {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
 
+  if (isLandingPage) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col theme-bg-primary theme-text-primary">
       <Header
@@ -69,7 +82,7 @@ export function App() {
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 lg:ml-0">
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/" element={<WorldOverview />} />
+              <Route path="/dashboard" element={<WorldOverview />} />
               <Route path="/agents" element={<AgentList />} />
               <Route path="/agents/:id" element={<AgentDetail />} />
               <Route path="/events" element={<EventFeed />} />
@@ -79,8 +92,8 @@ export function App() {
               <Route path="/timeline" element={<TimelineReplay />} />
               <Route path="/forecast" element={<ForecastPage />} />
               <Route path="/settings" element={<Settings />} />
-              {/* 未匹配路由重定向到首页 */}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {/* 非首页未匹配路由重定向到 dashboard */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
         </main>

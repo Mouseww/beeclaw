@@ -2,6 +2,7 @@
 // BeeClaw Dashboard — 顶部导航栏
 // ============================================================================
 
+import { Link } from 'react-router-dom';
 import type { ConnectionState } from './StatusBadge';
 import { ConnectionBadge } from './StatusBadge';
 import { ThemeToggle } from './ThemeToggle';
@@ -29,11 +30,13 @@ export function Header({ wsState, tick, theme, onThemeCycle, onToggleSidebar }: 
         >
           ☰
         </button>
-        <span className="text-xl sm:text-2xl shrink-0">🐝</span>
-        <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
-          <span className="text-bee-400">Bee</span>
-          <span className="theme-text-primary">Claw</span>
-        </h1>
+        <Link to="/" className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <span className="text-xl sm:text-2xl shrink-0">🐝</span>
+          <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
+            <span className="text-bee-400">Bee</span>
+            <span className="theme-text-primary">Claw</span>
+          </h1>
+        </Link>
         <span className="text-xs theme-text-muted hidden md:inline">群体智能仿真引擎</span>
       </div>
 

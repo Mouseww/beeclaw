@@ -110,29 +110,32 @@ describe('App', () => {
     vi.clearAllMocks();
   });
 
-  it('应该渲染 Header 和 Sidebar', async () => {
-    renderWithRouter();
-    // Header 应包含 BeeClaw logo
+  it('首页应该显示宣传主页', async () => {
+    renderWithRouter('/');
+    expect(await screen.findByText('把 AI 变成真正能协作、能执行、能持续工作的数字员工。')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '进入 BeeClaw 控制台' })).toHaveAttribute('href', '/dashboard');
+  });
+
+  it('dashboard 路由应该渲染 Header 和 Sidebar', async () => {
+    renderWithRouter('/dashboard');
     expect(screen.getByText('Bee')).toBeInTheDocument();
     expect(screen.getByText('Claw')).toBeInTheDocument();
-    // Sidebar 应包含导航链接（使用 getAllByText 因为页面标题可能重复）
     const sidebar = document.querySelector('aside')!;
     expect(within(sidebar).getByText('世界总览')).toBeInTheDocument();
     expect(within(sidebar).getByText('推演预测')).toBeInTheDocument();
     expect(within(sidebar).getByText('事件流')).toBeInTheDocument();
     expect(within(sidebar).getByText('共识引擎')).toBeInTheDocument();
     expect(within(sidebar).getByText('社交网络')).toBeInTheDocument();
+    expect(within(sidebar).getByText('查看宣传主页')).toBeInTheDocument();
   });
 
-  it('默认路由 "/" 应该显示世界总览页面', async () => {
-    renderWithRouter('/');
-    // 页面主内容区的标题（lazy 加载需等待异步渲染）
+  it('"/dashboard" 路由应该显示世界总览页面', async () => {
+    renderWithRouter('/dashboard');
     expect(await screen.findByText('BeeClaw 仿真世界实时状态')).toBeInTheDocument();
   });
 
   it('"/agents" 路由应该显示 Agent 列表页面', async () => {
     renderWithRouter('/agents');
-    // Agent 列表页有空状态提示
     expect(await screen.findByText('暂无 Agent，等待世界引擎启动...')).toBeInTheDocument();
   });
 
@@ -148,23 +151,21 @@ describe('App', () => {
 
   it('"/social-graph" 路由应该显示社交网络页面', async () => {
     renderWithRouter('/social-graph');
-    // 社交网络页面有 Mock 数据标签
     expect(await screen.findByText('Mock 数据')).toBeInTheDocument();
   });
 
-  it('未知路由应该重定向到首页', async () => {
+  it('未知路由应该重定向到 dashboard', async () => {
     renderWithRouter('/unknown-route');
     expect(await screen.findByText('BeeClaw 仿真世界实时状态')).toBeInTheDocument();
   });
 
   it('"/agents/:id" 路由应该显示 Agent 详情页面', async () => {
     renderWithRouter('/agents/test-agent-123');
-    // usePolling 返回 null → 显示 Agent 未找到
     expect(await screen.findByText('Agent 未找到')).toBeInTheDocument();
   });
 
   it('Header 应该显示 WebSocket 断开状态', async () => {
-    renderWithRouter();
+    renderWithRouter('/dashboard');
     expect(screen.getByText('已断开')).toBeInTheDocument();
     expect(screen.getByText('Tick #0')).toBeInTheDocument();
   });

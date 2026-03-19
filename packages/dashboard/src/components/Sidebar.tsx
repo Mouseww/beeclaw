@@ -2,7 +2,7 @@
 // BeeClaw Dashboard — 侧边栏导航
 // ============================================================================
 
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 
 interface NavItem {
   path: string;
@@ -16,7 +16,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/', label: '世界总览', icon: '🌍' },
+  { path: '/dashboard', label: '世界总览', icon: '🌍' },
   { path: '/agents', label: 'Agent 列表', icon: '🤖' },
   { path: '/forecast', label: '推演预测', icon: '🔮' },
   { path: '/events', label: '事件流', icon: '⚡' },
@@ -60,7 +60,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             <NavLink
               key={item.path}
               to={item.path}
-              end={item.path === '/'}
+              end={item.path === '/dashboard'}
               onClick={onClose}
               className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}
             >
@@ -70,7 +70,13 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="p-4 border-t theme-border">
+        <div className="p-4 border-t theme-border space-y-3">
+          <Link
+            to="/"
+            className="block text-center text-sm rounded-lg px-3 py-2 border border-yellow-400/30 text-yellow-300 hover:bg-yellow-400/10 transition"
+          >
+            查看宣传主页
+          </Link>
           <p className="text-xs theme-text-faint text-center" style={{ color: 'var(--text-faint)' }}>
             BeeClaw Mobile Ready
           </p>
