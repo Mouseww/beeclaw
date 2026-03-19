@@ -222,13 +222,46 @@ describe('PUT /api/config/llm/:tier', () => {
     expect(body.error).toContain('Invalid tier');
   });
 
-  it('配置中缺少 apiKey 应返回 400', async () => {
+  it('配置中缺少 apiKey 时应保留已有 key 并成功更新', async () => {
     const res = await app.inject({
       method: 'PUT',
       url: '/api/config/llm/local',
       payload: { baseURL: 'http://x', model: 'y' },
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(200);
+
+    expect(testCtx.store.saveLLMConfig).toHaveBeenCalledWith(
+      'local',
+      expect.objectContaining({ apiKey: 'mock' }),
+    );
+  });
+
+  it('apiKey 为空字符串时应保留已有 key', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/config/llm/cheap',
+      payload: { baseURL: 'http://x', apiKey: '', model: 'cheap-v3' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    expect(testCtx.store.saveLLMConfig).toHaveBeenCalledWith(
+      'cheap',
+      expect.objectContaining({ apiKey: 'mock' }),
+    );
+  });
+
+  it('apiKey 为脱敏值时应保留已有 key', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/config/llm/strong',
+      payload: { baseURL: 'http://x', apiKey: '****', model: 'strong-v3' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    expect(testCtx.store.saveLLMConfig).toHaveBeenCalledWith(
+      'strong',
+      expect.objectContaining({ apiKey: 'mock' }),
+    );
   });
 
   it('maxTokens 为负数应返回 400', async () => {

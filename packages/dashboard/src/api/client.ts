@@ -13,6 +13,7 @@ import type {
   TickEventsResponse,
   TickResponsesResponse,
   ForecastResult,
+  ForecastJobStatusResponse,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -163,17 +164,41 @@ export async function forecastScenario(body: {
   scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
   ticks?: number;
 }): Promise<ForecastResult> {
-  const res = await fetchWithTimeout(`${BASE_URL}/forecast`, {
+  const startRes = await fetchWithTimeout(`${BASE_URL}/forecast`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
+
+  if (!startRes.ok) {
+    const detail = await startRes.json().catch(() => null);
     const msg = (detail && typeof detail === 'object' && 'error' in detail)
       ? (detail as { error: string }).error
-      : `${res.status} ${res.statusText}`;
+      : `${startRes.status} ${startRes.statusText}`;
     throw new Error(`API Error: ${msg}`);
   }
-  return res.json() as Promise<ForecastResult>;
+
+  const startData = await startRes.json() as ForecastJobStatusResponse;
+  const startedAt = Date.now();
+  const maxWaitMs = 180_000;
+
+  while (Date.now() - startedAt < maxWaitMs) {
+    const pollRes = await fetchWithTimeout(`${BASE_URL}/forecast/${startData.jobId}`);
+    if (!pollRes.ok) {
+      throw new Error(`API Error: ${pollRes.status} ${pollRes.statusText}`);
+    }
+    const pollData = await pollRes.json() as ForecastJobStatusResponse;
+
+    if (pollData.status === 'completed' && pollData.result) {
+      return pollData.result;
+    }
+
+    if (pollData.status === 'failed') {
+      throw new Error(`API Error: ${pollData.error ?? 'forecast job failed'}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error(`API Timeout: forecast job exceeded ${maxWaitMs}ms`);
 }

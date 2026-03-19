@@ -297,3 +297,16 @@ export interface ForecastResult {
     consensus: unknown[];
   };
 }
+
+export interface ForecastJobStatusResponse {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  createdAt?: number;
+  updatedAt?: number;
+  progress: {
+    completedTicks: number;
+    totalTicks: number;
+  };
+  result?: ForecastResult;
+  error?: string;
+}

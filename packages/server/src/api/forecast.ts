@@ -240,99 +240,222 @@ function buildDirectAnswer(event: string, scenario: ForecastScenarioKey): Direct
   };
 }
 
+export interface ForecastResultPayload {
+  scenario: ForecastScenarioKey;
+  scenarioLabel: string;
+  event: string;
+  directAnswer: DirectAnswerBlock;
+  summary: string;
+  factions: ForecastFaction[];
+  keyReactions: Array<{ actor: string; reaction: string }>;
+  risks: string[];
+  recommendations: string[];
+  metrics: {
+    agentCount: number;
+    ticks: number;
+    responsesCollected: number;
+    averageActivatedAgents: number;
+    consensusSignals: number;
+    finalTick: number;
+  };
+  raw: {
+    ticks: unknown[];
+    consensus: unknown[];
+  };
+}
+
+type ForecastJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+interface ForecastJob {
+  jobId: string;
+  status: ForecastJobStatus;
+  createdAt: number;
+  updatedAt: number;
+  input: {
+    event: string;
+    scenario: ForecastScenarioKey;
+    ticks: number;
+    importance: number;
+  };
+  progress: {
+    completedTicks: number;
+    totalTicks: number;
+  };
+  result?: ForecastResultPayload;
+  error?: string;
+}
+
+async function runForecast(body: ForecastBody, ctx: ServerContext, onProgress?: (completedTicks: number, totalTicks: number) => void): Promise<ForecastResultPayload> {
+  const event = body.event?.trim();
+  const scenario = body.scenario ?? 'hot-event';
+  const template = pickTemplate(scenario);
+
+  if (!event) {
+    throw new Error('event required');
+  }
+
+  const ticks = clamp(body.ticks ?? 4, 1, 20);
+  const configuredAgentCount = template.agentProfiles.reduce((sum, profile) => sum + profile.count, 0);
+  const agentCount = clamp(configuredAgentCount, 8, 40);
+  const importance = clamp(body.importance ?? SCENARIO_MAP[scenario].defaultImportance, 0.1, 1);
+
+  const engine = new WorldEngine({
+    config: {
+      tickIntervalMs: 50,
+      maxAgents: agentCount,
+      eventRetentionTicks: ticks + 5,
+      enableNaturalSelection: false,
+    },
+    modelRouter: ctx.modelRouter,
+    concurrency: 5,
+  });
+
+  const agents = engine.spawner.spawnBatch(agentCount, 0);
+  engine.addAgents(agents);
+
+  const scenarioEvent = {
+    title: `${SCENARIO_MAP[scenario].label}: ${event.slice(0, 40)}`,
+    content: event,
+    category: SCENARIO_MAP[scenario].category,
+    importance,
+    propagationRadius: 0.7,
+    tags: [scenario, 'forecast'],
+  };
+
+  engine.injectEvent(scenarioEvent);
+
+  const tickResults = [];
+  try {
+    for (let i = 0; i < ticks; i++) {
+      tickResults.push(await engine.step());
+      onProgress?.(i + 1, ticks);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown engine error';
+    throw new Error(`forecast engine failed at tick ${tickResults.length + 1}: ${message}`);
+  }
+
+  const lastTick = tickResults.at(-1);
+  const consensus = engine.getConsensusEngine().getLatestSignals();
+  const factions = buildFactions(template, agentCount, event);
+  const avgActivated = tickResults.length > 0
+    ? Math.round(tickResults.reduce((sum, tick) => sum + tick.agentsActivated, 0) / tickResults.length)
+    : 0;
+  const totalResponses = tickResults.reduce((sum, tick) => sum + tick.responsesCollected, 0);
+
+  const keyReactions = factions.map((faction, index) => ({
+    actor: faction.name,
+    reaction: [
+      '会先表达态度，并影响同类群体的初始判断',
+      '会放大细节争议，推动讨论进入更复杂的阶段',
+      '会把讨论拉回现实收益、成本和风险上',
+      '会从竞争和外部环境角度重新定义这件事',
+    ][index] ?? '会持续参与讨论',
+  }));
+
+  const directAnswer = buildDirectAnswer(event, scenario);
+  const summary = `在“${SCENARIO_MAP[scenario].label}”场景下，系统为“${event}”创建了 ${agentCount} 个角色并运行 ${ticks} 轮推演。首轮主要由高敏感群体发起讨论，随后更务实的角色开始评估现实影响。整体来看，平均每轮约激活 ${avgActivated} 个 Agent，累计产生 ${totalResponses} 条响应，最终更像是“先升温、再分化、再形成有限共识”的走势。`;
+
+  return {
+    scenario,
+    scenarioLabel: SCENARIO_MAP[scenario].label,
+    event,
+    directAnswer,
+    summary,
+    factions,
+    keyReactions,
+    risks: buildRisks(scenario, event),
+    recommendations: buildRecommendations(scenario),
+    metrics: {
+      agentCount,
+      ticks,
+      responsesCollected: totalResponses,
+      averageActivatedAgents: avgActivated,
+      consensusSignals: consensus.length,
+      finalTick: lastTick?.tick ?? 0,
+    },
+    raw: {
+      ticks: tickResults,
+      consensus,
+    },
+  };
+}
+
 export function registerForecastRoute(app: FastifyInstance, ctx: ServerContext): void {
+  const jobs = new Map<string, ForecastJob>();
+
   app.post<{ Body: ForecastBody }>('/api/forecast', { schema: forecastSchema }, async (req, reply) => {
     const event = req.body.event?.trim();
     const scenario = req.body.scenario ?? 'hot-event';
-    const template = pickTemplate(scenario);
 
     if (!event) {
       return reply.status(400).send({ error: 'event required' });
     }
 
-    const ticks = clamp(req.body.ticks ?? 4, 1, 8);
-    const configuredAgentCount = template.agentProfiles.reduce((sum, profile) => sum + profile.count, 0);
-    const agentCount = clamp(configuredAgentCount, 8, 40);
+    const ticks = clamp(req.body.ticks ?? 4, 1, 20);
     const importance = clamp(req.body.importance ?? SCENARIO_MAP[scenario].defaultImportance, 0.1, 1);
+    const jobId = `forecast_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-    const engine = new WorldEngine({
-      config: {
-        tickIntervalMs: 50,
-        maxAgents: agentCount,
-        eventRetentionTicks: ticks + 5,
-        enableNaturalSelection: false,
+    const job: ForecastJob = {
+      jobId,
+      status: 'queued',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      input: {
+        event,
+        scenario,
+        ticks,
+        importance,
       },
-      modelRouter: ctx.modelRouter,
-      concurrency: 5,
-    });
-
-    const agents = engine.spawner.spawnBatch(agentCount, 0);
-    engine.addAgents(agents);
-
-    const scenarioEvent = {
-      title: `${SCENARIO_MAP[scenario].label}: ${event.slice(0, 40)}`,
-      content: event,
-      category: SCENARIO_MAP[scenario].category,
-      importance,
-      propagationRadius: 0.7,
-      tags: [scenario, 'forecast'],
+      progress: {
+        completedTicks: 0,
+        totalTicks: ticks,
+      },
     };
 
-    engine.injectEvent(scenarioEvent);
+    jobs.set(jobId, job);
 
-    const tickResults = [];
-    try {
-      for (let i = 0; i < ticks; i++) {
-        tickResults.push(await engine.step());
+    void (async () => {
+      job.status = 'running';
+      job.updatedAt = Date.now();
+      try {
+        const result = await runForecast({ event, scenario, ticks, importance }, ctx, (completedTicks, totalTicks) => {
+          job.progress.completedTicks = completedTicks;
+          job.progress.totalTicks = totalTicks;
+          job.updatedAt = Date.now();
+        });
+        job.status = 'completed';
+        job.result = result;
+        job.updatedAt = Date.now();
+      } catch (error) {
+        job.status = 'failed';
+        job.error = error instanceof Error ? error.message : 'unknown forecast error';
+        job.updatedAt = Date.now();
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'unknown engine error';
-      return reply.status(500).send({ error: `forecast engine failed at tick ${tickResults.length + 1}: ${message}` });
+    })();
+
+    return reply.status(202).send({
+      jobId,
+      status: job.status,
+      progress: job.progress,
+    });
+  });
+
+  app.get<{ Params: { jobId: string } }>('/api/forecast/:jobId', async (req, reply) => {
+    const job = jobs.get(req.params.jobId);
+    if (!job) {
+      return reply.status(404).send({ error: 'forecast job not found' });
     }
 
-    const lastTick = tickResults.at(-1);
-    const consensus = engine.getConsensusEngine().getLatestSignals();
-    const factions = buildFactions(template, agentCount, event);
-    const avgActivated = tickResults.length > 0
-      ? Math.round(tickResults.reduce((sum, tick) => sum + tick.agentsActivated, 0) / tickResults.length)
-      : 0;
-    const totalResponses = tickResults.reduce((sum, tick) => sum + tick.responsesCollected, 0);
-
-    const keyReactions = factions.map((faction, index) => ({
-      actor: faction.name,
-      reaction: [
-        '会先表达态度，并影响同类群体的初始判断',
-        '会放大细节争议，推动讨论进入更复杂的阶段',
-        '会把讨论拉回现实收益、成本和风险上',
-        '会从竞争和外部环境角度重新定义这件事',
-      ][index] ?? '会持续参与讨论',
-    }));
-
-    const directAnswer = buildDirectAnswer(event, scenario);
-    const summary = `在“${SCENARIO_MAP[scenario].label}”场景下，系统为“${event}”创建了 ${agentCount} 个角色并运行 ${ticks} 轮推演。首轮主要由高敏感群体发起讨论，随后更务实的角色开始评估现实影响。整体来看，平均每轮约激活 ${avgActivated} 个 Agent，累计产生 ${totalResponses} 条响应，最终更像是“先升温、再分化、再形成有限共识”的走势。`;
-
     return {
-      scenario,
-      scenarioLabel: SCENARIO_MAP[scenario].label,
-      event,
-      directAnswer,
-      summary,
-      factions,
-      keyReactions,
-      risks: buildRisks(scenario, event),
-      recommendations: buildRecommendations(scenario),
-      metrics: {
-        agentCount,
-        ticks,
-        responsesCollected: totalResponses,
-        averageActivatedAgents: avgActivated,
-        consensusSignals: consensus.length,
-        finalTick: lastTick?.tick ?? 0,
-      },
-      raw: {
-        ticks: tickResults,
-        consensus,
-      },
+      jobId: job.jobId,
+      status: job.status,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      input: job.input,
+      progress: job.progress,
+      result: job.result,
+      error: job.error,
     };
   });
 }

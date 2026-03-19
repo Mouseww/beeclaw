@@ -524,15 +524,15 @@ describe('Config API', () => {
       expect(body.error).toContain('Invalid tier');
     });
 
-    it('缺少 apiKey 应返回 400', async () => {
+    it('缺少 apiKey 时应保留已有 key 并成功更新', async () => {
       const res = await app.inject({
         method: 'PUT',
         url: '/api/config/llm/cheap',
         payload: { baseURL: 'http://url', model: 'model' },
       });
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(200);
       const body = res.json();
-      expect(body.error).toContain('apiKey');
+      expect(body.ok).toBe(true);
     });
 
     it('temperature 超出范围应返回 400', async () => {

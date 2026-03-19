@@ -475,8 +475,35 @@ describe('fetchTickResponses', () => {
 
 // ── forecastScenario ──
 
+/** Helper: mock 异步 Job 模式返回 */
+function mockJobStartResponse(jobId: string) {
+  return {
+    ok: true,
+    status: 202,
+    statusText: 'Accepted',
+    json: () =>
+      Promise.resolve({ jobId, status: 'queued', progress: { completedTicks: 0, totalTicks: 4 } }),
+  };
+}
+
+function mockJobGetResponse(jobId: string, status: string, result?: unknown, error?: string) {
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: () =>
+      Promise.resolve({
+        jobId,
+        status,
+        progress: { completedTicks: 4, totalTicks: 4 },
+        result,
+        error,
+      }),
+  };
+}
+
 describe('forecastScenario', () => {
-  it('应该发送 POST 请求到 /api/forecast 并返回结果', async () => {
+  it('应该发送 POST 请求到 /api/forecast 并轮询直到完成', async () => {
     const responseData = {
       scenario: 'hot-event',
       scenarioLabel: '热点事件预测',
@@ -488,15 +515,21 @@ describe('forecastScenario', () => {
       recommendations: [],
       metrics: { agentCount: 50, ticks: 4, responsesCollected: 120, averageActivatedAgents: 30, consensusSignals: 3, finalTick: 4 },
     };
-    mockFetch.mockResolvedValueOnce(mockOkResponse(responseData));
+    // 第一次 POST 返回 202 + jobId
+    mockFetch.mockResolvedValueOnce(mockJobStartResponse('job_123'));
+    // 第二次 GET 返回 completed
+    mockFetch.mockResolvedValueOnce(mockJobGetResponse('job_123', 'completed', responseData));
 
     const body = { event: '央行加息', scenario: 'hot-event' as const, ticks: 4 };
     const result = await forecastScenario(body);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/forecast', {
+    expect(mockFetch).toHaveBeenNthCalledWith(1, '/api/forecast', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: expect.any(AbortSignal),
+    });
+    expect(mockFetch).toHaveBeenNthCalledWith(2, '/api/forecast/job_123', {
       signal: expect.any(AbortSignal),
     });
     expect(result).toEqual(responseData);
@@ -511,16 +544,30 @@ describe('forecastScenario', () => {
   });
 
   it('应该支持不同场景类型', async () => {
-    mockFetch.mockResolvedValueOnce(mockOkResponse({ scenario: 'roundtable' }));
+    mockFetch.mockResolvedValueOnce(mockJobStartResponse('job_456'));
+    mockFetch.mockResolvedValueOnce(
+      mockJobGetResponse('job_456', 'completed', { scenario: 'roundtable' }),
+    );
 
     const body = { event: 'AI 监管政策', scenario: 'roundtable' as const };
     await forecastScenario(body);
 
-    expect(mockFetch).toHaveBeenCalledWith('/api/forecast', {
+    expect(mockFetch).toHaveBeenNthCalledWith(1, '/api/forecast', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('Job 失败时应该抛出包含错误信息的异常', async () => {
+    mockFetch.mockResolvedValueOnce(mockJobStartResponse('job_fail'));
+    mockFetch.mockResolvedValueOnce(
+      mockJobGetResponse('job_fail', 'failed', undefined, 'forecast engine failed: LLM timeout'),
+    );
+
+    await expect(forecastScenario({ event: 'test', scenario: 'hot-event' })).rejects.toThrow(
+      'forecast engine failed: LLM timeout',
+    );
   });
 });

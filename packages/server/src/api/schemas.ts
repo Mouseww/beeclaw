@@ -283,6 +283,18 @@ const llmConfigObjectSchema = {
   },
 };
 
+const llmTierUpdateObjectSchema = {
+  type: 'object' as const,
+  required: ['baseURL', 'model'],
+  properties: {
+    baseURL: { type: 'string' as const },
+    apiKey: { type: 'string' as const },
+    model: { type: 'string' as const },
+    maxTokens: { type: 'integer' as const, minimum: 1 },
+    temperature: { type: 'number' as const, minimum: 0, maximum: 2 },
+  },
+};
+
 export const getLLMConfigSchema = {
   tags: ['config'],
   summary: '获取当前 LLM 配置',
@@ -329,7 +341,7 @@ export const putLLMTierConfigSchema = {
     },
     required: ['tier'],
   },
-  body: llmConfigObjectSchema,
+  body: llmTierUpdateObjectSchema,
   response: {
     200: {
       type: 'object' as const,
@@ -845,7 +857,7 @@ export const signalsAccuracySchema = {
 
 export const forecastSchema = {
   tags: ['scenario'],
-  summary: '用户输入式推演（自动匹配场景模板）',
+  summary: '用户输入式推演（异步任务模式）',
   body: {
     type: 'object' as const,
     required: ['event'],
@@ -856,69 +868,26 @@ export const forecastSchema = {
         enum: ['hot-event', 'product-launch', 'policy-impact', 'roundtable'],
         description: '场景类型（默认 hot-event）',
       },
-      ticks: { type: 'integer' as const, minimum: 1, maximum: 8, description: '推演轮数（默认 4，最大 8）' },
+      ticks: { type: 'integer' as const, minimum: 1, maximum: 20, description: '推演轮数（默认 4，最大 20）' },
       importance: { type: 'number' as const, minimum: 0.1, maximum: 1, description: '事件重要性（默认由场景决定）' },
     },
   },
   response: {
-    200: {
+    202: {
       type: 'object' as const,
       properties: {
-        scenario: { type: 'string' as const },
-        scenarioLabel: { type: 'string' as const },
-        event: { type: 'string' as const },
-        directAnswer: {
+        jobId: { type: 'string' as const },
+        status: { type: 'string' as const, enum: ['queued', 'running', 'completed', 'failed'] },
+        progress: {
           type: 'object' as const,
           properties: {
-            questionType: {
-              type: 'string' as const,
-              enum: ['numeric-forecast', 'judgement', 'event-propagation', 'decision-simulation'],
-            },
-            answer: { type: 'string' as const },
-            confidence: { type: 'string' as const, enum: ['low', 'medium', 'high'] },
-            range: { type: 'string' as const },
-            assumptions: { type: 'array' as const, items: { type: 'string' as const } },
-            drivers: { type: 'array' as const, items: { type: 'string' as const } },
+            completedTicks: { type: 'integer' as const },
+            totalTicks: { type: 'integer' as const },
           },
-          required: ['questionType', 'answer', 'confidence', 'assumptions', 'drivers'],
+          required: ['completedTicks', 'totalTicks'],
         },
-        summary: { type: 'string' as const },
-        factions: {
-          type: 'array' as const,
-          items: {
-            type: 'object' as const,
-            properties: {
-              name: { type: 'string' as const },
-              share: { type: 'integer' as const },
-              summary: { type: 'string' as const },
-            },
-          },
-        },
-        keyReactions: {
-          type: 'array' as const,
-          items: {
-            type: 'object' as const,
-            properties: {
-              actor: { type: 'string' as const },
-              reaction: { type: 'string' as const },
-            },
-          },
-        },
-        risks: { type: 'array' as const, items: { type: 'string' as const } },
-        recommendations: { type: 'array' as const, items: { type: 'string' as const } },
-        metrics: {
-          type: 'object' as const,
-          properties: {
-            agentCount: { type: 'integer' as const },
-            ticks: { type: 'integer' as const },
-            responsesCollected: { type: 'integer' as const },
-            averageActivatedAgents: { type: 'integer' as const },
-            consensusSignals: { type: 'integer' as const },
-            finalTick: { type: 'integer' as const },
-          },
-        },
-        raw: { type: 'object' as const, additionalProperties: true },
       },
+      required: ['jobId', 'status', 'progress'],
     },
     400: ErrorResponseSchema,
   },

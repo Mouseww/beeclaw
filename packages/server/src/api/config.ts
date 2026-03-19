@@ -9,6 +9,7 @@ import type { LLMConfig, ModelTier } from '@beeclaw/shared';
 import { getLLMConfigSchema, putLLMConfigSchema, putLLMTierConfigSchema } from './schemas.js';
 
 const VALID_TIERS: ModelTier[] = ['local', 'cheap', 'strong'];
+const MASKED_API_KEY = '****';
 
 /** 校验 LLMConfig 字段 */
 function validateLLMConfig(body: unknown): LLMConfig | string {
@@ -35,6 +36,42 @@ function validateLLMConfig(body: unknown): LLMConfig | string {
   return {
     baseURL: obj['baseURL'] as string,
     apiKey: obj['apiKey'] as string,
+    model: obj['model'] as string,
+    maxTokens: obj['maxTokens'] as number | undefined,
+    temperature: obj['temperature'] as number | undefined,
+  };
+}
+
+/**
+ * 校验单个 tier 更新。
+ * 当 apiKey 缺失、为空字符串或仍是脱敏值时，保留现有 key。
+ */
+function validateTierUpdate(body: unknown, existing: LLMConfig): LLMConfig | string {
+  if (!body || typeof body !== 'object') return 'Body must be a JSON object';
+
+  const obj = body as Record<string, unknown>;
+
+  if (typeof obj['baseURL'] !== 'string' || obj['baseURL'].length === 0) {
+    return 'baseURL is required and must be a non-empty string';
+  }
+  if (typeof obj['model'] !== 'string' || obj['model'].length === 0) {
+    return 'model is required and must be a non-empty string';
+  }
+  if (obj['maxTokens'] !== undefined && (typeof obj['maxTokens'] !== 'number' || obj['maxTokens'] <= 0)) {
+    return 'maxTokens must be a positive number';
+  }
+  if (obj['temperature'] !== undefined && (typeof obj['temperature'] !== 'number' || obj['temperature'] < 0 || obj['temperature'] > 2)) {
+    return 'temperature must be a number between 0 and 2';
+  }
+
+  const rawApiKey = obj['apiKey'];
+  const apiKey = typeof rawApiKey !== 'string' || rawApiKey.length === 0 || rawApiKey === MASKED_API_KEY
+    ? existing.apiKey
+    : rawApiKey;
+
+  return {
+    baseURL: obj['baseURL'] as string,
+    apiKey,
     model: obj['model'] as string,
     maxTokens: obj['maxTokens'] as number | undefined,
     temperature: obj['temperature'] as number | undefined,
@@ -93,7 +130,8 @@ export function registerConfigRoute(app: FastifyInstance, ctx: ServerContext): v
       return reply.code(400).send({ error: `Invalid tier: ${tier}. Must be one of: ${VALID_TIERS.join(', ')}` });
     }
 
-    const result = validateLLMConfig(req.body);
+    const existing = ctx.modelRouter.getRawConfig()[tier];
+    const result = validateTierUpdate(req.body, existing);
     if (typeof result === 'string') {
       return reply.code(400).send({ error: result });
     }
