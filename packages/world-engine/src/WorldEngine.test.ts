@@ -978,4 +978,364 @@ describe('WorldEngine', () => {
       expect(result.eventsProcessed).toBe(0);
     });
   });
+
+  // ── 事件触发孵化的 slice 分支 (456-458) ──
+
+  describe('事件触发孵化 slice 分支', () => {
+    it('事件触发孵化返回多于剩余空间的 Agent 时应截断', async () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 4,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      // 先加 2 个 Agent
+      const agents = Array.from({ length: 2 }, (_, i) => new Agent({ id: `pre-${i}` }));
+      engine.addAgents(agents);
+      expect(engine.getAgents()).toHaveLength(2);
+
+      // 添加事件触发孵化规则（使用 event_keyword 类型，返回 5 个 Agent）
+      engine.spawner.addRule({
+        id: 'event-slice-rule',
+        trigger: { type: 'event_keyword', keywords: ['触发截断孵化'] },
+        count: 5,
+      });
+
+      engine.injectEvent({
+        title: '触发截断孵化',
+        content: '测试 slice 截断',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      const result = await engine.step();
+      // 应只孵化 2 个（4 - 2 = 2）
+      expect(result.newAgentsSpawned).toBe(2);
+      expect(engine.getAgents()).toHaveLength(4);
+    });
+
+    it('多个事件连续触发孵化时，第二个事件应被 break 跳过', async () => {
+      const router = createMockModelRouter();
+      const smallConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        maxAgents: 3,
+      };
+      const engine = new WorldEngine({ config: smallConfig, modelRouter: router });
+
+      // 先加 1 个 Agent
+      engine.addAgent(new Agent({ id: 'pre-0' }));
+
+      // 添加孵化规则（使用 event_keyword 类型）
+      engine.spawner.addRule({
+        id: 'multi-event-rule',
+        trigger: { type: 'event_keyword', keywords: ['多事件孵化'] },
+        count: 2,
+      });
+
+      // 注入两个同关键词事件
+      engine.injectEvent({
+        title: '多事件孵化1',
+        content: '第一个事件',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+      engine.injectEvent({
+        title: '多事件孵化2',
+        content: '第二个事件',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      const result = await engine.step();
+      // 第一个事件孵化 2 个（共 3），第二个事件因达上限被跳过
+      expect(result.newAgentsSpawned).toBe(2);
+      expect(engine.getAgents()).toHaveLength(3);
+    });
+  });
+
+  // ── BatchInference 推理失败分支 (692-696) ──
+
+  describe('BatchInference 推理结果失败分支', () => {
+    it('batchInference 返回 success=false 时应跳过该 Agent 并打印错误', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `batch-fail-${i}` }));
+      engine.addAgents(agents);
+
+      // Mock batchInference 返回 success=false 的结果
+      vi.spyOn(engine.batchInference, 'executeBatch').mockResolvedValue([
+        {
+          id: 'batch-fail-0',
+          success: true,
+          result: { agent: agents[0]!, response: { opinion: '观点', action: 'speak' as const, emotionalState: 0.3, reasoning: '理由' } },
+        },
+        {
+          id: 'batch-fail-1',
+          success: false,
+          error: new Error('LLM 调用超时'),
+        },
+        {
+          id: 'batch-fail-2',
+          success: false,
+          error: new Error('LLM 服务不可用'),
+        },
+      ]);
+
+      engine.injectEvent({
+        title: '批量失败事件',
+        content: '测试批量推理失败',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(1);
+      // 应该有失败日志（来自 WorldEngine 的 692-696 行）
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('Agent batch-fail-1 推理失败'),
+        expect.any(String),
+      );
+    });
+
+    it('batchInference 返回 result=null 时应跳过该 Agent', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 2 }, (_, i) => new Agent({ id: `null-result-${i}` }));
+      engine.addAgents(agents);
+
+      // Mock batchInference 返回包含 null result 的结果
+      vi.spyOn(engine.batchInference, 'executeBatch').mockResolvedValue([
+        {
+          id: 'null-result-0',
+          success: true,
+          result: { agent: agents[0]!, response: { opinion: '观点', action: 'speak' as const, emotionalState: 0.3, reasoning: '理由' } },
+        },
+        {
+          id: 'null-result-1',
+          success: true,
+          result: null as unknown as { agent: Agent; response: { opinion: string; action: 'speak'; emotionalState: number; reasoning: string } },
+        },
+      ]);
+
+      engine.injectEvent({
+        title: 'null result 测试',
+        content: '测试 result 为 null',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 虽然有一个 result 为 null，tick 仍应完成
+      // error 日志也应该被打印（最后一个参数是 undefined）
+      expect(console.error).toHaveBeenCalledWith(
+        '[WorldEngine] Agent null-result-1 推理失败:',
+        undefined,
+      );
+    });
+  });
+
+  // ── addAgents 只加一个 Agent 时不应初始化社交关系 ──
+
+  describe('addAgents 单个 Agent', () => {
+    it('只添加一个 Agent 时不应调用 initializeRandomRelations', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
+      const initSpy = vi.spyOn(engine.socialGraph, 'initializeRandomRelations');
+
+      engine.addAgents([new Agent({ id: 'single-agent' })]);
+
+      // 只有一个 Agent 时不应初始化随机关系
+      expect(initSpy).not.toHaveBeenCalled();
+      expect(engine.getAgents()).toHaveLength(1);
+    });
+  });
+
+  // ── socialActions target 不存在的分支 (730, 735) ──
+
+  describe('socialActions target 不存在', () => {
+    it('follow 目标 Agent 不存在时不应报错', async () => {
+      const router = new ModelRouter(MOCK_MODEL_CONFIG);
+      for (const tier of ['local', 'cheap', 'strong'] as const) {
+        vi.spyOn(router.getClient(tier), 'chatCompletion').mockResolvedValue(
+          JSON.stringify({
+            opinion: '关注不存在的人',
+            action: 'speak',
+            emotionalState: 0.3,
+            reasoning: '理由',
+            socialActions: [{ type: 'follow', targetAgentId: 'non-existent-agent' }],
+          })
+        );
+      }
+
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const a1 = new Agent({ id: 'a1', name: 'AgentA' });
+      engine.addAgent(a1);
+
+      engine.injectEvent({
+        title: '关注不存在目标',
+        content: '测试',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 应正常完成，不报错
+      expect(a1.following).toContain('non-existent-agent');
+    });
+
+    it('unfollow 目标 Agent 不存在时不应报错', async () => {
+      const router = new ModelRouter(MOCK_MODEL_CONFIG);
+      for (const tier of ['local', 'cheap', 'strong'] as const) {
+        vi.spyOn(router.getClient(tier), 'chatCompletion').mockResolvedValue(
+          JSON.stringify({
+            opinion: '取关不存在的人',
+            action: 'speak',
+            emotionalState: 0.3,
+            reasoning: '理由',
+            socialActions: [{ type: 'unfollow', targetAgentId: 'non-existent-agent' }],
+          })
+        );
+      }
+
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+      const a1 = new Agent({ id: 'a1', name: 'AgentA' });
+      // 先手动添加到 following
+      a1.follow('non-existent-agent');
+      engine.addAgent(a1);
+
+      engine.injectEvent({
+        title: '取关不存在目标',
+        content: '测试',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 应正常完成，不报错
+      expect(a1.following).not.toContain('non-existent-agent');
+    });
+  });
+
+  // ── 分布式模式 collectedNewEvents 分支 (617-629, 610-612) ──
+
+  describe('分布式模式事件处理', () => {
+    it('分布式模式下无响应记录时不应添加到 allResponseRecords', async () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      // 添加 Agent 但不响应事件（所有 Agent dormant）
+      const a1 = new Agent({ id: 'dorm-1' });
+      a1.setStatus('dormant');
+      engine.addAgent(a1);
+
+      engine.injectEvent({
+        title: '无响应测试',
+        content: '测试',
+        importance: 0.3,
+        propagationRadius: 0.5,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 无响应时 signals 应为 0
+      expect(result.signals).toBe(0);
+    });
+  });
+
+  // ── processTickLocal 时 agent 感兴趣但 activatedIds 不包含该 agent 的分支 (665-669) ──
+
+  describe('processTickLocal 激活与兴趣过滤', () => {
+    it('Agent 不在激活范围内时不应被加入 interestedAgents', async () => {
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: router });
+
+      const agents = Array.from({ length: 5 }, (_, i) => new Agent({ id: `active-${i}` }));
+      engine.addAgents(agents);
+
+      // Mock activationPool 只返回部分 Agent
+      vi.spyOn(engine.activationPool, 'computeActivation').mockReturnValue({
+        activatedIds: ['active-0', 'active-1'], // 只激活前两个
+        filteredCount: 3,
+        distances: new Map([['active-0', 0], ['active-1', 1]]),
+      });
+
+      engine.injectEvent({
+        title: '部分激活测试',
+        content: '测试',
+        importance: 0.5,
+        propagationRadius: 0.3,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 应只有 2 个 Agent 被激活处理
+      expect(result.agentsFiltered).toBe(3);
+    });
+  });
+
+  // ── 分布式模式 addAgent 运行中不重新分配 (262) ──
+
+  describe('分布式模式运行中 addAgent', () => {
+    it('分布式模式运行中 addAgent 不应触发重新分配', () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      // 模拟运行中状态
+      engine.markRunning(true);
+
+      const status1 = engine.getCoordinatorStatus();
+      const assignmentsBefore = JSON.stringify(status1!.assignments);
+
+      // 添加新 Agent（运行中不应重新分配）
+      engine.addAgent(new Agent({ id: 'running-add' }));
+
+      const status2 = engine.getCoordinatorStatus();
+      const assignmentsAfter = JSON.stringify(status2!.assignments);
+
+      // 分配应该没变化（因为运行中不触发 assignAgents）
+      expect(assignmentsBefore).toBe(assignmentsAfter);
+
+      engine.markRunning(false);
+    });
+  });
+
+  // ── processTickDistributed 无 coordinator 分支 (577) ──
+
+  describe('processTickDistributed 边界', () => {
+    it('非分布式模式调用 step 应使用本地处理', async () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
+
+      // 非分布式模式
+      expect(engine.getCoordinatorStatus()).toBeNull();
+
+      const agents = Array.from({ length: 3 }, (_, i) => new Agent({ id: `local-${i}` }));
+      engine.addAgents(agents);
+
+      engine.injectEvent({
+        title: '本地处理测试',
+        content: '测试',
+        importance: 0.8,
+        propagationRadius: 0.7,
+      });
+
+      const result = await engine.step();
+      expect(result.tick).toBe(1);
+      // 本地模式正常处理
+      expect(result.eventsProcessed).toBe(1);
+    });
+  });
 });
