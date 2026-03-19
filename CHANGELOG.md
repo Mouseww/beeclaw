@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.54] - 2026-03-19
+
+### ✨ Features
+
+- **agent-runtime:** 为 LLM 调用新增瞬时错误自动重试与指数退避机制，覆盖 429、502/503/504、网络错误与超时，并遵循 `Retry-After`，显著提升长时间运行场景下的稳定性
+
+### ⚡ Performance
+
+- **agent-runtime:** 将 Agent 的 followers/following 管理由数组切换为 `Set`，把增删查复杂度从 O(n) 降到 O(1)，提升社交关系维护效率
+
+### 🧪 Tests
+
+- **world-engine:** 补充分布式模式回归测试覆盖，并适当放宽多事件场景超时，降低偶发测试抖动
+- **agent-runtime:** 为 LLM retry/backoff 行为补齐完整测试，锁定可重试与不可重试错误语义
+
+---
+
 ## [1.0.53] - 2026-03-19
 
 ### 🧪 Tests
