@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.55] - 2026-03-19
+
+### 🛠️ Maintenance
+
+- **build/ci:** 新增 `scripts/check-workspace-coverage.ts` 与 `npm run check:workspaces`，自动校验 `packages/` 下所有 workspace 都已纳入根级 build 流程，避免新增包后漏构建
+- **ci:** 在 GitHub Actions 构建前加入 workspace coverage 校验，提前阻断 build/test 覆盖遗漏
+
+---
+
 ## [1.0.54] - 2026-03-19
 
 ### ✨ Features
