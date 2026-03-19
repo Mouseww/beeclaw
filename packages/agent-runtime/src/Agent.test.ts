@@ -268,6 +268,258 @@ describe('Agent', () => {
     });
   });
 
+  // ── normalizeResponse targets 过滤 ──
+
+  describe('normalizeResponse targets 处理', () => {
+    it('应正确过滤和规范化 targets', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      const responseWithTargets = JSON.stringify({
+        opinion: '看好股市',
+        action: 'speak',
+        emotionalState: 0.3,
+        targets: [
+          { name: 'AAPL', category: 'stock', stance: 0.8, confidence: 0.9, reasoning: '技术面良好' },
+          { name: 'TSLA', category: 'stock', stance: 1.5, confidence: 1.2 }, // stance/confidence 越界
+          { name: '', category: 'stock', stance: 0.5, confidence: 0.5 }, // 空名称，应过滤
+          { name: 'BTC', category: 'invalid', stance: 0.6, confidence: 0.7 }, // 无效 category
+        ],
+      });
+      const router = createMockModelRouter(responseWithTargets);
+      const response = await agent.react(createTestEvent(), router, 5);
+
+      expect(response.targets).toBeDefined();
+      expect(response.targets!.length).toBe(3); // 空名称被过滤
+      expect(response.targets![0]!.name).toBe('AAPL');
+      expect(response.targets![1]!.stance).toBe(1); // clamp to 1
+      expect(response.targets![1]!.confidence).toBe(1); // clamp to 1
+      expect(response.targets![2]!.category).toBe('other'); // invalid -> other
+    });
+
+    it('targets 超过 5 个时应截断', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      const targets = Array.from({ length: 10 }, (_, i) => ({
+        name: `Stock${i}`,
+        category: 'stock',
+        stance: 0.5,
+        confidence: 0.5,
+      }));
+      const responseWithManyTargets = JSON.stringify({
+        opinion: '分析',
+        action: 'speak',
+        emotionalState: 0,
+        targets,
+      });
+      const router = createMockModelRouter(responseWithManyTargets);
+      const response = await agent.react(createTestEvent(), router, 5);
+
+      expect(response.targets).toBeDefined();
+      expect(response.targets!.length).toBe(5); // 最多 5 个
+    });
+
+    it('targets 缺少必要字段时应过滤', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      const responseWithBadTargets = JSON.stringify({
+        opinion: '观点',
+        action: 'speak',
+        emotionalState: 0,
+        targets: [
+          { name: 'Valid', stance: 0.5, confidence: 0.5 }, // 有效
+          { name: 'NoStance', confidence: 0.5 }, // 缺 stance
+          { stance: 0.5, confidence: 0.5 }, // 缺 name
+        ],
+      });
+      const router = createMockModelRouter(responseWithBadTargets);
+      const response = await agent.react(createTestEvent(), router, 5);
+
+      expect(response.targets).toBeDefined();
+      expect(response.targets!.length).toBe(1); // 只有第一个有效
+    });
+  });
+
+  // ── newOpinions 更新 ──
+
+  describe('newOpinions 更新', () => {
+    it('应将 newOpinions 更新到 Agent 记忆', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      const responseWithOpinions = JSON.stringify({
+        opinion: '央行政策偏鸽',
+        action: 'speak',
+        emotionalState: 0.2,
+        newOpinions: {
+          '利率走势': { stance: -0.5, confidence: 0.8 },
+          '股市前景': { stance: 0.3, confidence: 0.6 },
+        },
+      });
+      const router = createMockModelRouter(responseWithOpinions);
+      await agent.react(createTestEvent(), router, 5);
+
+      const memories = agent.memory.getState();
+      expect(memories.opinions['利率走势']).toBeDefined();
+      expect(memories.opinions['利率走势']!.stance).toBe(-0.5);
+      expect(memories.opinions['股市前景']).toBeDefined();
+      expect(memories.opinions['股市前景']!.confidence).toBe(0.6);
+    });
+  });
+
+  // ── 记忆上下文为空 ──
+
+  describe('记忆上下文', () => {
+    it('新 Agent 无记忆时不应注入记忆上下文消息', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      const mockConfig: ModelRouterConfig = {
+        local: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+        cheap: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+        strong: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+      };
+      const router = new ModelRouter(mockConfig);
+      const chatSpy = vi.spyOn(router.getClient('cheap'), 'chatCompletion').mockResolvedValue(
+        '{"opinion":"ok","action":"silent","emotionalState":0}'
+      );
+
+      await agent.react(createTestEvent(), router, 1);
+
+      // 新 Agent 没有记忆，消息应该只有 system + user(event)
+      const callArgs = chatSpy.mock.calls[0]![0];
+      expect(callArgs.length).toBe(2); // system + event prompt
+      expect(callArgs[0]!.role).toBe('system');
+      expect(callArgs[1]!.role).toBe('user');
+      expect(callArgs[1]!.content).toContain('世界事件');
+    });
+
+    it('有记忆的 Agent 应注入记忆上下文', async () => {
+      const agent = new Agent({ persona: TEST_PERSONA });
+      // 先添加一些记忆
+      agent.memory.remember(1, 'event', '之前的事件', 0.5, 0.1);
+      agent.memory.updateOpinion('测试话题', 0.5, 0.8, '原因', 1);
+
+      const mockConfig: ModelRouterConfig = {
+        local: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+        cheap: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+        strong: { baseURL: 'http://mock:8000', apiKey: 'mock', model: 'mock' },
+      };
+      const router = new ModelRouter(mockConfig);
+      const chatSpy = vi.spyOn(router.getClient('cheap'), 'chatCompletion').mockResolvedValue(
+        '{"opinion":"ok","action":"silent","emotionalState":0}'
+      );
+
+      await agent.react(createTestEvent(), router, 2);
+
+      // 有记忆时应该有 4 条消息：system + memory context + assistant ack + event
+      const callArgs = chatSpy.mock.calls[0]![0];
+      expect(callArgs.length).toBe(4);
+      expect(callArgs[1]!.content).toContain('记忆上下文');
+      expect(callArgs[2]!.role).toBe('assistant');
+    });
+  });
+
+  // ── fromData ──
+
+  describe('fromData', () => {
+    it('应从序列化数据完整恢复 Agent', () => {
+      // 先创建一个有状态的 Agent
+      const original = new Agent({
+        id: 'restore_test',
+        name: '李华',
+        persona: TEST_PERSONA,
+        modelTier: 'strong',
+        spawnedAtTick: 10,
+      });
+      original.setStatus('dormant');
+      original.addFollower('follower_1');
+      original.addFollower('follower_2');
+      original.follow('following_1');
+      original.updateInfluence(20);
+      original.updateCredibility(0.3);
+      original.memory.remember(10, 'event', '测试记忆', 0.5, 0.2);
+      original.memory.updateOpinion('市场', 0.6, 0.7, '乐观', 10);
+
+      // 序列化
+      const data = original.toData();
+      // 修改序列化数据中的 lastActiveTick 模拟持久化场景
+      data.lastActiveTick = 15;
+
+      // 反序列化
+      const restored = Agent.fromData(data);
+
+      // 验证所有状态恢复
+      expect(restored.id).toBe('restore_test');
+      expect(restored.name).toBe('李华');
+      expect(restored.persona.profession).toBe('金融分析师');
+      expect(restored.modelTier).toBe('strong');
+      expect(restored.status).toBe('dormant');
+      expect(restored.spawnedAtTick).toBe(10);
+      expect(restored.lastActiveTick).toBe(15);
+      expect(restored.influence).toBe(original.influence);
+      expect(restored.credibility).toBe(original.credibility);
+      expect(restored.followers).toEqual(['follower_1', 'follower_2']);
+      expect(restored.following).toEqual(['following_1']);
+
+      // 验证记忆恢复
+      const memories = restored.memory.getShortTermMemories();
+      expect(memories.length).toBe(1);
+      expect(memories[0]!.content).toBe('测试记忆');
+
+      const state = restored.memory.getState();
+      expect(state.opinions['市场']).toBeDefined();
+      expect(state.opinions['市场']!.stance).toBe(0.6);
+    });
+  });
+
+  // ── isInterestedIn 低重要性随机分支 ──
+
+  describe('isInterestedIn 随机决策', () => {
+    it('低重要性无专长匹配事件应基于敏感度随机决策', () => {
+      // 创建超高敏感度 Agent
+      const highSensitivityPersona: AgentPersona = {
+        ...TEST_PERSONA,
+        expertise: ['完全不相关领域'],
+        traits: { ...TEST_PERSONA.traits, informationSensitivity: 1.0 },
+      };
+      const agent = new Agent({ persona: highSensitivityPersona });
+
+      // 低重要性、不相关的事件
+      const event = createTestEvent({
+        importance: 0.5,
+        tags: ['娱乐'],
+        title: '明星八卦',
+        content: '娱乐新闻',
+      });
+
+      // 敏感度 1.0 * importance 0.5 = 0.5，约 50% 概率感兴趣
+      // 多次测试应该有混合结果
+      let interestedCount = 0;
+      for (let i = 0; i < 100; i++) {
+        if (agent.isInterestedIn(event)) interestedCount++;
+      }
+      // 概率测试：应该在 20-80 范围内（给足够宽松度）
+      expect(interestedCount).toBeGreaterThan(10);
+      expect(interestedCount).toBeLessThan(90);
+    });
+
+    it('极低敏感度 Agent 对低重要性事件几乎不感兴趣', () => {
+      const lowSensitivityPersona: AgentPersona = {
+        ...TEST_PERSONA,
+        expertise: ['完全不相关领域'],
+        traits: { ...TEST_PERSONA.traits, informationSensitivity: 0.01 },
+      };
+      const agent = new Agent({ persona: lowSensitivityPersona });
+
+      const event = createTestEvent({
+        importance: 0.1, // 低重要性
+        tags: ['娱乐'],
+        title: '八卦',
+        content: '无关内容',
+      });
+
+      // 敏感度 0.01 * importance 0.1 = 0.001，几乎不会感兴趣
+      let interestedCount = 0;
+      for (let i = 0; i < 100; i++) {
+        if (agent.isInterestedIn(event)) interestedCount++;
+      }
+      expect(interestedCount).toBeLessThan(5); // 几乎都不感兴趣
+    });
+  });
+
   // ── toData ──
 
   describe('toData', () => {
