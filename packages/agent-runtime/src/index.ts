@@ -7,8 +7,8 @@ export { AgentMemory } from './AgentMemory.js';
 export { AgentSpawner } from './AgentSpawner.js';
 export { ModelRouter } from './ModelRouter.js';
 export type { LLMConfigMasked, ModelRouterConfigMasked } from './ModelRouter.js';
-export { LLMClient } from './LLMClient.js';
-export type { ChatMessage, ChatCompletionResponse } from './LLMClient.js';
+export { LLMClient, LLMError } from './LLMClient.js';
+export type { ChatMessage, ChatCompletionResponse, LLMClientOptions } from './LLMClient.js';
 export {
   generatePersona,
   generateAgentName,

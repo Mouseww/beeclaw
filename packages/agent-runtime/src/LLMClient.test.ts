@@ -1,10 +1,10 @@
 // ============================================================================
 // LLMClient 单元测试
-// 测试 OpenAI 兼容 API 调用的各种场景
+// 测试 OpenAI 兼容 API 调用的各种场景，包括重试机制
 // ============================================================================
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LLMClient } from './LLMClient.js';
+import { LLMClient, LLMError } from './LLMClient.js';
 import type { ChatMessage } from './LLMClient.js';
 import type { LLMConfig } from '@beeclaw/shared';
 
@@ -47,6 +47,7 @@ function createErrorResponse(status: number, statusText: string, errorBody: stri
     statusText,
     json: async () => ({}),
     text: async () => errorBody,
+    headers: new Headers(),
   };
 }
 
@@ -169,10 +170,12 @@ describe('LLMClient', () => {
 
   describe('chatCompletion — 错误处理', () => {
     it('HTTP 错误应抛出包含状态码的异常', async () => {
+      // 设置足够的重试次数以确保最终失败
       mockFetch.mockResolvedValue(
         createErrorResponse(429, 'Too Many Requests', 'Rate limit exceeded'),
       );
-      const client = new LLMClient(DEFAULT_CONFIG);
+      // 使用 maxRetries: 1 确保不重试
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 1 });
 
       await expect(
         client.chatCompletion([{ role: 'user', content: 'test' }]),
@@ -207,8 +210,9 @@ describe('LLMClient', () => {
         status: 502,
         statusText: 'Bad Gateway',
         text: async () => { throw new Error('read failed'); },
+        headers: new Headers(),
       });
-      const client = new LLMClient(DEFAULT_CONFIG);
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 1 });
 
       await expect(
         client.chatCompletion([{ role: 'user', content: 'test' }]),
@@ -322,6 +326,125 @@ describe('LLMClient', () => {
       const client2 = new LLMClient({ ...DEFAULT_CONFIG, model: 'model-b' });
       expect(client1.getModel()).toBe('model-a');
       expect(client2.getModel()).toBe('model-b');
+    });
+  });
+
+  // ── 重试机制 ──
+
+  describe('重试机制', () => {
+    it('429 错误应触发重试', async () => {
+      // 前两次返回 429，第三次成功
+      mockFetch
+        .mockResolvedValueOnce(createErrorResponse(429, 'Too Many Requests', 'Rate limit'))
+        .mockResolvedValueOnce(createErrorResponse(429, 'Too Many Requests', 'Rate limit'))
+        .mockResolvedValueOnce(createSuccessResponse('成功'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 3, initialBackoffMs: 10 });
+      const result = await client.chatCompletion([{ role: 'user', content: 'test' }]);
+
+      expect(result).toBe('成功');
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('503 错误应触发重试', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createErrorResponse(503, 'Service Unavailable', 'Overloaded'))
+        .mockResolvedValueOnce(createSuccessResponse('恢复'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 2, initialBackoffMs: 10 });
+      const result = await client.chatCompletion([{ role: 'user', content: 'test' }]);
+
+      expect(result).toBe('恢复');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('超过最大重试次数应抛出 LLMError', async () => {
+      mockFetch.mockResolvedValue(createErrorResponse(429, 'Too Many Requests', 'Rate limit'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 2, initialBackoffMs: 10 });
+
+      await expect(
+        client.chatCompletion([{ role: 'user', content: 'test' }]),
+      ).rejects.toThrow(LLMError);
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('LLMError 应包含正确的元数据', async () => {
+      mockFetch.mockResolvedValue(createErrorResponse(429, 'Too Many Requests', 'Rate limit'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 2, initialBackoffMs: 10 });
+
+      try {
+        await client.chatCompletion([{ role: 'user', content: 'test' }]);
+        expect.fail('应抛出错误');
+      } catch (error) {
+        expect(error).toBeInstanceOf(LLMError);
+        const llmError = error as LLMError;
+        expect(llmError.statusCode).toBe(429);
+        expect(llmError.isRetryable).toBe(true);
+        expect(llmError.attemptsMade).toBe(2);
+      }
+    });
+
+    it('401 错误不应重试', async () => {
+      mockFetch.mockResolvedValue(createErrorResponse(401, 'Unauthorized', 'Invalid API key'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 3, initialBackoffMs: 10 });
+
+      await expect(
+        client.chatCompletion([{ role: 'user', content: 'test' }]),
+      ).rejects.toThrow('401 Unauthorized');
+
+      // 只调用一次，不重试
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('网络错误应触发重试', async () => {
+      const networkError = new TypeError('fetch failed');
+      mockFetch
+        .mockRejectedValueOnce(networkError)
+        .mockResolvedValueOnce(createSuccessResponse('网络恢复'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 2, initialBackoffMs: 10 });
+      const result = await client.chatCompletion([{ role: 'user', content: 'test' }]);
+
+      expect(result).toBe('网络恢复');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('getRetryConfig 应返回重试配置', () => {
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 5, initialBackoffMs: 500 });
+      const config = client.getRetryConfig();
+
+      expect(config.maxRetries).toBe(5);
+      expect(config.initialBackoffMs).toBe(500);
+    });
+
+    it('默认重试配置应为 3 次和 1000ms', () => {
+      const client = new LLMClient(DEFAULT_CONFIG);
+      const config = client.getRetryConfig();
+
+      expect(config.maxRetries).toBe(3);
+      expect(config.initialBackoffMs).toBe(1000);
+    });
+
+    it('应尊重 Retry-After 响应头', async () => {
+      const sleepSpy = vi.spyOn(LLMClient.prototype as any, 'sleep');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        text: async () => 'Rate limit',
+        headers: new Headers({ 'Retry-After': '2' }),
+      }).mockResolvedValueOnce(createSuccessResponse('成功'));
+
+      const client = new LLMClient(DEFAULT_CONFIG, { maxRetries: 2, initialBackoffMs: 100 });
+      await client.chatCompletion([{ role: 'user', content: 'test' }]);
+
+      // 应使用 Retry-After 头的值（2 秒 = 2000ms）
+      expect(sleepSpy).toHaveBeenCalledWith(2000);
     });
   });
 });

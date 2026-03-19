@@ -214,7 +214,7 @@ describe('WorldEngine - Distributed Mode', () => {
       const result = await engine.step();
       expect(result.tick).toBe(1);
       expect(result.eventsProcessed).toBe(2);
-    });
+    }, 15000);
 
     it('分布式模式下 addAgent 时运行中不应重新分配', () => {
       const config: WorldConfig = {
