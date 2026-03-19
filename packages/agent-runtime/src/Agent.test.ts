@@ -112,12 +112,18 @@ describe('Agent', () => {
       agent.addFollower('a2');
       expect(agent.followers).toEqual(['a1', 'a2']);
 
-      // 重复添加不应增加
+      // 重复添加不应增加（Set 语义）
       agent.addFollower('a1');
-      expect(agent.followers).toEqual(['a1', 'a2']);
+      expect(agent.followers).toHaveLength(2);
+      expect(agent.followerCount).toBe(2);
+
+      // hasFollower 检查
+      expect(agent.hasFollower('a1')).toBe(true);
+      expect(agent.hasFollower('nonexistent')).toBe(false);
 
       agent.removeFollower('a1');
       expect(agent.followers).toEqual(['a2']);
+      expect(agent.followerCount).toBe(1);
     });
 
     it('follow / unfollow', () => {
@@ -127,10 +133,16 @@ describe('Agent', () => {
       expect(agent.following).toEqual(['b1', 'b2']);
 
       agent.follow('b1'); // 重复
-      expect(agent.following).toEqual(['b1', 'b2']);
+      expect(agent.following).toHaveLength(2);
+      expect(agent.followingCount).toBe(2);
+
+      // isFollowing 检查
+      expect(agent.isFollowing('b1')).toBe(true);
+      expect(agent.isFollowing('nonexistent')).toBe(false);
 
       agent.unfollow('b1');
       expect(agent.following).toEqual(['b2']);
+      expect(agent.followingCount).toBe(1);
     });
 
     it('updateInfluence 应限制在 0~100', () => {

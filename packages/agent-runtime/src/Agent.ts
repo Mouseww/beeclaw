@@ -28,8 +28,8 @@ export class Agent {
   private _credibility: number;
   private _spawnedAtTick: number;
   private _lastActiveTick: number;
-  private _followers: string[];
-  private _following: string[];
+  private _followersSet: Set<string>;
+  private _followingSet: Set<string>;
   private _systemPrompt: string;
 
   constructor(
@@ -52,8 +52,8 @@ export class Agent {
     this._credibility = 0.5;
     this._spawnedAtTick = options.spawnedAtTick ?? 0;
     this._lastActiveTick = this._spawnedAtTick;
-    this._followers = [];
-    this._following = [];
+    this._followersSet = new Set<string>();
+    this._followingSet = new Set<string>();
     this._systemPrompt = buildSystemPrompt(this.persona, this.name);
   }
 
@@ -64,8 +64,10 @@ export class Agent {
   get credibility(): number { return this._credibility; }
   get spawnedAtTick(): number { return this._spawnedAtTick; }
   get lastActiveTick(): number { return this._lastActiveTick; }
-  get followers(): string[] { return [...this._followers]; }
-  get following(): string[] { return [...this._following]; }
+  get followers(): string[] { return [...this._followersSet]; }
+  get following(): string[] { return [...this._followingSet]; }
+  get followerCount(): number { return this._followersSet.size; }
+  get followingCount(): number { return this._followingSet.size; }
 
   // ── 状态管理 ──
 
@@ -73,24 +75,46 @@ export class Agent {
     this._status = status;
   }
 
+  /**
+   * 添加追随者（O(1) 复杂度）
+   */
   addFollower(agentId: string): void {
-    if (!this._followers.includes(agentId)) {
-      this._followers.push(agentId);
-    }
+    this._followersSet.add(agentId);
   }
 
+  /**
+   * 移除追随者（O(1) 复杂度）
+   */
   removeFollower(agentId: string): void {
-    this._followers = this._followers.filter(id => id !== agentId);
+    this._followersSet.delete(agentId);
   }
 
+  /**
+   * 检查是否有追随者
+   */
+  hasFollower(agentId: string): boolean {
+    return this._followersSet.has(agentId);
+  }
+
+  /**
+   * 关注某 Agent（O(1) 复杂度）
+   */
   follow(agentId: string): void {
-    if (!this._following.includes(agentId)) {
-      this._following.push(agentId);
-    }
+    this._followingSet.add(agentId);
   }
 
+  /**
+   * 取消关注某 Agent（O(1) 复杂度）
+   */
   unfollow(agentId: string): void {
-    this._following = this._following.filter(id => id !== agentId);
+    this._followingSet.delete(agentId);
+  }
+
+  /**
+   * 检查是否关注某 Agent
+   */
+  isFollowing(agentId: string): boolean {
+    return this._followingSet.has(agentId);
   }
 
   updateInfluence(delta: number): void {
@@ -262,8 +286,8 @@ export class Agent {
     agent._influence = data.influence;
     agent._credibility = data.credibility;
     agent._lastActiveTick = data.lastActiveTick;
-    agent._followers = [...data.followers];
-    agent._following = [...data.following];
+    agent._followersSet = new Set(data.followers);
+    agent._followingSet = new Set(data.following);
 
     return agent;
   }
@@ -278,8 +302,8 @@ export class Agent {
       persona: this.persona,
       memory: this.memory.getState(),
       relationships: [],
-      followers: this._followers,
-      following: this._following,
+      followers: [...this._followersSet],
+      following: [...this._followingSet],
       influence: this._influence,
       status: this._status,
       credibility: this._credibility,
