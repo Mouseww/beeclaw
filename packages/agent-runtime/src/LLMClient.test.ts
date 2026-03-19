@@ -430,6 +430,7 @@ describe('LLMClient', () => {
     });
 
     it('应尊重 Retry-After 响应头', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sleepSpy = vi.spyOn(LLMClient.prototype as any, 'sleep');
 
       mockFetch.mockResolvedValueOnce({
