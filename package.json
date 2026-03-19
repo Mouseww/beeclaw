@@ -24,7 +24,8 @@
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\"",
     "benchmark": "vitest bench --config vitest.config.bench.ts",
-    "migrate:pg": "npx tsx scripts/migrate-sqlite-to-postgres.ts"
+    "migrate:pg": "npx tsx scripts/migrate-sqlite-to-postgres.ts",
+    "check:workspaces": "npx tsx scripts/check-workspace-coverage.ts"
   },
   "engines": {
     "node": ">=20"
