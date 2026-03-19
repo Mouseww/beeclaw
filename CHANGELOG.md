@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.52] - 2026-03-19
+
+### ✨ Features
+
+- **dashboard:** 新增 `/` 落地宣传页，并将控制台主界面迁移到 `/dashboard`，同时把 Header/Sidebar 导航切换为 SPA `Link`，避免整页刷新
+
+---
+
 ## [1.0.51] - 2026-03-19
 
 ### 🧪 Tests
