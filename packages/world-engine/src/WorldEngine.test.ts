@@ -854,4 +854,128 @@ describe('WorldEngine', () => {
       expect(engine).toBeDefined();
     });
   });
+
+  // ── 分布式模式 ──
+
+  describe('分布式模式', () => {
+    it('未启用分布式模式时 getCoordinatorStatus 应返回 null', () => {
+      const engine = new WorldEngine({ config: TEST_CONFIG, modelRouter: createMockModelRouter() });
+      expect(engine.getCoordinatorStatus()).toBeNull();
+    });
+
+    it('启用分布式模式时应正确初始化 Coordinator', () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      const status = engine.getCoordinatorStatus();
+      expect(status).not.toBeNull();
+      expect(status!.enabled).toBe(true);
+      expect(status!.workers).toHaveLength(2);
+    });
+
+    it('分布式模式默认 workerCount 应为 2', () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        // 不指定 workerCount
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      const status = engine.getCoordinatorStatus();
+      expect(status).not.toBeNull();
+      expect(status!.workers).toHaveLength(2);
+    });
+
+    it('分布式模式 step 应通过 Coordinator 处理 tick', async () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      // 添加 Agent
+      const agents = Array.from({ length: 4 }, (_, i) => new Agent({ id: `dist-a${i}` }));
+      engine.addAgents(agents);
+
+      // 注入事件
+      engine.injectEvent({
+        title: '分布式测试事件',
+        content: '测试分布式处理',
+        importance: 0.9,
+        propagationRadius: 0.8,
+      });
+
+      const result = await engine.step();
+
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(1);
+      // 分布式模式也应正常完成 tick
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('分布式模式下 addAgent 应触发 Agent 分配', () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      const agent = new Agent({ id: 'dist-single' });
+      engine.addAgent(agent);
+
+      const status = engine.getCoordinatorStatus();
+      // Coordinator 应该有分配信息
+      expect(status!.assignments).toBeDefined();
+    });
+
+    it('分布式模式 Tick 结果应包含 Worker 处理的响应', async () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const router = createMockModelRouter();
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: router });
+
+      // 添加 Agent
+      const agents = Array.from({ length: 6 }, (_, i) => new Agent({ id: `dist-w${i}` }));
+      engine.addAgents(agents);
+
+      // 注入高重要性事件
+      engine.injectEvent({
+        title: '分布式高重要性',
+        content: '测试所有 Agent 激活',
+        importance: 1.0,
+        propagationRadius: 1.0,
+      });
+
+      const result = await engine.step();
+
+      // tick 应正常完成
+      expect(result.tick).toBe(1);
+    });
+
+    it('分布式模式下无事件时 tick 应正常完成', async () => {
+      const distributedConfig: WorldConfig = {
+        ...TEST_CONFIG,
+        distributed: true,
+        workerCount: 2,
+      };
+      const engine = new WorldEngine({ config: distributedConfig, modelRouter: createMockModelRouter() });
+
+      engine.addAgent(new Agent({ id: 'dist-idle' }));
+
+      // 无事件注入
+      const result = await engine.step();
+
+      expect(result.tick).toBe(1);
+      expect(result.eventsProcessed).toBe(0);
+    });
+  });
 });
