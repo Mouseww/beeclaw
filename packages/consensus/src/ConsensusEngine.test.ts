@@ -198,13 +198,51 @@ describe('ConsensusEngine', () => {
       expect(signal.trend).toBe('forming');
     });
 
-    it('第二次分析也应返回 forming（只有一条历史记录）', () => {
+    it('历史不足两条时应持续返回 forming', () => {
       const engine = new ConsensusEngine();
       engine.analyze(1, createTestEvent(), [createBullishRecord('a1')]);
       const signal2 = engine.analyze(2, createTestEvent(), [createBullishRecord('a2')]);
-      // 此时有 1 条历史（第一次 analyze 保存的），不满足 >= 2 条
-      // 但实际上 detectTrend 在第二次调用时，history 已经有第一次的记录了
-      expect(['forming', 'strengthening', 'weakening', 'reversing']).toContain(signal2.trend);
+      expect(signal2.trend).toBe('forming');
+    });
+
+    it('变化极小且共识较高时应检测到 strengthening', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent(), [
+        createBullishRecord('a1', 0.6),
+        createBullishRecord('a2', 0.7),
+        createBullishRecord('a3', 0.65),
+      ]);
+      engine.analyze(2, createTestEvent(), [
+        createBullishRecord('a1', 0.6),
+        createBullishRecord('a2', 0.7),
+        createBullishRecord('a3', 0.65),
+      ]);
+      const signal3 = engine.analyze(3, createTestEvent(), [
+        createBullishRecord('a1', 0.2),
+        createBullishRecord('a2', 0.3),
+        createBullishRecord('a3', 0.4),
+      ]);
+      expect(signal3.trend).toBe('strengthening');
+    });
+
+    it('变化极小且共识较低时应保持 forming', () => {
+      const engine = new ConsensusEngine();
+      engine.analyze(1, createTestEvent(), [
+        createBullishRecord('a1', 0.7),
+        createBullishRecord('a2', 0.6),
+        createBearishRecord('a3', -0.6),
+      ]);
+      engine.analyze(2, createTestEvent(), [
+        createBullishRecord('a1', 0.7),
+        createBullishRecord('a2', 0.6),
+        createBearishRecord('a3', -0.6),
+      ]);
+      const signal3 = engine.analyze(3, createTestEvent(), [
+        createBullishRecord('a1', 1.0),
+        createBullishRecord('a2', 0.2),
+        createBearishRecord('a3', -0.2),
+      ]);
+      expect(signal3.trend).toBe('forming');
     });
 
     it('方向反转时应检测到 reversing', () => {
@@ -499,6 +537,46 @@ describe('ConsensusEngine', () => {
       ]);
 
       expect(engine.getSignalHistory('恢复话题').map(signal => signal.tick)).toEqual([1, 2, 3]);
+    });
+
+    it('restoreSignals 应合并不同话题并分别排序', () => {
+      const engine = new ConsensusEngine();
+
+      engine.restoreSignals([
+        {
+          topic: '话题A',
+          tick: 3,
+          sentimentDistribution: { bullish: 1, bearish: 0, neutral: 0 },
+          intensity: 0.6,
+          consensus: 0.8,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+        {
+          topic: '话题B',
+          tick: 2,
+          sentimentDistribution: { bullish: 0, bearish: 1, neutral: 0 },
+          intensity: 0.6,
+          consensus: 0.8,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+        {
+          topic: '话题A',
+          tick: 1,
+          sentimentDistribution: { bullish: 0, bearish: 0, neutral: 1 },
+          intensity: 0,
+          consensus: 1,
+          trend: 'forming',
+          topArguments: [],
+          alerts: [],
+        },
+      ]);
+
+      expect(engine.getSignalHistory('话题A').map(signal => signal.tick)).toEqual([1, 3]);
+      expect(engine.getSignalHistory('话题B').map(signal => signal.tick)).toEqual([2]);
     });
 
     it('restoreSignals 应仅保留最近 50 条历史', () => {

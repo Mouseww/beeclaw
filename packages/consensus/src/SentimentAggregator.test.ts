@@ -72,6 +72,15 @@ describe('aggregateSentiment', () => {
       expect(result.distribution.neutral).toBe(1);
     });
 
+    it('阈值边界 ±0.15 应归为 neutral', () => {
+      const records = [
+        createRecord(0.15, 0.5, 'speak', 'a1'),
+        createRecord(-0.15, 0.5, 'speak', 'a2'),
+      ];
+      const result = aggregateSentiment(records);
+      expect(result.distribution).toEqual({ bullish: 0, bearish: 0, neutral: 1 });
+    });
+
     it('混合分布应正确计算比例', () => {
       const records = [
         createRecord(0.5, 0.5, 'speak', 'a1'),   // bullish
@@ -150,6 +159,12 @@ describe('aggregateSentiment', () => {
       const result = aggregateSentiment(records);
       // (1.0*1.0 + (-1.0)*0.5) / (1.0+0.5) = 0.5/1.5 ≈ 0.333
       expect(result.averageEmotion).toBeCloseTo(1 / 3, 5);
+    });
+
+    it('单个零信誉响应也应使用基础权重计算平均值', () => {
+      const records = [createRecord(-0.8, 0.0, 'speak', 'a1')];
+      const result = aggregateSentiment(records);
+      expect(result.averageEmotion).toBeCloseTo(-0.8, 10);
     });
   });
 
