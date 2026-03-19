@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.56] - 2026-03-19
+
+### 🧪 Tests
+
+- **agent-runtime:** 补齐 `Agent.ts` 边界与状态恢复测试，覆盖 targets 规范化/截断、newOpinions 记忆写入、`fromData` 反序列化，以及 `isInterestedIn` 随机分支，将该模块测试覆盖率提升到 100%
+
+---
+
 ## [1.0.55] - 2026-03-19
 
 ### 🛠️ Maintenance
