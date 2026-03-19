@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.53] - 2026-03-19
+
+### 🧪 Tests
+
+- **dashboard:** 补齐 LandingPage 组件测试覆盖，巩固新首页与 `/dashboard` 分流后的前端回归保护
+
+---
+
 ## [1.0.52] - 2026-03-19
 
 ### ✨ Features
