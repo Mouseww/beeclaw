@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.51] - 2026-03-19
+
+### 🧪 Tests
+
+- **consensus:** 补齐 `ConsensusEngine` 趋势判定与 `SentimentAggregator` 阈值/零信誉边界测试，锁定当前实现语义并加固共识模块回归保护
+
+---
+
 ## [1.0.50] - 2026-03-19
 
 ### 🐛 Bug Fixes
