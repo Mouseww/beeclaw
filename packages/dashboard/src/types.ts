@@ -264,6 +264,72 @@ export interface ForecastResult {
   scenario: 'hot-event' | 'product-launch' | 'policy-impact' | 'roundtable';
   scenarioLabel: string;
   event: string;
+  resultType?: 'Reaction' | 'ForecastValue' | 'BestMatch' | 'Judgment' | 'Strategy' | 'Evolution' | 'Risk' | 'Ranking' | 'Insight';
+  mainResult?:
+    | {
+      type: 'Reaction';
+      headline: string;
+      sequence: Array<{ actor: string; reaction: string; timing: string }>;
+      divergence: string[];
+      consensus: string[];
+    }
+    | {
+      type: 'ForecastValue';
+      headline: string;
+      pointEstimate: string;
+      range: string;
+      confidence: 'low' | 'medium' | 'high';
+      timepoint?: string;
+      drivers: string[];
+      assumptions: string[];
+    }
+    | {
+      type: 'BestMatch';
+      headline: string;
+      match: string;
+      rationale: string[];
+      alternatives: Array<{ name: string; whyNot: string }>;
+    }
+    | {
+      type: 'Judgment';
+      headline: string;
+      verdict: string;
+      reasoning: string[];
+      conditions?: string[];
+    }
+    | {
+      type: 'Strategy';
+      headline: string;
+      recommendedActions: string[];
+      priority: Array<{ action: string; urgency: 'high' | 'medium' | 'low' }>;
+      caveats: string[];
+    }
+    | {
+      type: 'Evolution';
+      headline: string;
+      phases: Array<{ phase: string; description: string; timeframe: string }>;
+      turningPoints: string[];
+      endState: string;
+    }
+    | {
+      type: 'Risk';
+      headline: string;
+      risks: Array<{ name: string; severity: 'high' | 'medium' | 'low'; likelihood: 'high' | 'medium' | 'low'; mitigation: string }>;
+      overallRiskLevel: 'high' | 'medium' | 'low';
+    }
+    | {
+      type: 'Ranking';
+      headline: string;
+      rankings: Array<{ rank: number; item: string; score?: number; reason: string }>;
+      criteria: string;
+    }
+    | {
+      type: 'Insight';
+      headline: string;
+      insights: string[];
+      evidence: string[];
+      implications: string[];
+    };
   directAnswer: {
     questionType: 'numeric-forecast' | 'judgement' | 'event-propagation' | 'decision-simulation';
     answer: string;

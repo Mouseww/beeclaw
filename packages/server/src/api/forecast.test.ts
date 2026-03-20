@@ -175,21 +175,28 @@ describe('POST /api/forecast', () => {
     expect(metrics.ticks).toBe(2);
   });
 
-  it('应根据问题类型返回 numeric directAnswer', async () => {
+
+  it('应识别 2026 年底中国实体黄金价格问题并返回具体数值区间', async () => {
     const { statusCode, body } = await submitAndAwaitForecast(app, {
-      event: '黄金 2027 年每克多少钱？',
+      event: '2026年年底中国的实体黄金的价格会多少钱一克',
       scenario: 'hot-event',
       ticks: 1,
     });
     expect(statusCode).toBe(200);
     const b = body as Record<string, unknown>;
     const da = b.directAnswer as Record<string, unknown>;
-    expect(da.questionType).toBe('numeric-forecast');
-    expect(da.confidence).toBe('medium');
-    expect(da.range).toBe('¥620 ~ ¥780 / 克');
-    expect((da.answer as string)).toContain('2027 年');
-    expect((da.assumptions as unknown[]).length).toBeGreaterThan(0);
-    expect((da.drivers as unknown[]).length).toBeGreaterThan(0);
+    const mainResult = b.mainResult as Record<string, unknown>;
+    const summary = b.summary as string;
+
+    expect(b.resultType).toBe('ForecastValue');
+    expect((da.answer as string)).toContain('2026 年底');
+    expect(da.range).toBe('¥840 ~ ¥980 / 克');
+    expect(mainResult.pointEstimate).toBe('¥910');
+    expect(mainResult.range).toBe('¥840 ~ ¥980 / 克');
+    expect(mainResult.timepoint).toBe('2026 年底');
+    expect(summary).toContain('¥910');
+    expect(summary).toContain('¥840 ~ ¥980 / 克');
+    expect(summary).not.toContain('建议按区间理解');
   });
 
   it('应根据判断类问题返回 judgement directAnswer', async () => {
@@ -204,6 +211,7 @@ describe('POST /api/forecast', () => {
     expect(da.questionType).toBe('judgement');
     expect(da.confidence).toBe('medium');
     expect(da.range).toBeUndefined();
+    expect((da.answer as string).startsWith('直接判断：')).toBe(true);
   });
 
   it('应为产品发布场景返回 decision-simulation directAnswer', async () => {
@@ -216,11 +224,64 @@ describe('POST /api/forecast', () => {
     const b = body as Record<string, unknown>;
     const da = b.directAnswer as Record<string, unknown>;
     expect(da.questionType).toBe('decision-simulation');
-    expect((da.answer as string)).toContain('决策预演');
+    expect((da.answer as string).startsWith('直接判断：')).toBe(true);
+    expect((da.answer as string)).not.toContain('更适合做“决策预演”');
   });
 
 
-  // ── 错误处理 ──
+  it('数值预测 summary 应体现数值结论而不是泛化立场', async () => {
+    const { statusCode, body } = await submitAndAwaitForecast(app, {
+      event: '黄金 2027 年每克多少钱？',
+      scenario: 'hot-event',
+      ticks: 1,
+    });
+    expect(statusCode).toBe(200);
+    const b = body as Record<string, unknown>;
+    const summary = b.summary as string;
+    const mainResult = b.mainResult as Record<string, unknown>;
+
+    expect(b.resultType).toBe('ForecastValue');
+    expect(summary).toContain('最终输出为数值预测');
+    expect(summary).toContain(String(mainResult.pointEstimate));
+    expect(summary).toContain(String(mainResult.range));
+    expect(summary).not.toContain('形成了几类稳定立场');
+  });
+
+  it('Reaction summary 应强调反应顺序与分歧', async () => {
+    const { statusCode, body } = await submitAndAwaitForecast(app, {
+      event: '如果 OpenAI 发布 AI 浏览器，市场会怎么反应？',
+      scenario: 'hot-event',
+      ticks: 1,
+    });
+    expect(statusCode).toBe(200);
+    const b = body as Record<string, unknown>;
+    const summary = b.summary as string;
+    const mainResult = b.mainResult as Record<string, unknown>;
+
+    expect(b.resultType).toBe('Reaction');
+    expect(summary).toContain('最终输出为反应推演');
+    expect(summary).toContain('主要分歧');
+    expect(Array.isArray(mainResult.sequence)).toBe(true);
+    expect(Array.isArray(mainResult.divergence)).toBe(true);
+  });
+
+  it('BestMatch 应给出明确对象和理由', async () => {
+    const { statusCode, body } = await submitAndAwaitForecast(app, {
+      event: '这几类人里哪个更适合做 BeeClaw 首批种子用户？',
+      scenario: 'product-launch',
+      ticks: 1,
+    });
+    expect(statusCode).toBe(200);
+    const b = body as Record<string, unknown>;
+    const mainResult = b.mainResult as Record<string, unknown>;
+
+    expect(b.resultType).toBe('BestMatch');
+    expect(mainResult.type).toBe('BestMatch');
+    expect(typeof mainResult.match).toBe('string');
+    expect((mainResult.match as string).length).toBeGreaterThan(0);
+    expect(Array.isArray(mainResult.rationale)).toBe(true);
+    expect((mainResult.rationale as unknown[]).length).toBeGreaterThan(0);
+  });
 
   it('缺少 event 应返回 400', async () => {
     const res = await app.inject({

@@ -28,6 +28,14 @@ const MOCK_RESULT = {
   scenario: 'hot-event' as const,
   scenarioLabel: '热点事件预测',
   event: '央行加息 25 个基点',
+  resultType: 'Judgment' as const,
+  mainResult: {
+    type: 'Judgment' as const,
+    headline: '直接判断：存在明显扰动，但仍要结合后续执行情况继续观察。',
+    verdict: '有条件成立',
+    reasoning: ['政策预期', '市场情绪'],
+    conditions: ['政策信号延续', '市场没有出现额外黑天鹅'],
+  },
   directAnswer: {
     questionType: 'judgement' as const,
     answer: '初步判断是：存在明显扰动，但仍要结合后续执行情况继续观察。',
@@ -105,24 +113,24 @@ describe('ForecastPage', () => {
 
     // 等待结果
     expect(await screen.findByText('推演摘要')).toBeInTheDocument();
-    expect(screen.getByText('直接回答')).toBeInTheDocument();
-    expect(screen.getByText('判断预测')).toBeInTheDocument();
-    expect(screen.getByText('置信度：medium')).toBeInTheDocument();
-    expect(screen.getByText(MOCK_RESULT.directAnswer.answer)).toBeInTheDocument();
-    expect(screen.getByText('关键假设')).toBeInTheDocument();
-    expect(screen.getByText('政策信号延续')).toBeInTheDocument();
-    expect(screen.getByText('核心驱动因素')).toBeInTheDocument();
+    expect(screen.getByText('主结果')).toBeInTheDocument();
+    expect(screen.getByText('判断结果')).toBeInTheDocument();
+    expect(screen.getByText('类型：Judgment')).toBeInTheDocument();
+    expect(screen.getByText(MOCK_RESULT.mainResult.headline)).toBeInTheDocument();
+    expect(screen.getByText('明确判断')).toBeInTheDocument();
+    expect(screen.getByText('有条件成立')).toBeInTheDocument();
+    expect(screen.getByText('判断依据')).toBeInTheDocument();
     expect(screen.getByText('政策预期')).toBeInTheDocument();
     expect(screen.getByText(MOCK_RESULT.summary)).toBeInTheDocument();
     expect(screen.getAllByText('热点事件预测').length).toBeGreaterThanOrEqual(1);
 
     // 阵营
-    expect(screen.getByText('主要阵营')).toBeInTheDocument();
+    expect(screen.getByText('推演中的主要视角')).toBeInTheDocument();
     expect(screen.getByText('看空派')).toBeInTheDocument();
     expect(screen.getByText('55%')).toBeInTheDocument();
 
     // 关键反应
-    expect(screen.getByText('关键反应')).toBeInTheDocument();
+    expect(screen.getByText('支撑证据 / 关键反应')).toBeInTheDocument();
     expect(screen.getByText('金融分析师')).toBeInTheDocument();
 
     // 风险点和建议
@@ -143,6 +151,17 @@ describe('ForecastPage', () => {
   it('应该按 questionType 显示 directAnswer 标签并展示区间', async () => {
     mockForecast.mockResolvedValueOnce({
       ...MOCK_RESULT,
+      resultType: 'ForecastValue',
+      mainResult: {
+        type: 'ForecastValue',
+        headline: '我判断 2027 年黄金价格大概率在区间内波动。',
+        pointEstimate: '¥690/克',
+        range: '¥620 ~ ¥780 / 克',
+        confidence: 'high',
+        timepoint: '2027 年',
+        assumptions: ['国际金价维持高位'],
+        drivers: ['国际金价'],
+      },
       directAnswer: {
         questionType: 'numeric-forecast',
         answer: '预计价格在区间内波动。',
@@ -160,8 +179,13 @@ describe('ForecastPage', () => {
     await user.click(screen.getByText('开始推演'));
 
     expect(await screen.findByText('数值预测')).toBeInTheDocument();
-    expect(screen.getByText('置信度：high')).toBeInTheDocument();
-    expect(screen.getByText('区间：¥620 ~ ¥780 / 克')).toBeInTheDocument();
+    expect(screen.getByText('类型：ForecastValue')).toBeInTheDocument();
+    expect(screen.getByText('预测值')).toBeInTheDocument();
+    expect(screen.getByText('¥690/克')).toBeInTheDocument();
+    expect(screen.getByText('预测区间')).toBeInTheDocument();
+    expect(screen.getByText('¥620 ~ ¥780 / 克')).toBeInTheDocument();
+    expect(screen.getByText('时间点')).toBeInTheDocument();
+    expect(screen.getByText('2027 年')).toBeInTheDocument();
   });
 
   it('没有 range 时不应显示区间标签', async () => {
@@ -173,12 +197,39 @@ describe('ForecastPage', () => {
     await user.type(screen.getByPlaceholderText(/如果 BeeClaw/), '这项政策会不会导致房价下跌？');
     await user.click(screen.getByText('开始推演'));
 
-    await screen.findByText('直接回答');
+    await screen.findByText('主结果');
     expect(screen.queryByText(/区间：/)).not.toBeInTheDocument();
   });
 
 
-  // ── 失败处理 ──
+  it('Reaction 类型应优先展示 mainResult 的反应顺序', async () => {
+    mockForecast.mockResolvedValueOnce({
+      ...MOCK_RESULT,
+      resultType: 'Reaction',
+      mainResult: {
+        type: 'Reaction',
+        headline: '市场短期会先兴奋，中期会迅速分化。',
+        sequence: [
+          { actor: '媒体', reaction: '会先把它定义成新叙事', timing: '第一波' },
+          { actor: '投资人', reaction: '会转向看留存和商业化', timing: '第二波' },
+        ],
+        divergence: ['短期热度高', '中期重新定价'],
+        consensus: ['不会快速收敛成单一观点'],
+      },
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.type(screen.getByPlaceholderText(/如果 BeeClaw/), '如果 OpenAI 发布 AI 浏览器，市场会怎么反应？');
+    await user.click(screen.getByText('开始推演'));
+
+    expect(await screen.findByText('市场反应')).toBeInTheDocument();
+    expect(screen.getByText('反应顺序')).toBeInTheDocument();
+    expect(screen.getByText('媒体')).toBeInTheDocument();
+    expect(screen.getByText('会先把它定义成新叙事')).toBeInTheDocument();
+    expect(screen.getByText('第一波')).toBeInTheDocument();
+  });
 
   it('API 失败时应该显示错误信息', async () => {
     mockForecast.mockRejectedValueOnce(new Error('API Error: 500 Internal Server Error'));
